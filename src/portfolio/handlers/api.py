@@ -25,7 +25,7 @@ from portfolio.logs import get_logger, log
 logger = get_logger(__name__)
 
 MAX_BODY_BYTES = 10_000
-MAX_HOLDINGS = 100
+MAX_HOLDINGS = 40  # keeps the price sync under Tiingo's free limit of 50 requests/hour
 MAX_RULES = 50
 HISTORY_DAYS = 400  # calendar days of history for the performance chart (about 1 trading year + margin)
 

@@ -110,3 +110,13 @@ def test_news_only_for_held_tickers(repo):
     assert call(repo, "GET /news", query={"ticker": "TSLA"})[0] == 404
     status, body = call(repo, "GET /news")
     assert status == 200 and body["articles"] == []
+
+
+def test_holdings_cap(repo, monkeypatch):
+    monkeypatch.setattr(api, "MAX_HOLDINGS", 2)
+    for ticker in ("VTI", "BND"):
+        call(repo, "PUT /holdings/{ticker}", path={"ticker": ticker}, body=json.dumps({"shares": 1, "cost_basis": 1}))
+    status, body = call(repo, "PUT /holdings/{ticker}", path={"ticker": "QQQ"}, body=json.dumps({"shares": 1, "cost_basis": 1}))
+    assert status == 409 and "up to 2" in body["message"]
+    # Updating an existing holding is still allowed at the cap
+    assert call(repo, "PUT /holdings/{ticker}", path={"ticker": "VTI"}, body=json.dumps({"shares": 2, "cost_basis": 1}))[0] == 200
