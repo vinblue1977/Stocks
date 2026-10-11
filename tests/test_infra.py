@@ -134,9 +134,23 @@ def test_functions_traced_on_arm(any_template):
 
 def test_bedrock_access_limited_to_one_model(any_template):
     policies = json.dumps(any_template.find_resources("AWS::IAM::Policy"))
-    assert "bedrock-mantle:CreateInference" in policies
-    assert '"bedrock-mantle:Model": "anthropic.claude-haiku-5-5"' in policies
+    profile = "inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    assert profile in policies
+    assert "foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0" in policies
+    assert "bedrock:InferenceProfileArn" in policies  # model reachable only through the profile
     assert '"bedrock:*"' not in policies and '"Action": "*"' not in policies
+
+
+def test_mantle_option_uses_model_condition(tmp_path_factory):
+    template = synth(tmp_path_factory, bedrockApi="mantle", bedrockModelId="anthropic.claude-haiku-5-5")
+    policies = json.dumps(template.find_resources("AWS::IAM::Policy"))
+    assert '"bedrock-mantle:Model": "anthropic.claude-haiku-5-5"' in policies
+    assert "bedrock:InvokeModel" not in policies
+
+
+def test_rejects_unknown_bedrock_api(tmp_path_factory):
+    with pytest.raises(ValueError, match="bedrockApi"):
+        synth(tmp_path_factory, bedrockApi="other")
 
 
 def test_secrets_scoped_to_named_parameters(any_template):

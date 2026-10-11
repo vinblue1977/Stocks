@@ -34,7 +34,7 @@ All routes need `Authorization: Bearer <Cognito token>`.
 
 ## Setup
 
-Needs the AWS CLI, Python 3.13+, Node 20+, free [Tiingo](https://www.tiingo.com/) and [Finnhub](https://finnhub.io/) keys, and Claude Haiku 5.5 available on Bedrock in your region.
+Needs the AWS CLI, Python 3.13+, Node 20+, free [Tiingo](https://www.tiingo.com/) and [Finnhub](https://finnhub.io/) keys, and access to Claude on Bedrock. Defaults target **us-east-2** with Claude Haiku 4.5 through the `us.` cross-region inference profile, so requests may be processed in us-east-1, us-east-2 or us-west-2.
 
 ```bash
 make install && make test
@@ -67,7 +67,8 @@ Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <Pi
 | `alertEmail` | none | Alerts, reports, alarms, budget warnings |
 | `allowedOrigins` | `localhost:5173` | CORS origins |
 | `benchmarkTicker` | `SPY` | Performance benchmark |
-| `bedrockModelId` | `anthropic.claude-haiku-5-5` | Model for news summaries |
+| `bedrockModelId` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Model for news summaries |
+| `bedrockApi` | `runtime` | `runtime` for Haiku 4.5; `mantle` for newer models such as `anthropic.claude-haiku-5-5` once your account has access |
 | `monthlyBudgetUsd` | `5` | Budget alert threshold |
 | `useCustomerManagedKey` | `false` | Use your own KMS key (about $1/month) instead of AWS default encryption |
 

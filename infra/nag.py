@@ -21,8 +21,10 @@ def apply_suppressions(stack: Stack) -> None:
                 reason="Wildcards are limited to: the table's own indexes (index/*), X-Ray trace writes "
                 "(no resource-level support), Step Functions log delivery actions (AWS requires Resource '*'), "
                 "KMS GenerateDataKey*/ReEncrypt* actions on the one stack key, "
-                "Lambda version qualifiers of the stack's own functions, and Bedrock projects in this account "
-                "restricted by a bedrock-mantle:Model condition to a single model.",
+                "Lambda version qualifiers of the stack's own functions, and Bedrock access to a single model: "
+                "the model in any region its cross-region inference profile routes to (only via that profile, "
+                "enforced by a bedrock:InferenceProfileArn condition), or Mantle projects limited by a "
+                "bedrock-mantle:Model condition.",
             ),
             NagPackSuppression(
                 id="AwsSolutions-COG2",

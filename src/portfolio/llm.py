@@ -1,9 +1,14 @@
 """News summarization and sentiment scoring with Claude on Amazon Bedrock.
 
-Uses the Anthropic SDK's Bedrock client and structured outputs, so the response is
-validated against a schema instead of parsed from free text. Headlines are untrusted
-input: they are passed as data inside tags, and the model is told never to follow
-instructions found inside them.
+Two Bedrock paths, chosen by BEDROCK_API:
+- "runtime" (default): the standard bedrock-runtime API through a cross-region inference
+  profile (for example Claude Haiku 4.5). Output is forced through a tool whose input
+  schema is the result shape, then validated with pydantic.
+- "mantle": the newer Messages API endpoint (for example Claude Haiku 5.5), using
+  structured outputs.
+
+Headlines are untrusted input: they are passed as data inside tags, and the model is told
+never to follow instructions found inside them.
 """
 
 from __future__ import annotations
@@ -13,7 +18,7 @@ from collections.abc import Sequence
 from functools import lru_cache
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from portfolio.config import get_config
 
@@ -30,6 +35,9 @@ Produce:
 Describe what the news says. Do not recommend buying, selling or holding, do not predict
 prices, and do not give investment advice."""
 
+PORTFOLIO_INSTRUCTION = "\n\nThis request is the whole-portfolio briefing: combine the per-ticker summaries into 3-4 sentences."
+UNAVAILABLE = "Summary unavailable for this update."
+
 
 class ArticleScore(BaseModel):
     article_id: str
@@ -45,6 +53,34 @@ class PortfolioBrief(BaseModel):
     summary: str
 
 
+# Hand-written tool schemas (no $ref) for the runtime path.
+_TOOL_SCHEMAS: dict[type[BaseModel], dict[str, Any]] = {
+    TickerBrief: {
+        "type": "object",
+        "properties": {
+            "summary": {"type": "string"},
+            "article_scores": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "article_id": {"type": "string"},
+                        "score": {"type": "number", "minimum": -1, "maximum": 1},
+                    },
+                    "required": ["article_id", "score"],
+                },
+            },
+        },
+        "required": ["summary", "article_scores"],
+    },
+    PortfolioBrief: {
+        "type": "object",
+        "properties": {"summary": {"type": "string"}},
+        "required": ["summary"],
+    },
+}
+
+
 def sentiment_label(score: float | None) -> Literal["Positive", "Negative", "Neutral"]:
     if score is None or -0.15 < score < 0.15:
         return "Neutral"
@@ -53,44 +89,66 @@ def sentiment_label(score: float | None) -> Literal["Positive", "Negative", "Neu
 
 @lru_cache(maxsize=1)
 def _client() -> Any:
-    from anthropic import AnthropicBedrockMantle
+    cfg = get_config()
+    if cfg.bedrock_api == "mantle":
+        from anthropic import AnthropicBedrockMantle
 
-    return AnthropicBedrockMantle(aws_region=get_config().bedrock_region, max_retries=3, timeout=60.0)
+        return AnthropicBedrockMantle(aws_region=cfg.bedrock_region, max_retries=3, timeout=60.0)
+    from anthropic import AnthropicBedrock
+
+    return AnthropicBedrock(aws_region=cfg.bedrock_region, max_retries=3, timeout=60.0)
+
+
+def _ask[T: BaseModel](schema: type[T], system: str, content: str, max_tokens: int) -> T | None:
+    """Return the validated result, or None if the model refused or returned an invalid shape."""
+    cfg = get_config()
+    messages = [{"role": "user", "content": content}]
+    if cfg.bedrock_api == "mantle":
+        response = _client().messages.parse(
+            model=cfg.bedrock_model_id,
+            max_tokens=max_tokens,
+            system=system,
+            output_config={"effort": "low"},
+            messages=messages,
+            output_format=schema,
+        )
+        if response.stop_reason == "refusal":
+            return None
+        return response.parsed_output
+
+    tool_name = f"record_{schema.__name__.lower()}"
+    response = _client().messages.create(
+        model=cfg.bedrock_model_id,
+        max_tokens=max_tokens,
+        system=system,
+        messages=messages,
+        tools=[{"name": tool_name, "description": "Record the result.", "input_schema": _TOOL_SCHEMAS[schema]}],
+        tool_choice={"type": "tool", "name": tool_name},
+    )
+    for block in response.content:
+        if getattr(block, "type", None) == "tool_use" and block.name == tool_name:
+            try:
+                return schema.model_validate(block.input)
+            except ValidationError:
+                return None
+    return None
 
 
 def brief_for_ticker(ticker: str, articles: Sequence[dict[str, Any]]) -> TickerBrief:
     payload = [
         {"article_id": a["article_id"], "headline": a["headline"], "summary": a.get("summary", "")[:500]} for a in articles
     ]
-    response = _client().messages.parse(
-        model=get_config().bedrock_model_id,
-        max_tokens=4000,
-        system=SYSTEM_PROMPT,
-        output_config={"effort": "low"},
-        messages=[
-            {
-                "role": "user",
-                "content": f"Ticker: {ticker}\n<articles>\n{json.dumps(payload)}\n</articles>",
-            }
-        ],
-        output_format=TickerBrief,
-    )
-    if response.stop_reason == "refusal" or response.parsed_output is None:
-        return TickerBrief(summary="Summary unavailable for this update.", article_scores=[])
-    return response.parsed_output
+    content = f"Ticker: {ticker}\n<articles>\n{json.dumps(payload)}\n</articles>"
+    result = _ask(TickerBrief, SYSTEM_PROMPT, content, max_tokens=4000)
+    return result or TickerBrief(summary=UNAVAILABLE, article_scores=[])
 
 
 def brief_for_portfolio(ticker_briefs: dict[str, str], active_alerts: Sequence[str]) -> str:
     content = {"ticker_summaries": ticker_briefs, "active_alert_rules": list(active_alerts)}
-    response = _client().messages.parse(
-        model=get_config().bedrock_model_id,
+    result = _ask(
+        PortfolioBrief,
+        SYSTEM_PROMPT + PORTFOLIO_INSTRUCTION,
+        f"<articles>\n{json.dumps(content)}\n</articles>",
         max_tokens=2000,
-        system=SYSTEM_PROMPT
-        + "\n\nThis request is the whole-portfolio briefing: combine the per-ticker summaries into 3-4 sentences.",
-        output_config={"effort": "low"},
-        messages=[{"role": "user", "content": f"<articles>\n{json.dumps(content)}\n</articles>"}],
-        output_format=PortfolioBrief,
     )
-    if response.stop_reason == "refusal" or response.parsed_output is None:
-        return "Summary unavailable for this update."
-    return response.parsed_output.summary
+    return result.summary if result else UNAVAILABLE

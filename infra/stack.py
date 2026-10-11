@@ -49,6 +49,40 @@ ROOT = Path(__file__).resolve().parent.parent
 PARAM_PREFIX = "/portfolio-tracker"
 
 
+def bedrock_statements(api: str, model_id: str) -> list[iam.PolicyStatement]:
+    """Least-privilege permission to call exactly one Claude model.
+
+    runtime + cross-region profile (e.g. us.anthropic.claude-haiku-4-5-...): invoke the profile in
+    this region, and the underlying model in whichever US region the profile routes to, but only
+    when the call comes through that profile.
+    """
+    if api == "mantle":
+        return [
+            iam.PolicyStatement(
+                actions=["bedrock-mantle:CreateInference"],
+                resources=[f"arn:{Aws.PARTITION}:bedrock-mantle:{Aws.REGION}:{Aws.ACCOUNT_ID}:project/*"],
+                conditions={"StringEquals": {"bedrock-mantle:Model": model_id}},
+            )
+        ]
+    _, _, rest = model_id.partition(".")
+    if rest.startswith("anthropic."):  # inference profile id such as us.anthropic...
+        profile_arn = f"arn:{Aws.PARTITION}:bedrock:{Aws.REGION}:{Aws.ACCOUNT_ID}:inference-profile/{model_id}"
+        return [
+            iam.PolicyStatement(actions=["bedrock:InvokeModel"], resources=[profile_arn]),
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel"],
+                resources=[f"arn:{Aws.PARTITION}:bedrock:*::foundation-model/{rest}"],
+                conditions={"StringEquals": {"bedrock:InferenceProfileArn": profile_arn}},
+            ),
+        ]
+    return [
+        iam.PolicyStatement(
+            actions=["bedrock:InvokeModel"],
+            resources=[f"arn:{Aws.PARTITION}:bedrock:{Aws.REGION}::foundation-model/{model_id}"],
+        )
+    ]
+
+
 def _flag(value: Any) -> bool:
     """Context values from `-c key=value` arrive as strings; from cdk.json as booleans."""
     if isinstance(value, str):
@@ -62,7 +96,10 @@ class PortfolioTrackerStack(Stack):
 
         alert_email: str | None = self.node.try_get_context("alertEmail")
         allowed_origins: list[str] = self.node.try_get_context("allowedOrigins") or ["http://localhost:5173"]
-        model_id: str = self.node.try_get_context("bedrockModelId") or "anthropic.claude-haiku-5-5"
+        model_id: str = self.node.try_get_context("bedrockModelId") or "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+        bedrock_api: str = self.node.try_get_context("bedrockApi") or "runtime"
+        if bedrock_api not in ("runtime", "mantle"):
+            raise ValueError("bedrockApi must be 'runtime' or 'mantle'")
         monthly_budget = float(self.node.try_get_context("monthlyBudgetUsd") or 5)
         layer_path = Path(self.node.try_get_context("layerPath") or ROOT / "build" / "layer")
         if not layer_path.is_dir():
@@ -202,6 +239,7 @@ class PortfolioTrackerStack(Stack):
             "PRICE_API_KEY_PARAM": f"{PARAM_PREFIX}/tiingo-api-key",
             "NEWS_API_KEY_PARAM": f"{PARAM_PREFIX}/finnhub-api-key",
             "BEDROCK_MODEL_ID": model_id,
+            "BEDROCK_API": bedrock_api,
             "BEDROCK_REGION": Aws.REGION,
         }
 
@@ -255,13 +293,8 @@ class PortfolioTrackerStack(Stack):
         news_ingest.add_to_role_policy(
             iam.PolicyStatement(actions=["ssm:GetParameter"], resources=[ssm_param_arn("finnhub-api-key")])
         )
-        news_ingest.add_to_role_policy(
-            iam.PolicyStatement(
-                actions=["bedrock-mantle:CreateInference"],
-                resources=[f"arn:{Aws.PARTITION}:bedrock-mantle:{Aws.REGION}:{Aws.ACCOUNT_ID}:project/*"],
-                conditions={"StringEquals": {"bedrock-mantle:Model": model_id}},
-            )
-        )
+        for statement in bedrock_statements(bedrock_api, model_id):
+            news_ingest.add_to_role_policy(statement)
 
         evaluate = make_function("EvaluateSignals", "evaluate_signals", timeout=300)
         table.grant_read_write_data(evaluate)

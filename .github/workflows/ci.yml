@@ -51,7 +51,7 @@ jobs:
       - name: Synthesize and run cdk-nag security checks
         run: make synth
         env:
-          CDK_DEFAULT_REGION: us-east-1
+          CDK_DEFAULT_REGION: us-east-2
 
   deploy:
     needs: checks
@@ -75,7 +75,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
       - name: Deploy
         run: |
           python -m venv .venv

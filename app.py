@@ -15,7 +15,7 @@ stack = PortfolioTrackerStack(
     "PortfolioTracker",
     env=cdk.Environment(
         account=os.environ.get("CDK_DEFAULT_ACCOUNT"),
-        region=os.environ.get("CDK_DEFAULT_REGION", "us-east-1"),
+        region=os.environ.get("CDK_DEFAULT_REGION", "us-east-2"),
     ),
     termination_protection=True,
     description="Serverless stock portfolio tracker with news summaries and rule-based alerts",
