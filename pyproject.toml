@@ -1,0 +1,22 @@
+[project]
+name = "portfolio-tracker"
+version = "0.1.0"
+description = "Serverless stock portfolio tracker on AWS: holdings, prices, news summaries and rule-based alerts"
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", ".", "tests"]
+addopts = "-q --cov=portfolio --cov-report=term-missing:skip-covered"
+
+[tool.ruff]
+line-length = 130
+target-version = "py313"
+extend-exclude = ["build", ".venv", "cdk.out"]
+
+[tool.ruff.lint]
+# E/F/W: correctness, I: imports, B: bugbear, UP: modern syntax, S: bandit security checks
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]

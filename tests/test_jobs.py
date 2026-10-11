@@ -1,0 +1,125 @@
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from conftest import price_series
+
+from portfolio.handlers import evaluate_signals, news_ingest, price_sync, weekly_report
+from portfolio.llm import ArticleScore, TickerBrief
+
+
+class FakePrices:
+    def __init__(self):
+        self.calls = []
+
+    def daily_prices(self, ticker, start_date):
+        self.calls.append((ticker, start_date))
+        if ticker == "BAD":
+            raise RuntimeError("provider down")
+        return price_series(100, 0.5, 5, start_date)
+
+
+def test_price_sync_backfills_then_increments(repo):
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "cost_basis": 1})
+    provider = FakePrices()
+    result = price_sync.handler({}, None, repo=repo, provider=provider)
+    assert result["tickers"] == ["SPY", "VTI"]  # benchmark always included
+    assert result["rows_written"] == 10
+    first_start = dict(provider.calls)["VTI"]
+    assert first_start < (datetime.now(UTC).date() - timedelta(days=365 * 4)).isoformat()
+
+    provider.calls.clear()
+    price_sync.handler({"tickers": ["VTI"]}, None, repo=repo, provider=provider)
+    last = repo.latest_price_date("VTI")
+    assert provider.calls[0][1] > first_start and last is not None
+
+
+def test_price_sync_tolerates_partial_failure_but_not_total(repo):
+    result = price_sync.handler({"tickers": ["VTI", "BAD"]}, None, repo=repo, provider=FakePrices())
+    assert result["failed"] == ["BAD"]
+    with pytest.raises(RuntimeError):
+        price_sync.handler({"tickers": ["BAD"]}, None, repo=repo, provider=FakePrices())
+
+
+def test_price_sync_ignores_invalid_requested_tickers(repo):
+    result = price_sync.handler({"tickers": ["VTI", "../x"]}, None, repo=repo, provider=FakePrices())
+    assert result["tickers"] == ["VTI"]
+
+
+class FakeNews:
+    def company_news(self, ticker, from_date, to_date):
+        now = datetime.now(UTC).isoformat(timespec="seconds")
+        return [
+            {
+                "article_id": f"{ticker}-1",
+                "headline": "Up",
+                "summary": "",
+                "source": "Wire",
+                "url": "https://x/1",
+                "published_at": now,
+            },
+            {
+                "article_id": f"{ticker}-2",
+                "headline": "Down",
+                "summary": "",
+                "source": "Wire",
+                "url": "https://x/2",
+                "published_at": now,
+            },
+        ]
+
+
+class FakeSummarizer:
+    @staticmethod
+    def brief_for_ticker(ticker, articles):
+        return TickerBrief(
+            summary=f"{ticker} summary",
+            article_scores=[
+                ArticleScore(article_id=f"{ticker}-1", score=0.8),
+                ArticleScore(article_id=f"{ticker}-2", score=-0.2),
+            ],
+        )
+
+    @staticmethod
+    def brief_for_portfolio(briefs, alerts):
+        return "Portfolio summary"
+
+
+def test_news_ingest_scores_and_briefs(repo):
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "cost_basis": 1})
+    result = news_ingest.handler({}, None, repo=repo, provider=FakeNews(), summarizer=FakeSummarizer)
+    assert result["summarized"] == ["VTI"]
+    brief = repo.latest_brief("VTI")
+    assert brief["sentiment_7d"] == pytest.approx(0.3)
+    assert brief["label"] == "Positive"
+    assert repo.latest_brief("ALL")["summary"] == "Portfolio summary"
+
+
+def test_evaluate_signals_alerts_once(repo, monkeypatch):
+    sent = []
+    monkeypatch.setattr(evaluate_signals.notify, "send_email", lambda s, b: sent.append(s))
+    start = (datetime.now(UTC).date() - timedelta(days=300)).isoformat()
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 10, "cost_basis": 100})
+    repo.put_holding("u1", {"ticker": "BND", "shares": 1, "cost_basis": 70})
+    repo.put_prices("VTI", price_series(100, 1, 300, start))
+    repo.put_prices("BND", price_series(70, 0, 300, start))
+    repo.put_prices("SPY", price_series(400, 1, 300, start))
+    repo.create_rule("u1", {"type": "weight_above", "ticker": "VTI", "params": {"pct": 50}, "enabled": True})
+    repo.create_rule("u1", {"type": "rsi_below", "ticker": "VTI", "params": {"threshold": 30}, "enabled": True})
+
+    first = evaluate_signals.handler({}, None, repo=repo)
+    assert first["alerts_sent"] == 1 and len(sent) == 1
+    assert repo.get_signal("VTI")["rsi14"] == 100.0
+    second = evaluate_signals.handler({}, None, repo=repo)
+    assert second["alerts_sent"] == 0  # still true, but no repeat email
+    assert len(repo.list_alerts("u1")) == 1
+
+
+def test_weekly_report(repo, monkeypatch):
+    sent = []
+    monkeypatch.setattr(weekly_report.notify, "send_email", lambda s, b: sent.append(b))
+    start = (datetime.now(UTC).date() - timedelta(days=10)).isoformat()
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 10, "cost_basis": 100})
+    repo.put_prices("VTI", price_series(100, 1, 10, start))
+    assert weekly_report.handler({}, None, repo=repo) == {"reports_sent": 1}
+    assert "Total value: $1,090.00" in sent[0]
+    assert "No alerts fired this week." in sent[0]
