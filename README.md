@@ -63,7 +63,7 @@ Rule example: `{"type": "drawdown_below", "ticker": "VTI", "params": {"pct": 10}
 
 Security is enforced in code and checked on every build. Highlights:
 
-- **Encryption:** one customer-managed KMS key with automatic rotation encrypts the table, SNS topic, dead-letter queue, Lambda environment variables and every log group. SNS and SQS reject non-TLS requests.
+- **Encryption:** everything is encrypted at rest. By default this uses AWS's free keys (AWS-owned key for DynamoDB, `aws/sns` for alerts, SQS-managed encryption, CloudWatch default encryption). Set `useCustomerManagedKey` to `true` to switch to one rotating customer-managed KMS key for the table, topic, queue, Lambda environment variables and every log group. SNS and SQS reject non-TLS requests in both modes.
 - **Least privilege:** each Lambda has its own role with only what it needs. Bedrock access is limited to `bedrock-mantle:CreateInference` for a single model ID. Each function can read only its own API-key parameter.
 - **Authentication:** Cognito with self sign-up disabled, a 12-character password policy, optional TOTP MFA, short-lived tokens, token revocation, and no user-existence leaks. Every API route requires a JWT.
 - **Isolation and validation:** the user ID always comes from the verified token, never the request. Inputs are validated (ticker format, numeric ranges, body size, rule parameters), and per-user limits cap holdings and rules.
@@ -144,20 +144,22 @@ Set these in `cdk.json` context or with `-c key=value`:
 | `benchmarkTicker` | `SPY` | Benchmark for performance comparison |
 | `bedrockModelId` | `anthropic.claude-haiku-5-5` | Claude model used for news summaries |
 | `monthlyBudgetUsd` | `5` | AWS Budget alert threshold |
+| `useCustomerManagedKey` | `false` | `true` adds a customer-managed KMS key (about $1/month) for key-policy control, revocation and CloudTrail auditing |
 
 ## Cost
 
-At personal scale (one user, a handful of tickers), expect about **$1–3/month**:
+At personal scale (one user, a handful of tickers), expect about **$0–2/month** with the default settings:
 
 | Service | Approx. monthly |
 |---|---|
-| KMS customer-managed key | $1.00 |
 | Bedrock (Claude Haiku 5.5, about 6 small calls per weekday) | well under $0.50 |
 | Lambda, Step Functions, EventBridge, SNS email, API Gateway | cents, mostly free tier |
 | DynamoDB on-demand + PITR | cents |
 | CloudWatch logs and alarms | the first 10 alarms are free; logs are tiny |
 
 Tiingo and Finnhub free tiers cover this usage.
+
+Turning on `useCustomerManagedKey` adds about $1/month, billed for as long as the key exists, used or not. The key is kept when you switch the flag back off or delete the stack, so data encrypted with it stays readable. To stop paying for it after switching off, schedule it for deletion: `aws kms schedule-key-deletion --key-id alias/portfolio-tracker --pending-window-in-days 30`. Only do that once nothing (including old table backups) still needs it.
 
 ## Design decisions
 

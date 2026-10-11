@@ -1,7 +1,8 @@
 """Portfolio Tracker infrastructure.
 
 Security posture (see docs/SECURITY.md for the full list):
-- One customer-managed KMS key (rotation on) encrypts the table, SNS topic, SQS queue and log groups.
+- Everything is encrypted at rest. By default with AWS-owned/managed keys (free); set the
+  `useCustomerManagedKey` context flag to use one rotating customer-managed KMS key instead.
 - Every Lambda has its own role with only the grants it needs; Bedrock access is limited to one model.
 - The API requires a Cognito JWT on every route, is throttled, and logs every request.
 - Data is retained on stack deletion, with point-in-time recovery and deletion protection.
@@ -41,10 +42,18 @@ from aws_cdk import aws_sns_subscriptions as subscriptions
 from aws_cdk import aws_sqs as sqs
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as tasks
+from cdk_nag import NagPackSuppression, NagSuppressions
 from constructs import Construct
 
 ROOT = Path(__file__).resolve().parent.parent
 PARAM_PREFIX = "/portfolio-tracker"
+
+
+def _flag(value: Any) -> bool:
+    """Context values from `-c key=value` arrive as strings; from cdk.json as booleans."""
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
 
 
 class PortfolioTrackerStack(Stack):
@@ -62,33 +71,40 @@ class PortfolioTrackerStack(Stack):
         Tags.of(self).add("project", "portfolio-tracker")
 
         # ------------------------------------------------------------------ encryption key
-        key = kms.Key(
-            self,
-            "DataKey",
-            alias="alias/portfolio-tracker",
-            description="Encrypts Portfolio Tracker data, messages and logs",
-            enable_key_rotation=True,
-            removal_policy=RemovalPolicy.RETAIN,
-        )
-        # CloudWatch Logs and CloudWatch alarms (publishing to the encrypted topic) need the key too.
-        key.add_to_resource_policy(
-            iam.PolicyStatement(
-                principals=[iam.ServicePrincipal(f"logs.{Aws.REGION}.amazonaws.com")],
-                actions=["kms:Encrypt*", "kms:Decrypt*", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:Describe*"],
-                resources=["*"],
-                conditions={
-                    "ArnLike": {"kms:EncryptionContext:aws:logs:arn": f"arn:{Aws.PARTITION}:logs:{Aws.REGION}:{Aws.ACCOUNT_ID}:*"}
-                },
+        # Off (default): AWS-owned/AWS-managed keys everywhere, no monthly key charge.
+        # On: one customer-managed key (about $1/month) for control, revocation and CloudTrail auditing.
+        use_cmk = _flag(self.node.try_get_context("useCustomerManagedKey"))
+        key: kms.Key | None = None
+        if use_cmk:
+            key = kms.Key(
+                self,
+                "DataKey",
+                alias="alias/portfolio-tracker",
+                description="Encrypts Portfolio Tracker data, messages and logs",
+                enable_key_rotation=True,
+                removal_policy=RemovalPolicy.RETAIN,
             )
-        )
-        key.add_to_resource_policy(
-            iam.PolicyStatement(
-                principals=[iam.ServicePrincipal("cloudwatch.amazonaws.com")],
-                actions=["kms:Decrypt", "kms:GenerateDataKey*"],
-                resources=["*"],
-                conditions={"StringEquals": {"aws:SourceAccount": Aws.ACCOUNT_ID}},
+            # CloudWatch Logs and CloudWatch alarms (publishing to the encrypted topic) need the key too.
+            key.add_to_resource_policy(
+                iam.PolicyStatement(
+                    principals=[iam.ServicePrincipal(f"logs.{Aws.REGION}.amazonaws.com")],
+                    actions=["kms:Encrypt*", "kms:Decrypt*", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:Describe*"],
+                    resources=["*"],
+                    conditions={
+                        "ArnLike": {
+                            "kms:EncryptionContext:aws:logs:arn": f"arn:{Aws.PARTITION}:logs:{Aws.REGION}:{Aws.ACCOUNT_ID}:*"
+                        }
+                    },
+                )
             )
-        )
+            key.add_to_resource_policy(
+                iam.PolicyStatement(
+                    principals=[iam.ServicePrincipal("cloudwatch.amazonaws.com")],
+                    actions=["kms:Decrypt", "kms:GenerateDataKey*"],
+                    resources=["*"],
+                    conditions={"StringEquals": {"aws:SourceAccount": Aws.ACCOUNT_ID}},
+                )
+            )
 
         # ------------------------------------------------------------------ data
         table = dynamodb.Table(
@@ -97,7 +113,7 @@ class PortfolioTrackerStack(Stack):
             partition_key=dynamodb.Attribute(name="pk", type=dynamodb.AttributeType.STRING),
             sort_key=dynamodb.Attribute(name="sk", type=dynamodb.AttributeType.STRING),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            encryption=dynamodb.TableEncryption.CUSTOMER_MANAGED,
+            encryption=dynamodb.TableEncryption.CUSTOMER_MANAGED if key else dynamodb.TableEncryption.DEFAULT,
             encryption_key=key,
             point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(point_in_time_recovery_enabled=True),
             deletion_protection=True,
@@ -111,9 +127,30 @@ class PortfolioTrackerStack(Stack):
         )
 
         # ------------------------------------------------------------------ notifications
-        topic = sns.Topic(self, "AlertsTopic", display_name="Portfolio Tracker", master_key=key, enforce_ssl=True)
+        # Alerts and reports carry portfolio details, so the topic is always encrypted: with the
+        # customer key when enabled, otherwise with the free AWS-managed SNS key.
+        topic_key = key or kms.Alias.from_alias_name(self, "SnsManagedKey", "alias/aws/sns")
+        topic = sns.Topic(self, "AlertsTopic", display_name="Portfolio Tracker", master_key=topic_key, enforce_ssl=True)
+        if key:
+            ops_topic = topic
+        else:
+            # CloudWatch alarms cannot publish to a topic encrypted with the AWS-managed SNS key,
+            # so alarms get their own topic. Alarm messages contain no portfolio data.
+            ops_topic = sns.Topic(self, "OpsTopic", display_name="Portfolio Tracker ops", enforce_ssl=True)
+            NagSuppressions.add_resource_suppressions(
+                ops_topic,
+                [
+                    NagPackSuppression(
+                        id="AwsSolutions-SNS2",
+                        reason="Only CloudWatch alarm notifications (no user data) use this topic; alarms cannot "
+                        "publish to a topic encrypted with the AWS-managed key. Enable useCustomerManagedKey to encrypt it.",
+                    )
+                ],
+            )
         if alert_email:
             topic.add_subscription(subscriptions.EmailSubscription(alert_email))
+            if ops_topic is not topic:
+                ops_topic.add_subscription(subscriptions.EmailSubscription(alert_email))
 
         # ------------------------------------------------------------------ auth
         user_pool = cognito.UserPool(
@@ -201,7 +238,7 @@ class PortfolioTrackerStack(Stack):
         price_sync_dlq = sqs.Queue(
             self,
             "PriceSyncDlq",
-            encryption=sqs.QueueEncryption.KMS,
+            encryption=sqs.QueueEncryption.KMS if key else sqs.QueueEncryption.SQS_MANAGED,
             encryption_master_key=key,
             enforce_ssl=True,
             retention_period=Duration.days(14),
@@ -349,7 +386,7 @@ class PortfolioTrackerStack(Stack):
         )
 
         # ------------------------------------------------------------------ monitoring
-        alarm_action = cw_actions.SnsAction(topic)
+        alarm_action = cw_actions.SnsAction(ops_topic)
         cloudwatch.Alarm(
             self,
             "PipelineFailedAlarm",
