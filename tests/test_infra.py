@@ -17,6 +17,15 @@ def synth(tmp_path_factory, **context):
     return Template.from_stack(stack)
 
 
+def app_functions(template):
+    """The app's own Lambdas (excludes CDK's helper that uploads the dashboard files)."""
+    return [
+        fn
+        for fn in template.find_resources("AWS::Lambda::Function").values()
+        if str(fn["Properties"].get("Handler", "")).startswith("portfolio.handlers.")
+    ]
+
+
 @pytest.fixture(scope="module")
 def template(tmp_path_factory):
     """Default mode: AWS-managed encryption, no customer-managed key."""
@@ -56,7 +65,7 @@ def test_cmk_mode_encrypts_everything_with_rotating_key(cmk_template):
     cmk_template.resource_count_is("AWS::SNS::Topic", 1)
     for group in cmk_template.find_resources("AWS::Logs::LogGroup").values():
         assert "KmsKeyId" in group["Properties"]
-    for fn in cmk_template.find_resources("AWS::Lambda::Function").values():
+    for fn in app_functions(cmk_template):
         assert "KmsKeyArn" in fn["Properties"]
 
 
@@ -125,9 +134,9 @@ def test_topics_and_queue_require_tls(any_template):
 
 
 def test_functions_traced_on_arm(any_template):
-    functions = any_template.find_resources("AWS::Lambda::Function")
+    functions = app_functions(any_template)
     assert len(functions) == 5
-    for fn in functions.values():
+    for fn in functions:
         assert fn["Properties"]["TracingConfig"] == {"Mode": "Active"}
         assert fn["Properties"]["Architectures"] == ["arm64"]
 
@@ -162,3 +171,54 @@ def test_secrets_scoped_to_named_parameters(any_template):
 def test_budget_and_alarms(any_template):
     any_template.resource_count_is("AWS::Budgets::Budget", 1)
     assert len(any_template.find_resources("AWS::CloudWatch::Alarm")) == 7
+
+
+# ---------------------------------------------------------------- dashboard hosting and login
+def test_site_bucket_private_and_served_only_via_cloudfront(any_template):
+    any_template.has_resource_properties(
+        "AWS::S3::Bucket",
+        Match.object_like(
+            {
+                "PublicAccessBlockConfiguration": {
+                    "BlockPublicAcls": True,
+                    "BlockPublicPolicy": True,
+                    "IgnorePublicAcls": True,
+                    "RestrictPublicBuckets": True,
+                }
+            }
+        ),
+    )
+    any_template.resource_count_is("AWS::CloudFront::OriginAccessControl", 1)
+    policies = json.dumps(any_template.find_resources("AWS::S3::BucketPolicy"))
+    assert "cloudfront.amazonaws.com" in policies and '"aws:SecureTransport": "false"' in policies
+
+
+def test_site_https_only_with_strict_headers(any_template):
+    dist = next(iter(any_template.find_resources("AWS::CloudFront::Distribution").values()))
+    behavior = dist["Properties"]["DistributionConfig"]["DefaultCacheBehavior"]
+    assert behavior["ViewerProtocolPolicy"] == "redirect-to-https"
+    headers = json.dumps(any_template.find_resources("AWS::CloudFront::ResponseHeadersPolicy"))
+    for expected in (
+        "script-src 'self'",
+        "frame-ancestors 'none'",
+        "object-src 'none'",
+        '"FrameOption": "DENY"',
+        "Permissions-Policy",
+    ):
+        assert expected in headers
+    assert "unsafe-inline" not in headers and "unsafe-eval" not in headers
+
+
+def test_login_uses_code_flow_with_pkce_only(any_template):
+    any_template.has_resource_properties(
+        "AWS::Cognito::UserPoolClient",
+        Match.object_like({"AllowedOAuthFlows": ["code"], "AllowedOAuthScopes": ["openid", "email"], "GenerateSecret": False}),
+    )
+    any_template.resource_count_is("AWS::Cognito::UserPoolDomain", 1)
+
+
+def test_every_log_group_expires(any_template):
+    groups = any_template.find_resources("AWS::Logs::LogGroup")
+    assert groups
+    for group in groups.values():
+        assert group["Properties"].get("RetentionInDays"), "log groups must not keep logs forever"

@@ -26,6 +26,8 @@ from aws_cdk import aws_apigatewayv2 as apigw
 from aws_cdk import aws_apigatewayv2_authorizers as authorizers
 from aws_cdk import aws_apigatewayv2_integrations as integrations
 from aws_cdk import aws_budgets as budgets
+from aws_cdk import aws_cloudfront as cloudfront
+from aws_cdk import aws_cloudfront_origins as origins
 from aws_cdk import aws_cloudwatch as cloudwatch
 from aws_cdk import aws_cloudwatch_actions as cw_actions
 from aws_cdk import aws_cognito as cognito
@@ -37,6 +39,8 @@ from aws_cdk import aws_kms as kms
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_lambda_destinations as destinations
 from aws_cdk import aws_logs as logs
+from aws_cdk import aws_s3 as s3
+from aws_cdk import aws_s3_deployment as s3deploy
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as subscriptions
 from aws_cdk import aws_sqs as sqs
@@ -189,6 +193,80 @@ class PortfolioTrackerStack(Stack):
             if ops_topic is not topic:
                 ops_topic.add_subscription(subscriptions.EmailSubscription(alert_email))
 
+        # ------------------------------------------------------------------ web dashboard hosting
+        # Private bucket, served only through CloudFront (Origin Access Control). Strict security
+        # headers; the CSP allows scripts only from this site and API calls only to this region's
+        # API Gateway and this app's Cognito login domain.
+        auth_prefix = f"portfolio-tracker-{Aws.ACCOUNT_ID}"
+        auth_url = f"https://{auth_prefix}.auth.{Aws.REGION}.amazoncognito.com"
+        site_bucket = s3.Bucket(
+            self,
+            "SiteBucket",
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            enforce_ssl=True,
+            object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+        csp = "; ".join(
+            [
+                "default-src 'none'",
+                "script-src 'self'",
+                "style-src 'self' https://fonts.googleapis.com",
+                "font-src https://fonts.gstatic.com",
+                "img-src 'self' data:",
+                f"connect-src 'self' https://*.execute-api.{Aws.REGION}.amazonaws.com {auth_url}",
+                "base-uri 'none'",
+                "form-action 'self'",
+                "frame-ancestors 'none'",
+                "object-src 'none'",
+                "upgrade-insecure-requests",
+            ]
+        )
+        headers = cloudfront.ResponseHeadersPolicy(
+            self,
+            "SiteHeaders",
+            security_headers_behavior=cloudfront.ResponseSecurityHeadersBehavior(
+                content_security_policy=cloudfront.ResponseHeadersContentSecurityPolicy(
+                    content_security_policy=csp, override=True
+                ),
+                strict_transport_security=cloudfront.ResponseHeadersStrictTransportSecurity(
+                    access_control_max_age=Duration.days(730), include_subdomains=True, preload=True, override=True
+                ),
+                content_type_options=cloudfront.ResponseHeadersContentTypeOptions(override=True),
+                frame_options=cloudfront.ResponseHeadersFrameOptions(
+                    frame_option=cloudfront.HeadersFrameOption.DENY, override=True
+                ),
+                referrer_policy=cloudfront.ResponseHeadersReferrerPolicy(
+                    referrer_policy=cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override=True
+                ),
+            ),
+            custom_headers_behavior=cloudfront.ResponseCustomHeadersBehavior(
+                custom_headers=[
+                    cloudfront.ResponseCustomHeader(
+                        header="Permissions-Policy", value="camera=(), microphone=(), geolocation=(), payment=()", override=True
+                    )
+                ]
+            ),
+        )
+        distribution = cloudfront.Distribution(
+            self,
+            "Site",
+            default_behavior=cloudfront.BehaviorOptions(
+                origin=origins.S3BucketOrigin.with_origin_access_control(site_bucket),
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                response_headers_policy=headers,
+                compress=True,
+            ),
+            default_root_object="index.html",
+            price_class=cloudfront.PriceClass.PRICE_CLASS_100,  # North America and Europe edges: cheapest
+            http_version=cloudfront.HttpVersion.HTTP2_AND_3,
+            comment="Portfolio Tracker dashboard",
+        )
+        site_url = f"https://{distribution.distribution_domain_name}"
+        allowed_origins = [*allowed_origins, site_url]
+
         # ------------------------------------------------------------------ auth
         user_pool = cognito.UserPool(
             self,
@@ -220,6 +298,19 @@ class PortfolioTrackerStack(Stack):
             id_token_validity=Duration.hours(1),
             refresh_token_validity=Duration.days(7),
             enable_token_revocation=True,
+            # Dashboard sign-in: Cognito's hosted page with authorization code + PKCE (no client secret).
+            o_auth=cognito.OAuthSettings(
+                flows=cognito.OAuthFlows(authorization_code_grant=True),
+                scopes=[cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL],
+                callback_urls=[f"{site_url}/", "http://localhost:5173/"],
+                logout_urls=[f"{site_url}/", "http://localhost:5173/"],
+            ),
+            supported_identity_providers=[cognito.UserPoolClientIdentityProvider.COGNITO],
+        )
+        user_pool.add_domain(
+            "LoginDomain",
+            cognito_domain=cognito.CognitoDomainOptions(domain_prefix=auth_prefix),
+            managed_login_version=cognito.ManagedLoginVersion.CLASSIC_HOSTED_UI,
         )
 
         # ------------------------------------------------------------------ Lambda shared pieces
@@ -472,7 +563,34 @@ class PortfolioTrackerStack(Stack):
                 ],
             )
 
+        # ------------------------------------------------------------------ dashboard deployment
+        # Uploads web/ plus a config.json with this stack's API URL and login settings, then
+        # invalidates the CloudFront cache so the new version is live immediately.
+        s3deploy.BucketDeployment(
+            self,
+            "DeploySite",
+            destination_bucket=site_bucket,
+            sources=[
+                s3deploy.Source.asset(str(ROOT / "web")),
+                s3deploy.Source.json_data(
+                    "config.json",
+                    {"apiUrl": http_api.api_endpoint, "authDomain": auth_url, "clientId": user_pool_client.user_pool_client_id},
+                ),
+            ],
+            distribution=distribution,
+            distribution_paths=["/*"],
+            memory_limit=256,
+            log_group=logs.LogGroup(
+                self,
+                "DeploySiteLogs",
+                retention=logs.RetentionDays.ONE_WEEK,
+                encryption_key=key,
+                removal_policy=RemovalPolicy.DESTROY,
+            ),
+        )
+
         # ------------------------------------------------------------------ outputs
+        CfnOutput(self, "DashboardUrl", value=site_url)
         CfnOutput(self, "ApiUrl", value=http_api.api_endpoint)
         CfnOutput(self, "UserPoolId", value=user_pool.user_pool_id)
         CfnOutput(self, "UserPoolClientId", value=user_pool_client.user_pool_client_id)

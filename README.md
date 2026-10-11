@@ -1,6 +1,6 @@
 # Portfolio Tracker
 
-Serverless stock/ETF tracker on AWS: holdings, daily prices, AI news summaries (Claude on Bedrock), technical signals, and email alerts on rules you define.
+Serverless stock/ETF tracker on AWS: a web dashboard, daily prices, AI news summaries (Claude on Bedrock), technical signals, and email alerts on rules you define.
 
 > Describes data only. Not investment advice.
 
@@ -8,7 +8,9 @@ Serverless stock/ETF tracker on AWS: holdings, daily prices, AI news summaries (
 
 ```mermaid
 flowchart LR
-    C[Client] -->|JWT| API[HTTP API] --> FN[Api Lambda] --> DB[(DynamoDB)]
+    U[Browser] --> CF[CloudFront + S3<br/>dashboard] 
+    U -->|sign in| COG[Cognito hosted login]
+    U -->|JWT| API[HTTP API] --> FN[Api Lambda] --> DB[(DynamoDB)]
     EB[EventBridge, weekdays] --> SF
     subgraph SF[Step Functions]
         P[PriceSync] --> N[NewsIngest] --> E[EvaluateSignals]
@@ -60,6 +62,8 @@ curl -X PUT "$API/holdings/VTI" -H "Authorization: Bearer $TOKEN" -d '{"shares":
 
 Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <PipelineArn>`.
 
+**Dashboard:** open the `DashboardUrl` output and sign in with the same email and password. It has Overview, Holdings, News & signals, and Alerts (create and delete rules). The code is plain HTML/CSS/JS in `web/` and is uploaded on every deploy.
+
 ## Configuration (`cdk.json` or `-c key=value`)
 
 | Key | Default | Purpose |
@@ -78,16 +82,17 @@ About **$0–2/month** for one user: mostly free tier, plus a few cents of Bedro
 
 ## Security
 
-Encryption at rest everywhere, least-privilege role per function, Cognito JWT on every route, API throttling and access logs, PITR and deletion protection, and API keys in SSM SecureString. CI runs Ruff with Bandit rules, `pip-audit`, cdk-nag, and template security tests, and deploys via OIDC. Details: [docs/SECURITY.md](docs/SECURITY.md).
+Encryption at rest everywhere, least-privilege role per function, Cognito hosted login (OAuth code + PKCE), private S3 behind CloudFront with a strict CSP and security headers, Cognito JWT on every route, API throttling and access logs, PITR and deletion protection, and API keys in SSM SecureString. CI runs Ruff with Bandit rules, `pip-audit`, cdk-nag, and template security tests, and deploys via OIDC. Details: [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Layout
 
 ```
 infra/          CDK stack and documented cdk-nag exceptions
+web/            Dashboard (no build step)
 src/portfolio/  Lambda handlers, providers, indicators, rules, analytics, LLM client
 tests/          Unit, handler and infrastructure tests
 ```
 
 ## Roadmap
 
-Web dashboard (dark theme), rule backtesting, and transaction history.
+Rule backtesting, transaction history, and a custom domain for the dashboard.

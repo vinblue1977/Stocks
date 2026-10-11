@@ -41,6 +41,30 @@ def apply_suppressions(stack: Stack) -> None:
                 reason="Same as COG3: the Plus feature plan is out of budget for a single-owner app.",
             ),
             NagPackSuppression(
+                id="AwsSolutions-CFR1",
+                reason="No geo restriction: the owner may sign in from anywhere; access is protected by Cognito.",
+            ),
+            NagPackSuppression(
+                id="AwsSolutions-CFR2",
+                reason="AWS WAF costs about $6+/month, more than this app's budget. The site serves only static files; "
+                "data access goes through the authenticated, throttled API. See docs/SECURITY.md hardening options.",
+            ),
+            NagPackSuppression(
+                id="AwsSolutions-CFR3",
+                reason="CloudFront access logs are off to avoid log storage cost; the static site has no user data, "
+                "and every data request is recorded in the API access logs.",
+            ),
+            NagPackSuppression(
+                id="AwsSolutions-CFR4",
+                reason="The default *.cloudfront.net certificate does not allow choosing a minimum TLS version; "
+                "a custom domain with an ACM certificate (TLSv1.2_2021) is a documented upgrade.",
+            ),
+            NagPackSuppression(
+                id="AwsSolutions-S1",
+                reason="The site bucket holds only the public dashboard code and is readable only by CloudFront; "
+                "server access logs would add cost without security value.",
+            ),
+            NagPackSuppression(
                 id="AwsSolutions-SQS3",
                 reason="This queue is itself the dead-letter queue for failed price backfills.",
             ),
