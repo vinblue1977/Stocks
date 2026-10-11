@@ -123,3 +123,40 @@ def test_weekly_report(repo, monkeypatch):
     assert weekly_report.handler({}, None, repo=repo) == {"reports_sent": 1}
     assert "Total value: $1,090.00" in sent[0]
     assert "No alerts fired this week." in sent[0]
+
+
+def test_prices_written_newest_first(repo):
+    order = []
+    real_batch = repo.table.batch_writer
+
+    class Spy:
+        def __init__(self, **kw):
+            self.inner = real_batch(**kw)
+
+        def __enter__(self):
+            self.ctx = self.inner.__enter__()
+            return self
+
+        def __exit__(self, *a):
+            return self.inner.__exit__(*a)
+
+        def put_item(self, Item):  # noqa: N803 - boto3 argument name
+            order.append(Item["sk"])
+            self.ctx.put_item(Item=Item)
+
+    repo.table.batch_writer = lambda **kw: Spy(**kw)
+    repo.put_prices("AVGO", price_series(100, 1, 5, "2026-01-01"))
+    assert order == sorted(order, reverse=True)
+
+
+def test_interrupted_backfill_is_redone(repo):
+    provider = FakePrices()
+    today = datetime.now(UTC).date()
+    # Simulate a partial earlier load: recent prices exist but no completion marker
+    repo.put_prices("AVGO", price_series(300, 1, 3, (today - timedelta(days=3)).isoformat()))
+    price_sync.sync_ticker("AVGO", repo, provider, today)
+    assert provider.calls[-1][1] <= (today - timedelta(days=365 * 4)).isoformat()  # full reload
+    assert repo.backfill_complete("AVGO")
+    # Afterwards only new days are requested
+    price_sync.sync_ticker("AVGO", repo, provider, today)
+    assert provider.calls[-1][1] > (today - timedelta(days=30)).isoformat()

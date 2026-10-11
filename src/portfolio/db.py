@@ -6,6 +6,7 @@ Key design (pk / sk):
     USER#<uid>      RULESTATE#<rule_id>          whether the rule is currently triggered
     USER#<uid>      ALERT#<iso_ts>#<rule_id>     alert history (expires after 180 days)
     PRICE#<ticker>  <yyyy-mm-dd>                 daily adjusted close
+    PRICEMETA#<ticker> BACKFILL                  set once the full history has loaded
     NEWS#<ticker>   <iso_ts>#<article_id>        scored headline (expires after 30 days)
     BRIEF#<ticker>  <yyyy-mm-dd>                 AI news summary; BRIEF#ALL is the portfolio brief
     SIGNAL#<ticker> LATEST                       latest signal snapshot
@@ -223,12 +224,22 @@ class Repository:
         return items[0]["sk"] if items else None
 
     def put_prices(self, ticker: str, rows: Iterable[Mapping[str, Any]]) -> int:
+        """Write newest first, so readers see the correct latest price even while a backfill is still running."""
         count = 0
         with self.table.batch_writer(overwrite_by_pkeys=["pk", "sk"]) as batch:
-            for row in rows:
+            for row in sorted(rows, key=lambda r: r["date"], reverse=True):
                 batch.put_item(Item=to_dynamo({"pk": f"PRICE#{ticker}", "sk": row["date"], **row}))
                 count += 1
         return count
+
+    def backfill_complete(self, ticker: str) -> bool:
+        item = self.table.get_item(Key={"pk": f"PRICEMETA#{ticker}", "sk": "BACKFILL"}).get("Item")
+        return bool(item)
+
+    def mark_backfill_complete(self, ticker: str, oldest: str | None) -> None:
+        self.table.put_item(
+            Item={"pk": f"PRICEMETA#{ticker}", "sk": "BACKFILL", "oldest_date": oldest or "", "completed_at": _now_iso()}
+        )
 
     def price_history(self, ticker: str, since: str | None = None) -> list[tuple[str, float]]:
         condition = Key("pk").eq(f"PRICE#{ticker}")

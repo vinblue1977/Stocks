@@ -20,15 +20,22 @@ logger = get_logger(__name__)
 
 
 def sync_ticker(ticker: str, repo: Repository, provider: PriceProvider, today: date) -> int:
+    """Load the full history once (until marked complete), then only the days since the last stored close.
+
+    If a backfill is interrupted, the marker is missing and the next run reloads the full history,
+    so a partial load can't leave a permanent gap.
+    """
     last = repo.latest_price_date(ticker)
-    if last:
+    if last and repo.backfill_complete(ticker):
         start = date.fromisoformat(last) + timedelta(days=1)
-    else:
-        start = today - timedelta(days=365 * get_config().history_years)
-    if start > today:
-        return 0
-    rows = provider.daily_prices(ticker, start.isoformat())
-    return repo.put_prices(ticker, rows)
+        if start > today:
+            return 0
+        return repo.put_prices(ticker, provider.daily_prices(ticker, start.isoformat()))
+
+    rows = provider.daily_prices(ticker, (today - timedelta(days=365 * get_config().history_years)).isoformat())
+    written = repo.put_prices(ticker, rows)
+    repo.mark_backfill_complete(ticker, min((r["date"] for r in rows), default=None))
+    return written
 
 
 def handler(
