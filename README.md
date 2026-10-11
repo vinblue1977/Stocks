@@ -28,6 +28,7 @@ All routes need `Authorization: Bearer <Cognito token>`.
 | Route | Purpose |
 |---|---|
 | `GET/PUT/DELETE /holdings[/{ticker}]` | Manage holdings: `{"shares": 40, "cost_basis": 230}` |
+| `POST /holdings/{ticker}/purchases` | Record a buy: `{"shares": 5, "price": 280}`. Updates total shares and the weighted average cost |
 | `GET /portfolio` | Value, gains, allocation, history vs. SPY |
 | `GET /signals` | RSI, moving averages, drawdown, sentiment |
 | `GET /news?ticker=VTI` | AI briefing and scored headlines |

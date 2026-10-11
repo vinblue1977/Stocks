@@ -448,6 +448,7 @@ class PortfolioTrackerStack(Stack):
         routes = {
             "/holdings": [apigw.HttpMethod.GET],
             "/holdings/{ticker}": [apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
+            "/holdings/{ticker}/purchases": [apigw.HttpMethod.POST],
             "/rule-types": [apigw.HttpMethod.GET],
             "/rules": [apigw.HttpMethod.GET, apigw.HttpMethod.POST],
             "/rules/{ruleId}": [apigw.HttpMethod.DELETE],

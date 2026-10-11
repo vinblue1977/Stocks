@@ -120,3 +120,84 @@ def test_holdings_cap(repo, monkeypatch):
     assert status == 409 and "up to 2" in body["message"]
     # Updating an existing holding is still allowed at the cap
     assert call(repo, "PUT /holdings/{ticker}", path={"ticker": "VTI"}, body=json.dumps({"shares": 2, "cost_basis": 1}))[0] == 200
+
+
+def buy(repo, ticker, shares, price, **extra):
+    return call(
+        repo,
+        "POST /holdings/{ticker}/purchases",
+        path={"ticker": ticker},
+        body=json.dumps({"shares": shares, "price": price, **extra}),
+    )
+
+
+def test_purchase_creates_then_averages(repo, no_backfill):
+    status, body = buy(repo, "VTI", 10, 250, purchased_on="2026-03-02")
+    assert status == 201 and body["previous"] is None
+    assert body["holding"]["shares"] == 10 and body["holding"]["cost_basis"] == 250
+    assert no_backfill == ["VTI"]
+
+    status, body = buy(repo, "vti", 5, 280, purchased_on="2026-08-03")
+    assert status == 200
+    assert body["holding"]["shares"] == 15
+    assert body["holding"]["cost_basis"] == pytest.approx(260.0)  # (10*250 + 5*280) / 15
+    assert body["holding"]["purchased_on"] == "2026-03-02"  # earliest purchase kept
+    assert body["previous"]["shares"] == 10
+    assert no_backfill == ["VTI"]  # no second backfill for an existing ticker
+
+
+def test_purchase_fractional_shares(repo):
+    buy(repo, "QQQ", 0.5, 400)
+    _, body = buy(repo, "QQQ", 0.25, 520)
+    assert body["holding"]["shares"] == 0.75
+    assert body["holding"]["cost_basis"] == pytest.approx(440.0)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"shares": 0, "price": 10},
+        {"shares": 1},
+        {"shares": 1, "price": -1},
+        {"shares": 1, "price": 1, "purchased_on": "2999-01-01"},
+    ],
+)
+def test_purchase_validation(repo, payload):
+    status, _ = call(repo, "POST /holdings/{ticker}/purchases", path={"ticker": "VTI"}, body=json.dumps(payload))
+    assert status == 400
+
+
+def test_purchase_retries_on_concurrent_change(repo, monkeypatch):
+    from portfolio.db import ConcurrentUpdateError
+
+    buy(repo, "VTI", 10, 100)
+    real = repo.replace_holding_if_unchanged
+    calls = {"n": 0}
+
+    def flaky(user_id, holding, previous):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ConcurrentUpdateError("VTI")
+        return real(user_id, holding, previous)
+
+    monkeypatch.setattr(repo, "replace_holding_if_unchanged", flaky)
+    status, body = buy(repo, "VTI", 10, 200)
+    assert status == 200 and body["holding"]["cost_basis"] == pytest.approx(150.0)
+    assert calls["n"] == 2
+
+
+def test_conditional_write_detects_stale_read(repo):
+    from portfolio.db import ConcurrentUpdateError
+
+    buy(repo, "VTI", 10, 100)
+    stale = repo.get_holding("user-1", "VTI")
+    buy(repo, "VTI", 1, 100)  # someone else changes it
+    with pytest.raises(ConcurrentUpdateError):
+        repo.replace_holding_if_unchanged("user-1", {"ticker": "VTI", "shares": 99, "cost_basis": 1}, stale)
+
+
+def test_purchase_respects_holdings_cap(repo, monkeypatch):
+    monkeypatch.setattr(api, "MAX_HOLDINGS", 1)
+    buy(repo, "VTI", 1, 1)
+    assert buy(repo, "BND", 1, 1)[0] == 409
+    assert buy(repo, "VTI", 1, 1)[0] == 200

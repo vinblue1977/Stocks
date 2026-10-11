@@ -1,7 +1,7 @@
 """DynamoDB single-table repository.
 
 Key design (pk / sk):
-    USER#<uid>      HOLDING#<ticker>             a position (gsi1: HOLDINGS / <ticker>#<uid>)
+    USER#<uid>      HOLDING#<ticker>             a position: shares + average cost per share (gsi1: HOLDINGS / <ticker>#<uid>)
     USER#<uid>      RULE#<rule_id>               an alert rule (gsi1: RULES / <uid>#<rule_id>)
     USER#<uid>      RULESTATE#<rule_id>          whether the rule is currently triggered
     USER#<uid>      ALERT#<iso_ts>#<rule_id>     alert history (expires after 180 days)
@@ -22,12 +22,16 @@ from functools import lru_cache
 from typing import Any
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 
 from portfolio.config import get_config
 
 NEWS_TTL_SECONDS = 30 * 24 * 3600
 ALERT_TTL_SECONDS = 180 * 24 * 3600
+
+
+class ConcurrentUpdateError(Exception):
+    """The item changed between read and write; the caller should re-read and retry."""
 
 
 def to_dynamo(value: Any) -> Any:
@@ -90,6 +94,39 @@ class Repository:
             **holding,
         }
         self.table.put_item(Item=to_dynamo(item))
+        return _clean(item)
+
+    def get_holding(self, user_id: str, ticker: str) -> dict[str, Any] | None:
+        item = self.table.get_item(Key={"pk": f"USER#{user_id}", "sk": f"HOLDING#{ticker}"}, ConsistentRead=True).get("Item")
+        return _clean(item) if item else None
+
+    def replace_holding_if_unchanged(
+        self, user_id: str, holding: Mapping[str, Any], previous: Mapping[str, Any] | None
+    ) -> dict[str, Any]:
+        """Write `holding` only if the stored one still matches `previous` (None = must not exist).
+
+        Prevents two purchases recorded at the same moment from overwriting each other's math.
+        Raises ConcurrentUpdateError when someone else changed the holding first.
+        """
+        ticker = holding["ticker"]
+        item = {
+            "pk": f"USER#{user_id}",
+            "sk": f"HOLDING#{ticker}",
+            "gsi1pk": "HOLDINGS",
+            "gsi1sk": f"{ticker}#{user_id}",
+            "updated_at": _now_iso(),
+            **holding,
+        }
+        if previous is None:
+            condition: Any = Attr("pk").not_exists()
+        else:
+            condition = Attr("shares").eq(to_dynamo(float(previous["shares"]))) & Attr("cost_basis").eq(
+                to_dynamo(float(previous["cost_basis"]))
+            )
+        try:
+            self.table.put_item(Item=to_dynamo(item), ConditionExpression=condition)
+        except self.table.meta.client.exceptions.ConditionalCheckFailedException as exc:
+            raise ConcurrentUpdateError(ticker) from exc
         return _clean(item)
 
     def delete_holding(self, user_id: str, ticker: str) -> None:

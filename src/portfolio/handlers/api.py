@@ -18,7 +18,7 @@ import boto3
 
 from portfolio import analytics, rules
 from portfolio.config import get_config
-from portfolio.db import Repository
+from portfolio.db import ConcurrentUpdateError, Repository
 from portfolio.llm import sentiment_label
 from portfolio.logs import get_logger, log
 
@@ -102,14 +102,9 @@ def put_holding(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         "shares": _number(body, "shares", 0.000001, 1_000_000_000),
         "cost_basis": _number(body, "cost_basis", 0, 10_000_000),
     }
-    if body.get("purchased_on"):
-        try:
-            purchased = date.fromisoformat(str(body["purchased_on"]))
-        except ValueError as exc:
-            raise ApiError(400, "purchased_on must be YYYY-MM-DD") from exc
-        if purchased > datetime.now(UTC).date():
-            raise ApiError(400, "purchased_on cannot be in the future")
-        holding["purchased_on"] = purchased.isoformat()
+    purchased_on = _purchase_date(body)
+    if purchased_on:
+        holding["purchased_on"] = purchased_on
     existing = {h["ticker"] for h in repo.list_holdings(user_id)}
     if ticker not in existing and len(existing) >= MAX_HOLDINGS:
         raise ApiError(409, f"You can track up to {MAX_HOLDINGS} holdings")
@@ -117,6 +112,59 @@ def put_holding(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     if ticker not in existing:
         _request_backfill(ticker)
     return _response(200, saved)
+
+
+def _purchase_date(body: dict[str, Any]) -> str | None:
+    if not body.get("purchased_on"):
+        return None
+    try:
+        purchased = date.fromisoformat(str(body["purchased_on"]))
+    except ValueError as exc:
+        raise ApiError(400, "purchased_on must be YYYY-MM-DD") from exc
+    if purchased > datetime.now(UTC).date():
+        raise ApiError(400, "purchased_on cannot be in the future")
+    return purchased.isoformat()
+
+
+def record_purchase(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """Add shares bought at a price; updates total shares and the weighted average cost.
+
+    new average = (old shares x old average + new shares x price) / total shares
+    """
+    user_id = _user_id(event)
+    ticker = _ticker(event.get("pathParameters", {}).get("ticker"))
+    body = _body(event)
+    shares = _number(body, "shares", 0.000001, 1_000_000_000)
+    price = _number(body, "price", 0, 10_000_000)
+    purchased_on = _purchase_date(body)
+
+    for _ in range(3):  # retry if another request changed the holding between read and write
+        current = repo.get_holding(user_id, ticker)
+        if current is None:
+            if len(repo.list_holdings(user_id)) >= MAX_HOLDINGS:
+                raise ApiError(409, f"You can track up to {MAX_HOLDINGS} holdings")
+            updated: dict[str, Any] = {"ticker": ticker, "shares": shares, "cost_basis": price}
+            if purchased_on:
+                updated["purchased_on"] = purchased_on
+        else:
+            old_shares = float(current["shares"])
+            total = old_shares + shares
+            average = (old_shares * float(current["cost_basis"]) + shares * price) / total
+            updated = {"ticker": ticker, "shares": round(total, 6), "cost_basis": round(average, 6)}
+            dates = [d for d in (current.get("purchased_on"), purchased_on) if d]
+            if dates:
+                updated["purchased_on"] = min(dates)  # keep the first purchase date
+        try:
+            saved = repo.replace_holding_if_unchanged(user_id, updated, current)
+            break
+        except ConcurrentUpdateError:
+            continue
+    else:
+        raise ApiError(409, "The holding changed while saving. Please try again.")
+
+    if current is None:
+        _request_backfill(ticker)
+    return _response(201 if current is None else 200, {"holding": saved, "previous": current})
 
 
 def delete_holding(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
@@ -227,6 +275,7 @@ Route = Callable[[dict[str, Any], Repository], dict[str, Any]]
 ROUTES: dict[str, Route] = {
     "GET /holdings": list_holdings,
     "PUT /holdings/{ticker}": put_holding,
+    "POST /holdings/{ticker}/purchases": record_purchase,
     "DELETE /holdings/{ticker}": delete_holding,
     "GET /rule-types": list_rule_types,
     "GET /rules": list_rules,
