@@ -21,6 +21,7 @@ class Config:
     news_lookback_days: int
     news_excluded: frozenset[str]
     owner_name: str
+    partner_news: bool
     partner_name: str
 
 
@@ -39,5 +40,6 @@ def get_config() -> Config:
         news_lookback_days=int(os.environ.get("NEWS_LOOKBACK_DAYS", "3")),
         news_excluded=frozenset(t.strip().upper() for t in os.environ.get("NEWS_EXCLUDED_TICKERS", "").split(",") if t.strip()),
         owner_name=os.environ.get("OWNER_NAME") or "Me",
+        partner_news=os.environ.get("PARTNER_NEWS", "true").lower() != "false",
         partner_name=os.environ.get("PARTNER_NAME") or "Partner",
     )
