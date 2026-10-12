@@ -1,10 +1,14 @@
 # Weekly update PRs for GitHub Actions (keeps the pinned commit SHAs current) and Python dependencies.
+# Titles follow Conventional Commits ("ci(deps): ...", "build(deps): ...") to pass the PR title check.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: ci
+      include: scope
     groups:
       actions:
         patterns: ["*"]
@@ -12,6 +16,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: build
+      include: scope
     groups:
       python:
         patterns: ["*"]
@@ -23,3 +30,6 @@ updates:
     directory: /layer
     schedule:
       interval: weekly
+    commit-message:
+      prefix: build
+      include: scope

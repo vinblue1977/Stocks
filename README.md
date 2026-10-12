@@ -86,6 +86,10 @@ Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <Pi
 | `accessAnalyzer` | `false` (this repo's `cdk.json`: `true`) | Free IAM Access Analyzer that flags resources reachable from outside the account and emails new findings to `alertEmail`. Only one is allowed per account and region, so check first with `aws accessanalyzer list-analyzers --type ACCOUNT` |
 | `useCustomerManagedKey` | `false` | Use your own KMS key (about $1/month) instead of AWS default encryption |
 
+## Commits
+
+PR titles follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) (`feat:`, `fix(api):`, `chore:`, …) and are checked in CI. PRs are squash-merged with the title as the commit title, so `main` stays in that format.
+
 ## Cost
 
 About **$0–2/month** for one user: mostly free tier, plus a few cents of Bedrock and DynamoDB. A customer-managed key adds about $1/month for as long as it exists. It's kept if you switch the flag off; delete it with `aws kms schedule-key-deletion --key-id alias/portfolio-tracker --pending-window-in-days 30` once nothing needs it.
