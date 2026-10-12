@@ -3,8 +3,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from conftest import price_series
 
-from portfolio.handlers import evaluate_signals, news_ingest, price_sync, weekly_report
+from portfolio.handlers import evaluate_signals, intraday_quotes, news_ingest, price_sync, weekly_report
 from portfolio.llm import ArticleScore, TickerBrief
+from portfolio.market import market_open
 
 
 class FakePrices:
@@ -372,3 +373,49 @@ def test_partner_only_tickers_skip_news_when_partner_news_off(repo, monkeypatch)
     monkeypatch.setattr(evaluate_signals, "get_config", lambda: cfg)
     evaluate_signals.handler({}, None, repo=repo)
     assert repo.get_signal("SCHD").get("sentiment_7d") is None
+
+
+class FakeQuotes:
+    def __init__(self):
+        self.calls = []
+
+    def quotes(self, tickers):
+        self.calls.append(list(tickers))
+        return {t: {"last": 10.0, "timestamp": "2026-10-12T15:00:00+00:00", "date": "2026-10-12"} for t in tickers if t != "VTI"}
+
+
+@pytest.mark.parametrize(
+    "moment, is_open",
+    [
+        ("2026-10-12T13:29:00+00:00", False),  # 9:29 AM EDT
+        ("2026-10-12T13:30:00+00:00", True),
+        ("2026-10-12T20:00:00+00:00", True),  # 4:00 PM EDT, last run
+        ("2026-10-12T20:15:00+00:00", False),
+        ("2026-12-14T14:15:00+00:00", False),  # 9:15 AM EST
+        ("2026-12-14T21:00:00+00:00", True),  # 4:00 PM EST
+        ("2026-10-10T15:00:00+00:00", False),  # Saturday
+    ],
+)
+def test_market_hours_follow_new_york_time(moment, is_open):
+    assert market_open(datetime.fromisoformat(moment)) is is_open
+
+
+def test_intraday_quotes_one_request_only_when_open(repo):
+    repo.put_holding("u1", {"group": "stocks", "ticker": "VTI", "shares": 1, "cost_basis": 1})
+    provider = FakeQuotes()
+    closed = intraday_quotes.handler({}, None, repo=repo, provider=provider, now=datetime(2026, 10, 12, 12, 0, tzinfo=UTC))
+    assert closed == {"skipped": "market closed"} and provider.calls == []
+
+    result = intraday_quotes.handler({}, None, repo=repo, provider=provider, now=datetime(2026, 10, 12, 15, 0, tzinfo=UTC))
+    assert provider.calls == [["SPY", "VTI"]]
+    assert result == {"tickers": 2, "quoted": 1, "missing": ["VTI"]}
+    assert repo.latest_quotes() == {"SPY": {"last": 10, "timestamp": "2026-10-12T15:00:00+00:00", "date": "2026-10-12"}}
+
+
+def test_intraday_quotes_keep_todays_quote_when_a_run_skips_a_ticker(repo):
+    repo.put_holding("u1", {"group": "stocks", "ticker": "VTI", "shares": 1, "cost_basis": 1})
+    earlier = {"last": 9.0, "timestamp": "2026-10-12T14:00:00+00:00", "date": "2026-10-12"}
+    stale = {"last": 8.0, "timestamp": "2026-10-09T19:00:00+00:00", "date": "2026-10-09"}
+    repo.put_quotes({"VTI": earlier, "OLD": stale})
+    intraday_quotes.handler({}, None, repo=repo, provider=FakeQuotes(), now=datetime(2026, 10, 12, 15, 0, tzinfo=UTC))
+    assert set(repo.latest_quotes()) == {"SPY", "VTI"} and repo.latest_quotes()["VTI"]["last"] == 9

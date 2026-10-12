@@ -135,7 +135,7 @@ def test_topics_and_queue_require_tls(any_template):
 
 def test_functions_traced_on_arm(any_template):
     functions = app_functions(any_template)
-    assert len(functions) == 5
+    assert len(functions) == 6
     for fn in functions:
         assert fn["Properties"]["TracingConfig"] == {"Mode": "Active"}
         assert fn["Properties"]["Architectures"] == ["arm64"]
@@ -185,6 +185,21 @@ def test_person_names_reach_the_functions(tmp_path_factory):
 def test_partner_news_setting(tmp_path_factory, value, expected):
     template = synth(tmp_path_factory, **({} if value is None else {"partnerNews": value}))
     assert app_functions(template)[0]["Properties"]["Environment"]["Variables"]["PARTNER_NEWS"] == expected
+
+
+def schedules(template):
+    return [r["Properties"]["ScheduleExpression"] for r in template.find_resources("AWS::Events::Rule").values()]
+
+
+def test_intraday_quotes_every_15_minutes_on_weekdays(template):
+    assert "cron(0/15 13-21 ? * MON-FRI *)" in schedules(template)
+    handlers = [fn["Properties"]["Handler"] for fn in app_functions(template)]
+    assert "portfolio.handlers.intraday_quotes.handler" in handlers
+
+
+@pytest.mark.parametrize("value", [False, "false", "off"])
+def test_intraday_quotes_can_be_turned_off(tmp_path_factory, value):
+    assert not any("0/15" in s for s in schedules(synth(tmp_path_factory, intradayQuotes=value)))
 
 
 def test_budget_can_be_turned_off(tmp_path_factory):

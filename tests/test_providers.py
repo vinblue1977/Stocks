@@ -1,5 +1,5 @@
 from portfolio.providers.news import parse_finnhub
-from portfolio.providers.prices import parse_tiingo
+from portfolio.providers.prices import parse_iex, parse_tiingo
 
 
 def test_parse_tiingo_uses_adjusted_close_and_sorts():
@@ -26,3 +26,18 @@ def test_parse_finnhub_filters_and_dedupes():
     assert [a["article_id"] for a in articles] == ["5", "1"]
     assert articles[1]["source"] == "Wire"
     assert articles[0]["published_at"].endswith("+00:00")
+
+
+def test_parse_iex_keeps_priced_quotes_with_new_york_trading_day():
+    raw = [
+        {"ticker": "VTI", "tngoLast": 381.835, "last": None, "timestamp": "2026-10-12T11:41:04.281212031-04:00"},
+        {"ticker": "spy", "tngoLast": None, "last": 778.3, "timestamp": "2026-10-12T19:59:00-04:00"},
+        {"ticker": "NOPE", "tngoLast": None, "last": None, "timestamp": "2026-10-12T11:41:04-04:00"},
+        {"ticker": "ODD", "tngoLast": 5.0, "timestamp": "yesterday"},
+        {"ticker": "NAIVE", "tngoLast": 5.0, "timestamp": "2026-10-12T11:41:04"},
+    ]
+    quotes = parse_iex(raw)
+    assert quotes["VTI"] == {"last": 381.835, "timestamp": "2026-10-12T15:41:04+00:00", "date": "2026-10-12"}
+    # 7:59 PM New York is already the next day in UTC; the trading day stays the New York date.
+    assert quotes["SPY"]["date"] == "2026-10-12" and quotes["SPY"]["timestamp"].startswith("2026-10-12T23:59")
+    assert set(quotes) == {"VTI", "SPY"} and parse_iex(None) == {}

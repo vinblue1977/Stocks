@@ -11,6 +11,7 @@ Key design (pk / sk):
     NEWS#<ticker>   <iso_ts>#<article_id>        scored headline (expires after 30 days)
     BRIEF#<ticker>  <yyyy-mm-dd>                 AI news summary; BRIEF#ALL is the portfolio brief
     SIGNAL#<ticker> LATEST                       latest signal snapshot
+    QUOTES          LATEST                       intraday prices for all tickers (market hours only)
 """
 
 from __future__ import annotations
@@ -340,6 +341,14 @@ class Repository:
     def get_signal(self, ticker: str) -> dict[str, Any] | None:
         item = self.table.get_item(Key={"pk": f"SIGNAL#{ticker}", "sk": "LATEST"}).get("Item")
         return _clean(item) if item else None
+
+    # ---------- intraday quotes ----------
+    def put_quotes(self, quotes: Mapping[str, Mapping[str, Any]]) -> None:
+        self.table.put_item(Item=to_dynamo({"pk": "QUOTES", "sk": "LATEST", "fetched_at": _now_iso(), "quotes": quotes}))
+
+    def latest_quotes(self) -> dict[str, dict[str, Any]]:
+        item = self.table.get_item(Key={"pk": "QUOTES", "sk": "LATEST"}).get("Item")
+        return _clean(item).get("quotes", {}) if item else {}
 
 
 def _now_iso() -> str:
