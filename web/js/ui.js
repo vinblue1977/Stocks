@@ -45,6 +45,7 @@ export const fmt = {
   num: (v, digits = 2) => (v == null ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: digits })),
   score: (v) => (v == null ? '—' : `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}`),
   date: (iso) => (iso ? new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'),
+  time: (iso) => (iso ? new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : '—'),
   ago(iso) {
     const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
     if (minutes < 60) return `${Math.max(minutes, 1)} min ago`;

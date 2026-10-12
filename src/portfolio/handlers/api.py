@@ -271,6 +271,12 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     histories = {t: repo.price_history(t, since) for t in {h["ticker"] for h in holdings}}
     latest = {t: h[-1][1] for t, h in histories.items() if h}
     previous = {t: h[-2][1] for t, h in histories.items() if len(h) > 1}
+    # During market hours an intraday quote newer than the last close becomes today's price, measured
+    # against that close. Once the evening sync stores today's close, the quote is no longer newer.
+    live = {t: q for t, q in repo.latest_quotes().items() if histories.get(t) and q["date"] > histories[t][-1][0]}
+    for ticker, quote in live.items():
+        previous[ticker] = latest[ticker]
+        latest[ticker] = quote["last"]
     benchmark_ticker = get_config().benchmark_ticker
     benchmark = repo.price_history(benchmark_ticker, since)
 
@@ -300,6 +306,7 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         200,
         {
             "as_of": max((h[-1][0] for h in histories.values() if h), default=None),
+            "live_as_of": max((q["timestamp"] for q in live.values()), default=None),
             "benchmark_ticker": benchmark_ticker,
             "benchmark_history": [{"date": d, "close": c} for d, c in benchmark],
             "portfolios": portfolios,

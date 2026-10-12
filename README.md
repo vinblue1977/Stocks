@@ -16,6 +16,8 @@ flowchart LR
         P[PriceSync] --> N[NewsIngest] --> E[EvaluateSignals]
     end
     P --> T[(Tiingo)]
+    EB2[EventBridge, every 15 min in market hours] --> Q[IntradayQuotes] --> T
+    Q --> DB
     N --> F[(Finnhub)] & B[Claude on Bedrock]
     SF --> DB
     E & W[WeeklyReport, Sundays] --> S[SNS email]
@@ -31,7 +33,7 @@ All routes need `Authorization: Bearer <Cognito token>`.
 | `PUT/DELETE /groups/{group}/holdings/{ticker}` | Set or remove a holding in a group: `{"shares": 40, "cost_basis": 230}` (average per share) or `{"shares": 40, "total_cost": 9200}` (total invested) |
 | `POST /groups/{group}/holdings/{ticker}/purchases` | Record a buy: `{"shares": 5, "price": 280}` or `{"shares": 0.28, "amount": 200}`. Updates that group's total shares and weighted average cost |
 | `GET /profile` | Display names (`owner_name`, `partner_name`) and whether to show the partner page |
-| `GET /portfolio` | Value, gains, allocation and history vs. SPY, under `portfolios.<household\|mine\|partner>.<overall\|stocks\|auto>` |
+| `GET /portfolio` | Value, gains, allocation and history vs. SPY, under `portfolios.<household\|mine\|partner>.<overall\|stocks\|auto>`. During market hours values use intraday prices (`live_as_of` is the quote time, otherwise null); history stays on closing prices |
 | `GET /signals` | RSI, moving averages, drawdown, sentiment |
 | `GET /news?ticker=VTI` | AI briefing and scored headlines |
 | `GET/POST/DELETE /rules[/{ruleId}]`, `GET /rule-types` | Alert rules, e.g. `{"type": "drawdown_below", "ticker": "VTI", "params": {"pct": 10}}` |
@@ -76,6 +78,7 @@ Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <Pi
 | `benchmarkTicker` | `SPY` | Performance benchmark |
 | `ownerName` / `partnerName` | none | Names on the portfolio pages and weekly email, e.g. `-c ownerName=Alex -c partnerName=Sam` (or `make deploy OWNER_NAME=Alex PARTNER_NAME=Sam`); the partner page appears only when `partnerName` is set. Pass them at deploy time rather than committing them; they're served only to signed-in users |
 | `newsExcludedTickers` | `["ITOT", "MGV", "DGRO", "DVY", "IWB", "ONEQ", "SPYD"]` | Tickers to skip when fetching news (e.g. broad index funds with no headlines); price signals still apply |
+| `intradayQuotes` | `true` | Fetch intraday prices every 15 minutes while the US market is open (one Tiingo request for all tickers, about 27 a day). `false` shows closing prices only |
 | `partnerNews` | `true` (this repo's `cdk.json`: `false`) | `false` skips news for the partner's tickers unless the owner also holds them. Price signals and price-based alerts still apply; `sentiment_below` rules on those tickers can't fire |
 | `bedrockModelId` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Model for news summaries |
 | `bedrockApi` | `runtime` | `runtime` for Haiku 4.5; `mantle` for newer models such as `anthropic.claude-haiku-5-5` once your account has access |

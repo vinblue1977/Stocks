@@ -25,8 +25,14 @@ function vsText(b) {
   return b.difference == null ? '—' : `${b.difference >= 0 ? '+' : '−'}${Math.abs(b.difference * 100).toFixed(1)} pts`;
 }
 
+/** Live during market hours (intraday quotes every 15 min), otherwise the last close. */
+function pricesNote(data) {
+  if (data.live_as_of) return `Live prices as of ${fmt.time(data.live_as_of)} · updates every 15 min`;
+  return data.as_of ? `Prices as of ${fmt.date(data.as_of)} close` : 'Waiting for the first price sync';
+}
+
 /** The selected person's Stock Holdings, Automatic Investment and total. */
-function summaryTable(views) {
+function summaryTable(views, dayLabel) {
   const total = views.overall.total_value || 0;
   const row = (key, label) => {
     const g = views[key];
@@ -43,7 +49,7 @@ function summaryTable(views) {
   return h('section', { class: 'card', 'aria-labelledby': 'sum-h' },
     h('div', { class: 'card-head' }, h('h2', { id: 'sum-h', text: `By group · ${viewLabel()}` })),
     h('div', { class: 'table-wrap' }, h('table', null,
-      h('thead', null, h('tr', null, ['Group', 'Value', 'Cost basis', 'Gain / loss', 'Last day', '1Y return', 'vs SPY (1Y)', 'Share of total']
+      h('thead', null, h('tr', null, ['Group', 'Value', 'Cost basis', 'Gain / loss', dayLabel, '1Y return', 'vs SPY (1Y)', 'Share of total']
         .map((t, i) => h('th', { scope: 'col', class: i === 0 ? 'text' : null, text: t })))),
       h('tbody', null, row('stocks', KINDS.stocks.label), row('auto', KINDS.auto.label), row('overall', 'Total')))));
 }
@@ -168,12 +174,12 @@ export async function renderOverview(main) {
         })))
       : null;
     main.replaceChildren(
-      pageHead('Overview', data.as_of ? `Prices as of ${fmt.date(data.as_of)} close` : 'Waiting for the first price sync', switcher),
-      summaryTable(portfolios[person]),
+      pageHead('Overview', pricesNote(data), switcher),
+      summaryTable(portfolios[person], data.live_as_of ? 'Today' : 'Last day'),
       h('section', { class: 'tiles', 'aria-label': `Summary for ${viewLabel()}` },
         tile(`Total value · ${viewLabel()}`, fmt.money(s.total_value), `Cost basis ${fmt.money(s.total_cost)}`),
         tile('Total gain', fmt.signedMoney(s.total_gain), `${fmt.signedPct(s.total_gain_pct)} all time`, tone(s.total_gain)),
-        tile('Last trading day', fmt.signedMoney(s.day_change), fmt.signedPct(s.day_change_pct), tone(s.day_change)),
+        tile(data.live_as_of ? 'Today' : 'Last trading day', fmt.signedMoney(s.day_change), fmt.signedPct(s.day_change_pct), tone(s.day_change)),
         tile(`vs. ${b.ticker} (1Y)`, vsText(b),
           b.difference == null ? 'Needs more history' : `This view ${fmt.signedPct(b.portfolio_return, 1)} · ${b.ticker} ${fmt.signedPct(b.benchmark_return, 1)}`, tone(b.difference))),
       h('div', { class: 'row' }, performanceCard(s, data.benchmark_history, data.benchmark_ticker), allocationCard(s)),

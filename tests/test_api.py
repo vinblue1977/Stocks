@@ -126,6 +126,36 @@ def test_portfolio_summary(repo):
     assert len(overall["history"]) == 30 and len(body["benchmark_history"]) == 30
 
 
+def test_portfolio_uses_intraday_quote_until_the_close_is_stored(repo):
+    from datetime import UTC, datetime, timedelta
+
+    call(
+        repo,
+        "PUT /groups/{group}/holdings/{ticker}",
+        path={"group": "stocks", "ticker": "VTI"},
+        body=json.dumps({"shares": 10, "cost_basis": 100}),
+    )
+    start = (datetime.now(UTC).date() - timedelta(days=30)).isoformat()
+    rows = price_series(100, 1, 30, start)  # last close 129, the one before 128
+    repo.put_prices("VTI", rows)
+    last_close_day = rows[-1]["date"]
+    next_day = (datetime.fromisoformat(last_close_day) + timedelta(days=1)).date().isoformat()
+
+    repo.put_quotes({"VTI": {"last": 131.0, "timestamp": f"{next_day}T15:00:00+00:00", "date": next_day}})
+    _, body = call(repo, "GET /portfolio")
+    overall = body["portfolios"]["household"]["overall"]
+    assert overall["total_value"] == pytest.approx(1310)
+    assert overall["day_change"] == pytest.approx(20)  # vs. the last close, 129
+    assert body["live_as_of"] == f"{next_day}T15:00:00+00:00"
+    assert len(overall["history"]) == 30  # the chart stays on closing prices
+
+    # Once that day's close is stored, the quote is stale and ignored.
+    repo.put_quotes({"VTI": {"last": 131.0, "timestamp": f"{last_close_day}T15:00:00+00:00", "date": last_close_day}})
+    _, body = call(repo, "GET /portfolio")
+    assert body["portfolios"]["household"]["overall"]["total_value"] == pytest.approx(1290)
+    assert body["live_as_of"] is None
+
+
 def test_news_only_for_held_tickers(repo):
     assert call(repo, "GET /news", query={"ticker": "TSLA"})[0] == 404
     status, body = call(repo, "GET /news")

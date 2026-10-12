@@ -390,6 +390,12 @@ class PortfolioTrackerStack(Stack):
             iam.PolicyStatement(actions=["ssm:GetParameter"], resources=[ssm_param_arn("tiingo-api-key")])
         )
 
+        intraday = make_function("IntradayQuotes", "intraday_quotes", timeout=60)
+        table.grant_read_write_data(intraday)
+        intraday.add_to_role_policy(
+            iam.PolicyStatement(actions=["ssm:GetParameter"], resources=[ssm_param_arn("tiingo-api-key")])
+        )
+
         news_ingest = make_function("NewsIngest", "news_ingest", timeout=600, memory=512)
         table.grant_read_write_data(news_ingest)
         news_ingest.add_to_role_policy(
@@ -515,6 +521,16 @@ class PortfolioTrackerStack(Stack):
             schedule=events.Schedule.cron(minute="30", hour="22", week_day="MON-FRI"),
             targets=[targets.SfnStateMachine(pipeline)],
         )
+        # Every 15 min across 9:30-16:00 New York time in both EDT and EST (13:00-21:45 UTC);
+        # the function returns without calling Tiingo outside market hours. One request per run.
+        intraday_setting = self.node.try_get_context("intradayQuotes")
+        if intraday_setting is None or _flag(intraday_setting):
+            events.Rule(
+                self,
+                "IntradaySchedule",
+                schedule=events.Schedule.cron(minute="0/15", hour="13-21", week_day="MON-FRI"),
+                targets=[targets.LambdaFunction(intraday, retry_attempts=0)],
+            )
         events.Rule(
             self,
             "WeeklyReportSchedule",
