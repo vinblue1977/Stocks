@@ -199,8 +199,13 @@ def test_site_bucket_private_and_served_only_via_cloudfront(any_template):
         ),
     )
     any_template.resource_count_is("AWS::CloudFront::OriginAccessControl", 1)
-    policies = json.dumps(any_template.find_resources("AWS::S3::BucketPolicy"))
-    assert "cloudfront.amazonaws.com" in policies and '"aws:SecureTransport": "false"' in policies
+    statements = [
+        stmt
+        for policy in any_template.find_resources("AWS::S3::BucketPolicy").values()
+        for stmt in policy["Properties"]["PolicyDocument"]["Statement"]
+    ]
+    assert any(stmt.get("Principal", {}).get("Service") == "cloudfront.amazonaws.com" for stmt in statements)
+    assert any(stmt.get("Condition", {}).get("Bool", {}).get("aws:SecureTransport") == "false" for stmt in statements)
 
 
 def test_site_https_only_with_strict_headers(any_template):

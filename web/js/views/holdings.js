@@ -33,7 +33,8 @@ export async function renderPerson(main, person, kind) {
   const all = holdingsRes.holdings;
   const mine = all.filter((x) => x.group === group).sort((a, b) => a.ticker.localeCompare(b.ticker));
   const otherTickers = new Set(all.filter((x) => x.group === otherGroup).map((x) => x.ticker));
-  const uniqueCount = new Set(all.map((x) => x.ticker)).size;
+  const heldAnywhere = new Set(all.map((x) => x.ticker));
+  const uniqueCount = heldAnywhere.size;
   const summary = portfolio.portfolios[person][kind];
   const priced = new Map(summary.positions.map((p) => [p.ticker, p]));
   const base = (ticker) => `/groups/${group}/holdings/${encodeURIComponent(ticker)}`;
@@ -91,7 +92,7 @@ export async function renderPerson(main, person, kind) {
       const res = await api('POST', `${base(symbol)}/purchases`, body);
       toast(res.previous
         ? `${symbol}: now ${fmt.num(res.holding.shares, 6)} shares at ${fmt.money(res.holding.cost_basis)} average.`
-        : `${symbol} added to ${info.label}.${otherTickers.has(symbol) ? '' : ' Price history loads within a minute.'}`);
+        : `${symbol} added to ${info.label}.${heldAnywhere.has(symbol) ? '' : ' Price history loads within a minute.'}`);
       rerender();
     } catch (e) {
       pError.textContent = e.message;

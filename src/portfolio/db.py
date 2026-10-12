@@ -36,13 +36,15 @@ ALERT_TTL_SECONDS = 180 * 24 * 3600
 # ("stocks" = Stock Holdings, "auto" = Automatic Investment). The owner's groups keep their
 # original names, so holdings saved before partner groups existed need no migration.
 PEOPLE = ("mine", "partner")
-KINDS = ("stocks", "auto")
-GROUPS = ("stocks", "auto", "partner_stocks", "partner_auto")
+KINDS = {"stocks": "Stock Holdings", "auto": "Automatic Investment"}  # kind -> display label
 DEFAULT_GROUP = "stocks"
 
 
 def group_for(person: str, kind: str) -> str:
     return kind if person == "mine" else f"{person}_{kind}"
+
+
+GROUPS = tuple(group_for(p, k) for p in PEOPLE for k in KINDS)  # stocks, auto, partner_stocks, partner_auto
 
 
 def person_of(group: str) -> str:

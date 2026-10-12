@@ -1,6 +1,6 @@
-import { setApiBase } from './api.js';
+import { api, setApiBase } from './api.js';
 import { currentEmail, initAuth, logout } from './auth.js';
-import { KINDS, hasPartner, portfolioTitle, setNames } from './groups.js';
+import { KINDS, hasPartner, portfolioTitle, setProfile } from './groups.js';
 import { errorCard, h } from './ui.js';
 import { renderAlerts } from './views/alerts.js';
 import { renderPerson } from './views/holdings.js';
@@ -45,13 +45,13 @@ async function start() {
   try {
     const config = await (await fetch('config.json', { cache: 'no-store' })).json();
     setApiBase(config.apiUrl);
-    setNames(config);
+    const signedIn = await initAuth(config);
+    if (!signedIn) return; // redirecting to the sign-in page
+    setProfile(await api('GET', '/profile'));
     document.getElementById('nav-mine').textContent = portfolioTitle('mine');
     const partnerNav = document.getElementById('nav-partner');
     partnerNav.textContent = portfolioTitle('partner');
     partnerNav.hidden = !hasPartner();
-    const signedIn = await initAuth(config);
-    if (!signedIn) return; // redirecting to the sign-in page
   } catch (e) {
     main.replaceChildren(errorCard(e.message), h('p', null, h('a', { href: '/', text: 'Try again' })));
     return;

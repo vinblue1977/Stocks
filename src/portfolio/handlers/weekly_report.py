@@ -8,7 +8,7 @@ from typing import Any
 
 from portfolio import analytics, notify
 from portfolio.config import get_config
-from portfolio.db import DEFAULT_GROUP, GROUPS, Repository, kind_of, person_of
+from portfolio.db import DEFAULT_GROUP, GROUPS, KINDS, Repository, kind_of, person_of
 from portfolio.logs import get_logger, log
 
 logger = get_logger(__name__)
@@ -53,9 +53,6 @@ def build_report(user_id: str, holdings: list[dict[str, Any]], repo: Repository,
     return "\n".join(lines)
 
 
-KIND_LABELS = {"stocks": "Stock Holdings", "auto": "Automatic Investment"}
-
-
 def _breakdown(holdings: list[dict[str, Any]], latest: dict[str, float], week_ago: dict[str, float]) -> list[str]:
     """Value per person (when both have holdings) and per group (when more than one is used)."""
     cfg = get_config()
@@ -79,7 +76,7 @@ def _breakdown(holdings: list[dict[str, Any]], latest: dict[str, float], week_ag
     if len(present) > 1:
         lines += ["", "By group:"]
         for g in present:
-            label = KIND_LABELS[kind_of(g)]
+            label = KINDS[kind_of(g)]
             if len(people) > 1:
                 label = f"{names[person_of(g)]} · {label}"
             lines.append(line(label, [h for h in holdings if group(h) == g]))

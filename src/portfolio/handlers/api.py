@@ -273,7 +273,16 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     benchmark_ticker = get_config().benchmark_ticker
     benchmark = repo.price_history(benchmark_ticker, since)
 
+    built: dict[tuple[str, ...], dict[str, Any]] = {}
+
     def build(subset: list[dict[str, Any]]) -> dict[str, Any]:
+        # Views with the same holdings (e.g. household = mine when there's no partner) are built once.
+        key = tuple(sorted(f"{h['group']}#{h['ticker']}" for h in subset))
+        if key not in built:
+            built[key] = _summary(subset)
+        return built[key]
+
+    def _summary(subset: list[dict[str, Any]]) -> dict[str, Any]:
         summary = analytics.summarize(subset, latest, previous)
         series = analytics.value_history(subset, histories)
         summary["benchmark"] = {"ticker": benchmark_ticker, **analytics.compare_to_benchmark(series, benchmark)}
@@ -295,6 +304,17 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
             "portfolios": portfolios,
         },
     )
+
+
+def get_profile(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """Display names for the dashboard. Served behind sign-in (not in the public config.json).
+
+    The partner page shows when a partner name is configured or the partner already has holdings,
+    so a deploy without the name can't hide holdings that still count in household totals.
+    """
+    owner, partner = os.environ.get("OWNER_NAME", ""), os.environ.get("PARTNER_NAME", "")
+    has_partner = bool(partner) or any(person_of(h["group"]) == "partner" for h in repo.list_holdings(_user_id(event)))
+    return _response(200, {"owner_name": owner, "partner_name": partner, "has_partner": has_partner})
 
 
 def get_signals(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
@@ -336,6 +356,7 @@ ROUTES: dict[str, Route] = {
     "DELETE /rules/{ruleId}": delete_rule,
     "GET /alerts": list_alerts,
     "GET /portfolio": get_portfolio,
+    "GET /profile": get_profile,
     "GET /signals": get_signals,
     "GET /news": get_news,
 }

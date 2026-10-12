@@ -461,6 +461,7 @@ class PortfolioTrackerStack(Stack):
             "/rules/{ruleId}": [apigw.HttpMethod.DELETE],
             "/alerts": [apigw.HttpMethod.GET],
             "/portfolio": [apigw.HttpMethod.GET],
+            "/profile": [apigw.HttpMethod.GET],
             "/signals": [apigw.HttpMethod.GET],
             "/news": [apigw.HttpMethod.GET],
         }
@@ -586,8 +587,6 @@ class PortfolioTrackerStack(Stack):
                         "apiUrl": http_api.api_endpoint,
                         "authDomain": auth_url,
                         "clientId": user_pool_client.user_pool_client_id,
-                        "ownerName": owner_name,
-                        "partnerName": partner_name,
                     },
                 ),
             ],

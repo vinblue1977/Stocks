@@ -38,6 +38,6 @@ def get_config() -> Config:
         history_years=int(os.environ.get("HISTORY_YEARS", "5")),
         news_lookback_days=int(os.environ.get("NEWS_LOOKBACK_DAYS", "3")),
         news_excluded=frozenset(t.strip().upper() for t in os.environ.get("NEWS_EXCLUDED_TICKERS", "").split(",") if t.strip()),
-        owner_name=os.environ.get("OWNER_NAME") or "Mine",
+        owner_name=os.environ.get("OWNER_NAME") or "Me",
         partner_name=os.environ.get("PARTNER_NAME") or "Partner",
     )

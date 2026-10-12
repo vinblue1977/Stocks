@@ -379,3 +379,15 @@ def test_news_lists_excluded_tickers(repo, monkeypatch):
     put(repo, "auto", "MGV", 1, 1)
     status, body = call(repo, "GET /news")
     assert status == 200 and body["news_excluded"] == ["MGV"]
+
+
+def test_profile_names_and_partner_visibility(repo, monkeypatch):
+    monkeypatch.delenv("OWNER_NAME", raising=False)
+    monkeypatch.delenv("PARTNER_NAME", raising=False)
+    assert call(repo, "GET /profile")[1] == {"owner_name": "", "partner_name": "", "has_partner": False}
+    # Partner holdings keep the partner page visible even if a deploy dropped the name
+    put(repo, "partner_auto", "BND", 1, 1)
+    assert call(repo, "GET /profile")[1]["has_partner"] is True
+    monkeypatch.setenv("OWNER_NAME", "Alex")
+    monkeypatch.setenv("PARTNER_NAME", "Sam")
+    assert call(repo, "GET /profile")[1] == {"owner_name": "Alex", "partner_name": "Sam", "has_partner": True}
