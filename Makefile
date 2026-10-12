@@ -27,8 +27,9 @@ synth: layer        ## Synthesize CloudFormation and run cdk-nag security checks
 diff: layer
 	. .venv/bin/activate && $(CDK) diff
 
-deploy: layer       ## Deploy (pass ALERT_EMAIL=you@example.com)
-	. .venv/bin/activate && $(CDK) deploy --require-approval broadening -c alertEmail=$(ALERT_EMAIL)
+deploy: layer       ## Deploy (pass ALERT_EMAIL=you@example.com; optional OWNER_NAME=Alex PARTNER_NAME=Sam)
+	. .venv/bin/activate && $(CDK) deploy --require-approval broadening -c alertEmail=$(ALERT_EMAIL) \
+		$(if $(OWNER_NAME),-c ownerName="$(OWNER_NAME)") $(if $(PARTNER_NAME),-c partnerName="$(PARTNER_NAME)")
 
 clean:
 	rm -rf build cdk.out .pytest_cache .ruff_cache .coverage

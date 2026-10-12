@@ -7,7 +7,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from portfolio import analytics, notify
-from portfolio.db import Repository
+from portfolio.config import get_config
+from portfolio.db import DEFAULT_GROUP, GROUPS, Repository, kind_of, person_of
 from portfolio.logs import get_logger, log
 
 logger = get_logger(__name__)
@@ -40,14 +41,7 @@ def build_report(user_id: str, holdings: list[dict[str, Any]], repo: Repository,
     if movers:
         best, worst = movers[0], movers[-1]
         lines += ["", f"Best this week: {best[1]} {best[0] * 100:+.2f}%", f"Worst this week: {worst[1]} {worst[0] * 100:+.2f}%"]
-    groups = {"stocks": "Stock Holdings", "auto": "Automatic Investment"}
-    present = [g for g in groups if any(h.get("group", "stocks") == g for h in holdings)]
-    if len(present) > 1:
-        lines += ["", "By group:"]
-        for g in present:
-            part = analytics.summarize([h for h in holdings if h.get("group", "stocks") == g], latest, week_ago)
-            change = f" ({part['day_change_pct'] * 100:+.2f}% this week)" if part["day_change_pct"] is not None else ""
-            lines.append(f"  {groups[g]}: ${part['total_value']:,.2f}{change}")
+    lines += _breakdown(holdings, latest, week_ago)
     lines += ["", "Allocation:"]
     for ticker, weight in sorted(analytics.combined_weights(holdings, latest).items(), key=lambda kv: -kv[1]):
         lines.append(f"  {ticker:<6} {weight * 100:5.1f}%")
@@ -57,6 +51,39 @@ def build_report(user_id: str, holdings: list[dict[str, Any]], repo: Repository,
     lines += ["", "Alerts this week:" if alerts else "No alerts fired this week."]
     lines += [f"  - {a['message']}" for a in alerts]
     return "\n".join(lines)
+
+
+KIND_LABELS = {"stocks": "Stock Holdings", "auto": "Automatic Investment"}
+
+
+def _breakdown(holdings: list[dict[str, Any]], latest: dict[str, float], week_ago: dict[str, float]) -> list[str]:
+    """Value per person (when both have holdings) and per group (when more than one is used)."""
+    cfg = get_config()
+    names = {"mine": cfg.owner_name, "partner": cfg.partner_name}
+
+    def group(holding: dict[str, Any]) -> str:
+        return holding.get("group", DEFAULT_GROUP)
+
+    present = [g for g in GROUPS if any(group(h) == g for h in holdings)]
+    people = [p for p in names if any(person_of(g) == p for g in present)]
+
+    def line(label: str, subset: list[dict[str, Any]]) -> str:
+        part = analytics.summarize(subset, latest, week_ago)
+        change = f" ({part['day_change_pct'] * 100:+.2f}% this week)" if part["day_change_pct"] is not None else ""
+        return f"  {label}: ${part['total_value']:,.2f}{change}"
+
+    lines: list[str] = []
+    if len(people) > 1:
+        lines += ["", "By person:"]
+        lines += [line(names[p], [h for h in holdings if person_of(group(h)) == p]) for p in people]
+    if len(present) > 1:
+        lines += ["", "By group:"]
+        for g in present:
+            label = KIND_LABELS[kind_of(g)]
+            if len(people) > 1:
+                label = f"{names[person_of(g)]} · {label}"
+            lines.append(line(label, [h for h in holdings if group(h) == g]))
+    return lines
 
 
 def handler(event: dict[str, Any] | None, context: Any, repo: Repository | None = None) -> dict[str, Any]:

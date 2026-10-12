@@ -173,6 +173,12 @@ def test_budget_and_alarms(any_template):
     assert len(any_template.find_resources("AWS::CloudWatch::Alarm")) == 7
 
 
+def test_person_names_reach_the_functions(tmp_path_factory):
+    template = synth(tmp_path_factory, ownerName="Ana", partnerName="Ben")
+    env = app_functions(template)[0]["Properties"]["Environment"]["Variables"]
+    assert env["OWNER_NAME"] == "Ana" and env["PARTNER_NAME"] == "Ben"
+
+
 def test_budget_can_be_turned_off(tmp_path_factory):
     synth(tmp_path_factory, monthlyBudgetUsd=0).resource_count_is("AWS::Budgets::Budget", 0)
 

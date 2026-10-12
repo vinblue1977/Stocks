@@ -1,34 +1,40 @@
 import { setApiBase } from './api.js';
 import { currentEmail, initAuth, logout } from './auth.js';
+import { KINDS, hasPartner, portfolioTitle, setNames } from './groups.js';
 import { errorCard, h } from './ui.js';
 import { renderAlerts } from './views/alerts.js';
-import { renderGroup } from './views/holdings.js';
+import { renderPerson } from './views/holdings.js';
 import { renderNews } from './views/news.js';
 import { renderOverview } from './views/overview.js';
 
 const ROUTES = {
   overview: renderOverview,
-  stocks: (main) => renderGroup(main, 'stocks'),
-  auto: (main) => renderGroup(main, 'auto'),
   news: renderNews,
   alerts: renderAlerts,
 };
 const main = document.getElementById('main');
 
+/** Returns [nav key, render function]. Portfolio pages are #/<person>/<kind>, e.g. #/partner/auto. */
 function currentRoute() {
-  const name = location.hash.replace(/^#\/?/, '').split('?')[0];
-  return ROUTES[name] ? name : 'overview';
+  const [name, kind] = location.hash.replace(/^#\/?/, '').split('?')[0].split('/');
+  if (name === 'mine' || (name === 'partner' && hasPartner())) {
+    const k = KINDS[kind] ? kind : 'stocks';
+    return [name, (m) => renderPerson(m, name, k)];
+  }
+  return ROUTES[name] ? [name, ROUTES[name]] : ['overview', renderOverview];
 }
 
 async function route() {
-  const name = currentRoute();
+  const legacy = location.hash.match(/^#\/?(stocks|auto)$/); // links from before per-person pages
+  if (legacy) { location.replace(`#/mine/${legacy[1]}`); return; }
+  const [name, render] = currentRoute();
   document.querySelectorAll('.nav a').forEach((a) => {
     if (a.dataset.route === name) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
   main.replaceChildren(h('p', { class: 'loading', text: 'Loading…' }));
   try {
-    await ROUTES[name](main);
+    await render(main);
   } catch (e) {
     main.replaceChildren(errorCard(`Something went wrong: ${e.message}`));
   }
@@ -39,6 +45,11 @@ async function start() {
   try {
     const config = await (await fetch('config.json', { cache: 'no-store' })).json();
     setApiBase(config.apiUrl);
+    setNames(config);
+    document.getElementById('nav-mine').textContent = portfolioTitle('mine');
+    const partnerNav = document.getElementById('nav-partner');
+    partnerNav.textContent = portfolioTitle('partner');
+    partnerNav.hidden = !hasPartner();
     const signedIn = await initAuth(config);
     if (!signedIn) return; // redirecting to the sign-in page
   } catch (e) {

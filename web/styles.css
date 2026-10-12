@@ -157,3 +157,5 @@ tr.highlight { background: var(--chip-bg); }
 tr.total-row td { font-weight: 600; }
 tr.total-row .link-btn { font-weight: 600; }
 .btn-link { display: inline-flex; align-items: center; text-decoration: none; }
+.sub-switch { margin-top: 14px; width: fit-content; }
+.section-title { font-size: 22px; }

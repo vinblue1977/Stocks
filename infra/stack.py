@@ -106,6 +106,9 @@ class PortfolioTrackerStack(Stack):
             raise ValueError("bedrockApi must be 'runtime' or 'mantle'")
         budget_setting = self.node.try_get_context("monthlyBudgetUsd")
         monthly_budget = float(5 if budget_setting is None else budget_setting)  # 0 = no budget
+        # Display names for the two people whose holdings are tracked (e.g. you and a spouse).
+        owner_name: str = self.node.try_get_context("ownerName") or ""
+        partner_name: str = self.node.try_get_context("partnerName") or ""
         layer_path = Path(self.node.try_get_context("layerPath") or ROOT / "build" / "layer")
         if not layer_path.is_dir():
             raise FileNotFoundError(f"Lambda layer not found at {layer_path}. Run `make layer` first.")
@@ -334,6 +337,8 @@ class PortfolioTrackerStack(Stack):
             "BEDROCK_API": bedrock_api,
             "NEWS_EXCLUDED_TICKERS": ",".join(self.node.try_get_context("newsExcludedTickers") or []),
             "BEDROCK_REGION": Aws.REGION,
+            "OWNER_NAME": owner_name,
+            "PARTNER_NAME": partner_name,
         }
 
         def make_function(name: str, handler: str, timeout: int, memory: int = 256) -> lambda_.Function:
@@ -577,7 +582,13 @@ class PortfolioTrackerStack(Stack):
                 s3deploy.Source.asset(str(ROOT / "web")),
                 s3deploy.Source.json_data(
                     "config.json",
-                    {"apiUrl": http_api.api_endpoint, "authDomain": auth_url, "clientId": user_pool_client.user_pool_client_id},
+                    {
+                        "apiUrl": http_api.api_endpoint,
+                        "authDomain": auth_url,
+                        "clientId": user_pool_client.user_pool_client_id,
+                        "ownerName": owner_name,
+                        "partnerName": partner_name,
+                    },
                 ),
             ],
             distribution=distribution,

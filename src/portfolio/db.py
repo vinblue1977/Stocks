@@ -2,7 +2,7 @@
 
 Key design (pk / sk):
     USER#<uid>      HOLDING#<group>#<ticker>     a position: shares + average cost per share; group is
-                                                 stocks or auto (gsi1: HOLDINGS / <ticker>#<uid>#<group>)
+                                                 one of GROUPS (gsi1: HOLDINGS / <ticker>#<uid>#<group>)
     USER#<uid>      RULE#<rule_id>               an alert rule (gsi1: RULES / <uid>#<rule_id>)
     USER#<uid>      RULESTATE#<rule_id>          whether the rule is currently triggered
     USER#<uid>      ALERT#<iso_ts>#<rule_id>     alert history (expires after 180 days)
@@ -32,8 +32,25 @@ NEWS_TTL_SECONDS = 30 * 24 * 3600
 ALERT_TTL_SECONDS = 180 * 24 * 3600
 
 
-GROUPS = ("stocks", "auto")
+# A group is a person ("mine" = the account owner, "partner" = e.g. a spouse) plus a kind
+# ("stocks" = Stock Holdings, "auto" = Automatic Investment). The owner's groups keep their
+# original names, so holdings saved before partner groups existed need no migration.
+PEOPLE = ("mine", "partner")
+KINDS = ("stocks", "auto")
+GROUPS = ("stocks", "auto", "partner_stocks", "partner_auto")
 DEFAULT_GROUP = "stocks"
+
+
+def group_for(person: str, kind: str) -> str:
+    return kind if person == "mine" else f"{person}_{kind}"
+
+
+def person_of(group: str) -> str:
+    return "partner" if group.startswith("partner_") else "mine"
+
+
+def kind_of(group: str) -> str:
+    return group.removeprefix("partner_")
 
 
 class ConcurrentUpdateError(Exception):
@@ -85,8 +102,8 @@ class Repository:
             kwargs["ExclusiveStartKey"] = last
 
     # ---------- holdings ----------
-    # A holding belongs to a group ("stocks" = Stock Holdings, "auto" = Automatic Investment).
-    # The same ticker can exist in both groups, each with its own shares and average cost.
+    # A holding belongs to a group (see GROUPS). The same ticker can exist in several groups,
+    # each with its own shares and average cost.
     @staticmethod
     def _holding_keys(user_id: str, group: str, ticker: str) -> dict[str, str]:
         return {

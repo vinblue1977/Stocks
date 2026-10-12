@@ -1,6 +1,6 @@
-// One screen used for both groups: Stock Holdings and Automatic Investment.
+// A person's portfolio page: a switch between their Stock Holdings and Automatic Investment.
 import { api } from '../api.js';
-import { GROUPS, MAX_TICKERS } from '../groups.js';
+import { KINDS, MAX_TICKERS, groupFor, possessive, portfolioTitle } from '../groups.js';
 import { fmt, h, toast, tone } from '../ui.js';
 
 const TICKER_PATTERN = '[A-Za-z][A-Za-z0-9.\\-]{0,9}';
@@ -23,19 +23,22 @@ function stat(label, value, cls = '') {
     h('div', { class: `mono ${cls}`, style: { fontSize: '20px', fontWeight: '500', marginTop: '4px' }, text: value }));
 }
 
-export async function renderGroup(main, group) {
-  const info = GROUPS[group];
-  const otherGroup = group === 'stocks' ? 'auto' : 'stocks';
+export async function renderPerson(main, person, kind) {
+  const group = groupFor(person, kind);
+  const otherKind = kind === 'stocks' ? 'auto' : 'stocks';
+  const otherGroup = groupFor(person, otherKind);
+  const info = { label: `${possessive(person)} ${KINDS[kind].label}` }; // e.g. "Sam's Stock Holdings"
+  const rerender = () => renderPerson(main, person, kind);
   const [holdingsRes, portfolio] = await Promise.all([api('GET', '/holdings'), api('GET', '/portfolio')]);
   const all = holdingsRes.holdings;
   const mine = all.filter((x) => x.group === group).sort((a, b) => a.ticker.localeCompare(b.ticker));
   const otherTickers = new Set(all.filter((x) => x.group === otherGroup).map((x) => x.ticker));
   const uniqueCount = new Set(all.map((x) => x.ticker)).size;
-  const summary = portfolio.groups[group];
+  const summary = portfolio.portfolios[person][kind];
   const priced = new Map(summary.positions.map((p) => [p.ticker, p]));
   const base = (ticker) => `/groups/${group}/holdings/${encodeURIComponent(ticker)}`;
   // Automatic Investment works in dollar totals (amount invested, cost basis); Stock Holdings per share.
-  const totals = group === 'auto';
+  const totals = kind === 'auto';
   const costOf = (x) => x.shares * x.cost_basis;
 
   // ---------- record a purchase
@@ -64,7 +67,7 @@ export async function renderGroup(main, group) {
         ? `${symbol}: ${fmt.num(current.shares, 6)} → ${fmt.num(shares, 6)} shares, cost basis ${fmt.money(costOf(current))} → ${fmt.money(basis)} (${fmt.money(spent / s)} per share this time).`
         : `${symbol}: ${fmt.num(current.shares, 6)} → ${fmt.num(shares, 6)} shares, average ${fmt.money(current.cost_basis)} → ${fmt.money(basis / shares)}.`;
     } else {
-      const note = otherTickers.has(symbol) ? ` (${symbol} is also in ${GROUPS[otherGroup].label}; that holding is not changed.)` : '';
+      const note = otherTickers.has(symbol) ? ` (${symbol} is also in ${KINDS[otherKind].label}; that holding is not changed.)` : '';
       pPreview.textContent = totals
         ? `New in ${info.label}: ${fmt.num(s, 6)} shares of ${symbol}, cost basis ${fmt.money(spent)} (${fmt.money(spent / s)} per share).${note}`
         : `New in ${info.label}: ${fmt.num(s, 6)} shares of ${symbol} at ${fmt.money(p)}.${note}`;
@@ -74,7 +77,7 @@ export async function renderGroup(main, group) {
   updatePreview();
 
   const purchaseForm = h('form', { class: 'form', novalidate: true },
-    field('Ticker', pTicker), field('Shares bought', pShares), field(totals ? 'Amount invested ($)' : 'Price per share ($)', pPrice),
+    field('Ticker', pTicker), field('Shares bought', pShares), field(totals ? 'Amount of this buy ($)' : 'Price per share ($)', pPrice),
     field('Date (optional)', pDate), pSubmit);
   purchaseForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -89,7 +92,7 @@ export async function renderGroup(main, group) {
       toast(res.previous
         ? `${symbol}: now ${fmt.num(res.holding.shares, 6)} shares at ${fmt.money(res.holding.cost_basis)} average.`
         : `${symbol} added to ${info.label}.${otherTickers.has(symbol) ? '' : ' Price history loads within a minute.'}`);
-      renderGroup(main, group);
+      rerender();
     } catch (e) {
       pError.textContent = e.message;
       pSubmit.disabled = false;
@@ -118,7 +121,7 @@ export async function renderGroup(main, group) {
       const isNew = !mine.some((x) => x.ticker === symbol);
       await api('PUT', base(symbol), body);
       toast(isNew ? `${symbol} added to ${info.label}.` : `${symbol} updated.`);
-      renderGroup(main, group);
+      rerender();
     } catch (e) {
       sError.textContent = e.message;
       sSubmit.disabled = false;
@@ -133,7 +136,7 @@ export async function renderGroup(main, group) {
     remove.addEventListener('click', async () => {
       if (!armed) { armed = true; remove.textContent = 'Confirm remove'; setTimeout(() => { armed = false; remove.textContent = 'Remove'; }, 4000); return; }
       remove.disabled = true;
-      try { await api('DELETE', base(x.ticker)); toast(`${x.ticker} removed from ${info.label}.`); renderGroup(main, group); } catch (e) { toast(e.message, true); remove.disabled = false; }
+      try { await api('DELETE', base(x.ticker)); toast(`${x.ticker} removed from ${info.label}.`); rerender(); } catch (e) { toast(e.message, true); remove.disabled = false; }
     });
     const buyMore = h('button', {
       type: 'button', class: 'btn btn-ghost', text: 'Buy more', 'aria-label': `Record a purchase of ${x.ticker}`,
@@ -145,7 +148,7 @@ export async function renderGroup(main, group) {
     });
     return h('tr', null,
       h('td', { class: 'text' }, h('div', null, h('strong', { text: x.ticker })),
-        otherTickers.has(x.ticker) ? h('div', { class: 'sub muted', text: `Also in ${GROUPS[otherGroup].label} (tracked separately)` }) : null),
+        otherTickers.has(x.ticker) ? h('div', { class: 'sub muted', text: `Also in ${KINDS[otherKind].label} (tracked separately)` }) : null),
       h('td', { text: fmt.num(x.shares, 6) }),
       h('td', { text: fmt.money(totals ? costOf(x) : x.cost_basis) }),
       h('td', { text: p.price == null ? 'Loading…' : fmt.money(p.price) }),
@@ -156,27 +159,33 @@ export async function renderGroup(main, group) {
 
   main.replaceChildren(
     h('datalist', { id: 'group-tickers' }, [...new Set(all.map((x) => x.ticker))].map((t) => h('option', { value: t }))),
+    h('div', null, h('h1', { text: portfolioTitle(person) }),
+      h('div', { class: 'segmented segmented-lg sub-switch', role: 'group', 'aria-label': `${possessive(person)} holdings` },
+        Object.entries(KINDS).map(([key, k]) => h('button', {
+          type: 'button', 'aria-pressed': String(key === kind), text: k.label,
+          onClick: () => { location.hash = `#/${person}/${key}`; },
+        })))),
     h('div', { class: 'page-head' },
-      h('div', null, h('h1', { text: info.label }),
-        h('p', { class: 'muted small', text: `${mine.length} position${mine.length === 1 ? '' : 's'} · ${uniqueCount} of ${MAX_TICKERS} tickers across both groups` })),
+      h('div', null, h('h2', { class: 'section-title', text: KINDS[kind].label }),
+        h('p', { class: 'muted small', text: `${mine.length} position${mine.length === 1 ? '' : 's'} · ${uniqueCount} of ${MAX_TICKERS} tickers across all groups` })),
       h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '24px' } },
         stat('Value', fmt.money(summary.total_value)),
         stat('Cost basis', fmt.money(summary.total_cost)),
         stat('Gain / loss', fmt.signedMoney(summary.total_gain), tone(summary.total_gain)))),
     h('section', { class: 'card', 'aria-labelledby': 'buy-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'buy-h', text: 'Record a purchase' }),
-        h('span', { class: 'muted small', text: totals ? 'Enter the shares and dollars from each automatic buy; the cost basis adds up.' : 'Adds to your shares in this group and recalculates the average cost.' })),
+        h('span', { class: 'muted small', text: totals ? 'Enter the shares and dollars from each automatic buy; the cost basis adds up.' : 'Adds to the shares in this group and recalculates the average cost.' })),
       purchaseForm, pPreview, pError),
     h('section', { class: 'card', 'aria-labelledby': 'list-h' },
-      h('div', { class: 'card-head' }, h('h2', { id: 'list-h', text: `Your ${info.label.toLowerCase()}` })),
+      h('div', { class: 'card-head' }, h('h2', { id: 'list-h', text: `${possessive(person)} ${KINDS[kind].label.toLowerCase()}` })),
       mine.length
         ? h('div', { class: 'table-wrap' }, h('table', null,
           h('thead', null, h('tr', null, ['Ticker', 'Shares', totals ? 'Cost basis' : 'Avg cost', 'Price', 'Value', 'Gain / loss', ''].map((t, i) => h('th', { scope: 'col', class: i === 0 ? 'text' : null, text: t })))),
           h('tbody', null, rows)))
-        : h('p', { class: 'muted', text: `Nothing in ${info.label} yet. Record your first purchase above.` })),
+        : h('p', { class: 'muted', text: `Nothing in ${info.label} yet. Record the first purchase above.` })),
     h('section', { class: 'card', 'aria-labelledby': 'set-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'set-h', text: 'Set totals directly' }),
-        h('span', { class: 'muted small', text: totals ? "Use your plan's total shares and total invested. Replaces what's saved in this group." : "Use your broker's total shares and average cost. Replaces what's saved in this group." })),
+        h('span', { class: 'muted small', text: totals ? "Use the plan's total shares and total invested. Replaces what's saved in this group." : "Use the broker's total shares and average cost. Replaces what's saved in this group." })),
       setForm, sError),
   );
 }

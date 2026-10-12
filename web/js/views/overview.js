@@ -1,13 +1,18 @@
 import { api } from '../api.js';
 import { lineChart } from '../charts.js';
-import { GROUPS } from '../groups.js';
+import { KINDS, groupChip, groupLabel, hasPartner, portfolioTitle, possessive } from '../groups.js';
 import { fmt, h, icon, pageHead, tone } from '../ui.js';
 
 const RANGES = { '1M': 22, '3M': 66, '1Y': 252, All: Infinity };
 const PALETTE = ['#BFE3FF', '#7CC4FA', '#3E8FD6', '#2A5F96', '#1D4573', '#F5A35C', '#F5C38F', '#C97B3F', '#8392AB', '#5A6B85'];
-const VIEWS = { overall: 'Overall', stocks: GROUPS.stocks.label, auto: GROUPS.auto.label };
-let view = 'overall';
+let person = 'household'; // household | mine | partner
 let range = '1Y';
+
+/** Name of what's on screen: "Overall" with one person, else "Household" or e.g. "Sam's portfolio". */
+function viewLabel() {
+  if (!hasPartner()) return 'Overall';
+  return person === 'household' ? 'Household' : `${possessive(person)} portfolio`;
+}
 
 function tile(label, value, sub, cls = '') {
   return h('div', { class: 'tile' },
@@ -20,14 +25,13 @@ function vsText(b) {
   return b.difference == null ? '—' : `${b.difference >= 0 ? '+' : '−'}${Math.abs(b.difference * 100).toFixed(1)} pts`;
 }
 
-function summaryTable(groups, rerender) {
-  const total = groups.overall.total_value || 0;
-  const row = (key) => {
-    const g = groups[key];
-    const isTotal = key === 'overall';
-    const pick = h('button', { type: 'button', class: `link-btn ${key === view ? 'active' : ''}`, 'aria-pressed': String(key === view), text: VIEWS[key], onClick: () => { view = key; rerender(); } });
-    return h('tr', { class: [key === view ? 'highlight' : '', isTotal ? 'total-row' : ''].join(' ').trim() || null },
-      h('td', { class: 'text' }, pick),
+/** The selected person's Stock Holdings, Automatic Investment and total. */
+function summaryTable(views) {
+  const total = views.overall.total_value || 0;
+  const row = (key, label) => {
+    const g = views[key];
+    return h('tr', { class: key === 'overall' ? 'total-row' : null },
+      h('td', { class: 'text', text: label }),
       h('td', { text: fmt.money(g.total_value) }),
       h('td', { text: fmt.money(g.total_cost) }),
       h('td', { class: tone(g.total_gain) }, `${fmt.signedMoney(g.total_gain)} `, h('span', { class: 'xsmall', text: fmt.signedPct(g.total_gain_pct, 1) })),
@@ -37,11 +41,11 @@ function summaryTable(groups, rerender) {
       h('td', { text: total ? fmt.pct(g.total_value / total) : '—' }));
   };
   return h('section', { class: 'card', 'aria-labelledby': 'sum-h' },
-    h('div', { class: 'card-head' }, h('h2', { id: 'sum-h', text: 'By group' }), h('span', { class: 'muted small', text: 'Select a row to focus the page on it' })),
+    h('div', { class: 'card-head' }, h('h2', { id: 'sum-h', text: `By group · ${viewLabel()}` })),
     h('div', { class: 'table-wrap' }, h('table', null,
       h('thead', null, h('tr', null, ['Group', 'Value', 'Cost basis', 'Gain / loss', 'Last day', '1Y return', 'vs SPY (1Y)', 'Share of total']
         .map((t, i) => h('th', { scope: 'col', class: i === 0 ? 'text' : null, text: t })))),
-      h('tbody', null, row('stocks'), row('auto'), row('overall')))));
+      h('tbody', null, row('stocks', KINDS.stocks.label), row('auto', KINDS.auto.label), row('overall', 'Total')))));
 }
 
 function performanceCard(summary, benchHistory, benchTicker) {
@@ -67,15 +71,15 @@ function performanceCard(summary, benchHistory, benchTicker) {
     chartHost.append(lineChart({
       series: [{ values: points.map((p) => p.value), color: '#7CC4FA', fill: true }, { values: benchValues, color: '#6F7F99', dashed: true }],
       labels,
-      ariaLabel: `${VIEWS[view]} value over ${range}: from ${fmt.money(start.value)} to ${fmt.money(points[points.length - 1].value)}, compared with ${benchTicker}`,
+      ariaLabel: `${viewLabel()} value over ${range}: from ${fmt.money(start.value)} to ${fmt.money(points[points.length - 1].value)}, compared with ${benchTicker}`,
     }));
   }
 
   card.append(
-    h('div', { class: 'card-head' }, h('h2', { id: 'perf-h', text: `Performance · ${VIEWS[view]}` }),
+    h('div', { class: 'card-head' }, h('h2', { id: 'perf-h', text: `Performance · ${viewLabel()}` }),
       h('div', { class: 'segmented', role: 'group', 'aria-label': 'Time range' }, buttons)),
     h('div', { class: 'legend' },
-      h('span', null, h('span', { class: 'swatch' }), VIEWS[view]),
+      h('span', null, h('span', { class: 'swatch' }), viewLabel()),
       h('span', null, h('span', { class: 'swatch-dashed' }), `${benchTicker}, same starting value`)),
     chartHost);
   draw();
@@ -90,9 +94,9 @@ function allocationCard(summary) {
   const total = [...byTicker.values()].reduce((a, b) => a + b, 0);
   const items = [...byTicker.entries()].sort((a, b) => b[1] - a[1])
     .map(([ticker, value], i) => ({ ticker, value, weight: total ? value / total : 0, color: PALETTE[i % PALETTE.length] }));
-  const inBoth = view === 'overall' ? [...new Set(summary.positions.filter((p, i, arr) => arr.findIndex((q) => q.ticker === p.ticker) !== i).map((p) => p.ticker))] : [];
+  const inBoth = [...new Set(summary.positions.filter((p, i, arr) => arr.findIndex((q) => q.ticker === p.ticker) !== i).map((p) => p.ticker))];
   return h('section', { class: 'card side', 'aria-labelledby': 'alloc-h' },
-    h('h2', { id: 'alloc-h', text: `Allocation · ${VIEWS[view]}` }),
+    h('h2', { id: 'alloc-h', text: `Allocation · ${viewLabel()}` }),
     items.length ? [
       h('div', { class: 'alloc-bar', role: 'img', 'aria-label': `Allocation: ${items.map((x) => `${x.ticker} ${fmt.pct(x.weight)}`).join(', ')}` },
         items.map((x) => h('div', { style: { width: `${x.weight * 100}%`, background: x.color } }))),
@@ -101,7 +105,7 @@ function allocationCard(summary) {
         h('strong', { text: x.ticker, style: { width: '56px' } }),
         h('span', { class: 'muted', style: { flex: '1' }, text: fmt.money(x.value) }),
         h('span', { class: 'mono', text: fmt.pct(x.weight) })))),
-      inBoth.length ? h('p', { class: 'xsmall muted', style: { margin: '14px 0 0' }, text: `${inBoth.join(', ')} ${inBoth.length === 1 ? 'is' : 'are'} held in both groups; Overall combines them.` }) : null,
+      inBoth.length ? h('p', { class: 'xsmall muted', style: { margin: '14px 0 0' }, text: `${inBoth.join(', ')} ${inBoth.length === 1 ? 'is' : 'are'} held in more than one group; this view combines them.` }) : null,
     ] : h('p', { class: 'muted', text: 'Nothing in this group yet.' }));
 }
 
@@ -120,22 +124,21 @@ function alertsCard(rules) {
 }
 
 function holdingsCard(summary) {
-  const totals = view === 'auto'; // Automatic Investment is shown in dollar totals
   const positions = [...summary.positions].sort((a, b) => (b.value || 0) - (a.value || 0));
   const rows = positions.map((p) => h('tr', null,
     h('td', { class: 'text' }, h('strong', { text: p.ticker })),
-    h('td', { class: 'text' }, h('span', { class: `group-chip ${GROUPS[p.group]?.chip || ''}`, text: GROUPS[p.group]?.short || p.group })),
+    h('td', { class: 'text' }, h('span', { class: `group-chip ${groupChip(p.group)}`, text: groupLabel(p.group, { short: true, withPerson: hasPartner() && person === 'household' }) })),
     h('td', { text: fmt.num(p.shares, 5) }),
-    h('td', { text: fmt.money(totals ? p.shares * p.cost_basis : p.cost_basis) }),
+    h('td', { text: fmt.money(p.cost_basis) }),
     h('td', { text: p.price == null ? 'Loading…' : fmt.money(p.price) }),
     h('td', { text: fmt.money(p.value) }),
     h('td', { class: tone(p.gain) }, `${fmt.signedMoney(p.gain)} `, h('span', { class: 'xsmall', text: fmt.signedPct(p.gain_pct, 1) }))));
   return h('section', { class: 'card', 'aria-labelledby': 'hold-h' },
-    h('div', { class: 'card-head' }, h('h2', { id: 'hold-h', text: `Holdings · ${VIEWS[view]}` }),
+    h('div', { class: 'card-head' }, h('h2', { id: 'hold-h', text: `Holdings · ${viewLabel()}` }),
       h('span', { class: 'muted small', text: `${rows.length} position${rows.length === 1 ? '' : 's'}` })),
     rows.length
       ? h('div', { class: 'table-wrap' }, h('table', null,
-        h('thead', null, h('tr', null, ['Ticker', 'Group', 'Shares', totals ? 'Cost basis' : 'Avg cost', 'Price', 'Value', 'Gain / loss']
+        h('thead', null, h('tr', null, ['Ticker', 'Group', 'Shares', 'Avg cost', 'Price', 'Value', 'Gain / loss']
           .map((t, i) => h('th', { scope: 'col', class: i < 2 ? 'text' : null, text: t })))),
         h('tbody', null, rows)))
       : h('p', { class: 'muted', text: 'Nothing in this group yet.' }));
@@ -143,29 +146,32 @@ function holdingsCard(summary) {
 
 export async function renderOverview(main) {
   const [data, rulesRes] = await Promise.all([api('GET', '/portfolio'), api('GET', '/rules')]);
-  const { groups } = data;
-  if (!groups.overall.positions.length) {
+  const { portfolios } = data;
+  if (!hasPartner()) person = 'household';
+  if (!portfolios.household.overall.positions.length) {
     main.replaceChildren(pageHead('Overview'), h('div', { class: 'card empty-card' },
       h('h2', { text: 'Add your first holding' }),
       h('p', { class: 'muted', text: 'Record purchases under Stock Holdings or Automatic Investment, and the app tracks value, gains, news and alerts from there.' }),
       h('div', { style: { display: 'flex', gap: '12px', justifyContent: 'center' } },
-        h('a', { class: 'btn btn-primary btn-link', href: '#/stocks', text: 'Stock Holdings' }),
-        h('a', { class: 'btn btn-ghost btn-link', href: '#/auto', text: 'Automatic Investment' }))));
+        h('a', { class: 'btn btn-primary btn-link', href: '#/mine/stocks', text: portfolioTitle('mine') }),
+        hasPartner() ? h('a', { class: 'btn btn-ghost btn-link', href: '#/partner/stocks', text: portfolioTitle('partner') }) : null)));
     return;
   }
 
   const draw = () => {
-    const s = groups[view];
+    const s = portfolios[person].overall;
     const b = s.benchmark;
-    const switcher = h('div', { class: 'segmented segmented-lg', role: 'group', 'aria-label': 'Show' },
-      Object.entries(VIEWS).map(([key, label]) => h('button', {
-        type: 'button', 'aria-pressed': String(key === view), text: label, onClick: () => { view = key; draw(); },
-      })));
+    const switcher = hasPartner()
+      ? h('div', { class: 'segmented segmented-lg', role: 'group', 'aria-label': 'Whose holdings' },
+        [['household', 'Household'], ['mine', possessive('mine')], ['partner', possessive('partner')]].map(([key, text]) => h('button', {
+          type: 'button', 'aria-pressed': String(key === person), text, onClick: () => { person = key; draw(); },
+        })))
+      : null;
     main.replaceChildren(
       pageHead('Overview', data.as_of ? `Prices as of ${fmt.date(data.as_of)} close` : 'Waiting for the first price sync', switcher),
-      summaryTable(groups, draw),
-      h('section', { class: 'tiles', 'aria-label': `Summary for ${VIEWS[view]}` },
-        tile(`Total value · ${VIEWS[view]}`, fmt.money(s.total_value), `Cost basis ${fmt.money(s.total_cost)}`),
+      summaryTable(portfolios[person]),
+      h('section', { class: 'tiles', 'aria-label': `Summary for ${viewLabel()}` },
+        tile(`Total value · ${viewLabel()}`, fmt.money(s.total_value), `Cost basis ${fmt.money(s.total_cost)}`),
         tile('Total gain', fmt.signedMoney(s.total_gain), `${fmt.signedPct(s.total_gain_pct)} all time`, tone(s.total_gain)),
         tile('Last trading day', fmt.signedMoney(s.day_change), fmt.signedPct(s.day_change_pct), tone(s.day_change)),
         tile(`vs. ${b.ticker} (1Y)`, vsText(b),

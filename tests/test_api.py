@@ -116,10 +116,11 @@ def test_portfolio_summary(repo):
     repo.put_prices("SPY", price_series(500, 1, 30, start))
     status, body = call(repo, "GET /portfolio")
     assert status == 200
-    overall = body["groups"]["overall"]
+    overall = body["portfolios"]["household"]["overall"]
     assert overall["total_value"] == pytest.approx(10 * 129)
-    assert body["groups"]["stocks"]["total_value"] == pytest.approx(10 * 129)
-    assert body["groups"]["auto"]["total_value"] == 0
+    assert body["portfolios"]["mine"]["stocks"]["total_value"] == pytest.approx(10 * 129)
+    assert body["portfolios"]["mine"]["auto"]["total_value"] == 0
+    assert body["portfolios"]["partner"]["overall"]["total_value"] == 0
     assert overall["benchmark"]["ticker"] == "SPY" == body["benchmark_ticker"]
     assert overall["benchmark"]["portfolio_return"] > overall["benchmark"]["benchmark_return"]
     assert len(overall["history"]) == 30 and len(body["benchmark_history"]) == 30
@@ -294,16 +295,48 @@ def test_portfolio_splits_groups_and_combines_overall(repo):
     put(repo, "stocks", "VOO", 2, 90)
     put(repo, "auto", "VOO", 3, 80)
     put(repo, "auto", "BND", 4, 50)
-    groups = call(repo, "GET /portfolio")[1]["groups"]
-    assert groups["stocks"]["total_value"] == 200 and groups["stocks"]["total_gain"] == 20
-    assert groups["auto"]["total_value"] == 500 and groups["auto"]["total_gain"] == 60
-    assert groups["overall"]["total_value"] == 700 and groups["overall"]["total_gain"] == 80
-    assert groups["overall"]["history"][-1]["value"] == 700  # VOO shares from both groups
-    assert {(p["ticker"], p["group"]) for p in groups["overall"]["positions"]} == {
+    mine = call(repo, "GET /portfolio")[1]["portfolios"]["mine"]
+    assert mine["stocks"]["total_value"] == 200 and mine["stocks"]["total_gain"] == 20
+    assert mine["auto"]["total_value"] == 500 and mine["auto"]["total_gain"] == 60
+    assert mine["overall"]["total_value"] == 700 and mine["overall"]["total_gain"] == 80
+    assert mine["overall"]["history"][-1]["value"] == 700  # VOO shares from both groups
+    assert {(p["ticker"], p["group"]) for p in mine["overall"]["positions"]} == {
         ("VOO", "stocks"),
         ("VOO", "auto"),
         ("BND", "auto"),
     }
+
+
+def test_partner_groups_are_separate_and_add_up_to_household(repo, no_backfill):
+    from datetime import UTC, datetime, timedelta
+
+    start = (datetime.now(UTC).date() - timedelta(days=10)).isoformat()
+    for ticker, price in (("VOO", 100), ("BND", 50), ("SPY", 400)):
+        repo.put_prices(ticker, price_series(price, 0, 10, start))
+    put(repo, "stocks", "VOO", 2, 90)
+    put(repo, "partner_stocks", "VOO", 1, 95)
+    put(repo, "partner_auto", "BND", 4, 40)
+    assert no_backfill == ["VOO", "BND"]
+    # Each group keeps its own holding
+    assert [h["shares"] for h in call(repo, "GET /holdings", query={"group": "partner_stocks"})[1]["holdings"]] == [1]
+    p = call(repo, "GET /portfolio")[1]["portfolios"]
+    assert p["mine"]["overall"]["total_value"] == 200
+    assert p["partner"]["stocks"]["total_value"] == 100 and p["partner"]["auto"]["total_value"] == 200
+    assert p["partner"]["overall"]["total_value"] == 300
+    assert p["household"]["stocks"]["total_value"] == 300  # both people's Stock Holdings
+    assert p["household"]["overall"]["total_value"] == 500 and p["household"]["overall"]["total_gain"] == 500 - 180 - 95 - 160
+
+
+def test_partner_auto_uses_dollar_totals(repo):
+    status, body = buy(repo, "VOO", 0.5, None, group="partner_auto", amount=300)
+    assert status == 201 and body["holding"]["cost_basis"] == 600
+
+
+def test_cap_counts_partner_tickers_too(repo, monkeypatch):
+    monkeypatch.setattr(api, "MAX_HOLDINGS", 1)
+    put(repo, "stocks", "VTI", 1, 1)
+    assert put(repo, "partner_stocks", "VTI", 1, 1)[0] == 200
+    assert put(repo, "partner_auto", "BND", 1, 1)[0] == 409
 
 
 def test_dollar_totals_for_automatic_investment(repo):
