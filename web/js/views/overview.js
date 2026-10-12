@@ -120,12 +120,13 @@ function alertsCard(rules) {
 }
 
 function holdingsCard(summary) {
+  const totals = view === 'auto'; // Automatic Investment is shown in dollar totals
   const positions = [...summary.positions].sort((a, b) => (b.value || 0) - (a.value || 0));
   const rows = positions.map((p) => h('tr', null,
     h('td', { class: 'text' }, h('strong', { text: p.ticker })),
     h('td', { class: 'text' }, h('span', { class: `group-chip ${GROUPS[p.group]?.chip || ''}`, text: GROUPS[p.group]?.short || p.group })),
     h('td', { text: fmt.num(p.shares, 5) }),
-    h('td', { text: fmt.money(p.cost_basis) }),
+    h('td', { text: fmt.money(totals ? p.shares * p.cost_basis : p.cost_basis) }),
     h('td', { text: p.price == null ? 'Loading…' : fmt.money(p.price) }),
     h('td', { text: fmt.money(p.value) }),
     h('td', { class: tone(p.gain) }, `${fmt.signedMoney(p.gain)} `, h('span', { class: 'xsmall', text: fmt.signedPct(p.gain_pct, 1) }))));
@@ -134,7 +135,7 @@ function holdingsCard(summary) {
       h('span', { class: 'muted small', text: `${rows.length} position${rows.length === 1 ? '' : 's'}` })),
     rows.length
       ? h('div', { class: 'table-wrap' }, h('table', null,
-        h('thead', null, h('tr', null, ['Ticker', 'Group', 'Shares', 'Avg cost', 'Price', 'Value', 'Gain / loss']
+        h('thead', null, h('tr', null, ['Ticker', 'Group', 'Shares', totals ? 'Cost basis' : 'Avg cost', 'Price', 'Value', 'Gain / loss']
           .map((t, i) => h('th', { scope: 'col', class: i < 2 ? 'text' : null, text: t })))),
         h('tbody', null, rows)))
       : h('p', { class: 'muted', text: 'Nothing in this group yet.' }));

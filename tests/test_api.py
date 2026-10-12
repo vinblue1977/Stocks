@@ -164,7 +164,7 @@ def buy(repo, ticker, shares, price, group="stocks", **extra):
         repo,
         "POST /groups/{group}/holdings/{ticker}/purchases",
         path={"group": group, "ticker": ticker},
-        body=json.dumps({"shares": shares, "price": price, **extra}),
+        body=json.dumps({"shares": shares, **({"price": price} if price is not None else {}), **extra}),
     )
 
 
@@ -304,3 +304,33 @@ def test_portfolio_splits_groups_and_combines_overall(repo):
         ("VOO", "auto"),
         ("BND", "auto"),
     }
+
+
+def test_dollar_totals_for_automatic_investment(repo):
+    # Set totals with a total cost basis instead of a per-share average
+    status, body = call(
+        repo,
+        "PUT /groups/{group}/holdings/{ticker}",
+        path={"group": "auto", "ticker": "VOO"},
+        body=json.dumps({"shares": 4, "total_cost": 2400}),
+    )
+    assert status == 200 and body["cost_basis"] == 600
+    # Record a purchase by amount invested instead of price per share
+    status, body = buy(repo, "VOO", 0.5, None, group="auto", amount=350)
+    assert status == 200
+    assert body["holding"]["shares"] == 4.5
+    assert body["holding"]["shares"] * body["holding"]["cost_basis"] == pytest.approx(2750, abs=0.01)  # total invested
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [{"shares": 1}, {"shares": 1, "price": 10, "amount": 10}, {"shares": 1, "amount": -5}],
+)
+def test_purchase_needs_exactly_one_of_price_or_amount(repo, payload):
+    status, body = call(
+        repo,
+        "POST /groups/{group}/holdings/{ticker}/purchases",
+        path={"group": "auto", "ticker": "VOO"},
+        body=json.dumps(payload),
+    )
+    assert status == 400

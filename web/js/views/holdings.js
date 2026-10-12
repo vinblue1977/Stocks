@@ -34,11 +34,14 @@ export async function renderGroup(main, group) {
   const summary = portfolio.groups[group];
   const priced = new Map(summary.positions.map((p) => [p.ticker, p]));
   const base = (ticker) => `/groups/${group}/holdings/${encodeURIComponent(ticker)}`;
+  // Automatic Investment works in dollar totals (amount invested, cost basis); Stock Holdings per share.
+  const totals = group === 'auto';
+  const costOf = (x) => x.shares * x.cost_basis;
 
   // ---------- record a purchase
   const pTicker = tickerInput('p-ticker');
   const pShares = numberInput('p-shares', '2', '0.000001');
-  const pPrice = numberInput('p-price', '700.00', '0');
+  const pPrice = numberInput('p-price', totals ? '200.00' : '700.00', '0');
   const pDate = h('input', { id: 'p-date', type: 'date', max: today() });
   const pSubmit = h('button', { type: 'submit', class: 'btn btn-primary', text: 'Record purchase' });
   const pPreview = h('p', { class: 'small preview', 'aria-live': 'polite' });
@@ -53,20 +56,26 @@ export async function renderGroup(main, group) {
       return;
     }
     const current = mine.find((x) => x.ticker === symbol);
+    const spent = totals ? p : s * p; // dollars for this purchase
     if (current) {
-      const total = current.shares + s;
-      const avg = (current.shares * current.cost_basis + s * p) / total;
-      pPreview.textContent = `${symbol}: ${fmt.num(current.shares, 6)} → ${fmt.num(total, 6)} shares, average ${fmt.money(current.cost_basis)} → ${fmt.money(avg)}.`;
+      const shares = current.shares + s;
+      const basis = costOf(current) + spent;
+      pPreview.textContent = totals
+        ? `${symbol}: ${fmt.num(current.shares, 6)} → ${fmt.num(shares, 6)} shares, cost basis ${fmt.money(costOf(current))} → ${fmt.money(basis)} (${fmt.money(spent / s)} per share this time).`
+        : `${symbol}: ${fmt.num(current.shares, 6)} → ${fmt.num(shares, 6)} shares, average ${fmt.money(current.cost_basis)} → ${fmt.money(basis / shares)}.`;
     } else {
       const note = otherTickers.has(symbol) ? ` (${symbol} is also in ${GROUPS[otherGroup].label}; that holding is not changed.)` : '';
-      pPreview.textContent = `New in ${info.label}: ${fmt.num(s, 6)} shares of ${symbol} at ${fmt.money(p)}.${note}`;
+      pPreview.textContent = totals
+        ? `New in ${info.label}: ${fmt.num(s, 6)} shares of ${symbol}, cost basis ${fmt.money(spent)} (${fmt.money(spent / s)} per share).${note}`
+        : `New in ${info.label}: ${fmt.num(s, 6)} shares of ${symbol} at ${fmt.money(p)}.${note}`;
     }
   }
   [pTicker, pShares, pPrice].forEach((el) => el.addEventListener('input', updatePreview));
   updatePreview();
 
   const purchaseForm = h('form', { class: 'form', novalidate: true },
-    field('Ticker', pTicker), field('Shares bought', pShares), field('Price per share ($)', pPrice), field('Date (optional)', pDate), pSubmit);
+    field('Ticker', pTicker), field('Shares bought', pShares), field(totals ? 'Amount invested ($)' : 'Price per share ($)', pPrice),
+    field('Date (optional)', pDate), pSubmit);
   purchaseForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     pError.textContent = '';
@@ -74,7 +83,7 @@ export async function renderGroup(main, group) {
     pSubmit.disabled = true;
     const symbol = pTicker.value.trim().toUpperCase();
     try {
-      const body = { shares: Number(pShares.value), price: Number(pPrice.value) };
+      const body = { shares: Number(pShares.value), [totals ? 'amount' : 'price']: Number(pPrice.value) };
       if (pDate.value) body.purchased_on = pDate.value;
       const res = await api('POST', `${base(symbol)}/purchases`, body);
       toast(res.previous
@@ -90,12 +99,13 @@ export async function renderGroup(main, group) {
   // ---------- set totals directly
   const sTicker = tickerInput('s-ticker');
   const sShares = numberInput('s-shares', '15', '0.000001');
-  const sCost = numberInput('s-cost', '260.00', '0');
+  const sCost = numberInput('s-cost', totals ? '4175.39' : '260.00', '0');
   const sDate = h('input', { id: 's-date', type: 'date', max: today() });
   const sSubmit = h('button', { type: 'submit', class: 'btn btn-ghost', text: 'Save totals' });
   const sError = h('p', { class: 'form-error', role: 'alert' });
   const setForm = h('form', { class: 'form', novalidate: true },
-    field('Ticker', sTicker), field('Total shares', sShares), field('Average cost per share ($)', sCost), field('First purchase (optional)', sDate), sSubmit);
+    field('Ticker', sTicker), field('Total shares', sShares), field(totals ? 'Cost basis (total $ invested)' : 'Average cost per share ($)', sCost),
+    field('First purchase (optional)', sDate), sSubmit);
   setForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     sError.textContent = '';
@@ -103,7 +113,7 @@ export async function renderGroup(main, group) {
     sSubmit.disabled = true;
     const symbol = sTicker.value.trim().toUpperCase();
     try {
-      const body = { shares: Number(sShares.value), cost_basis: Number(sCost.value) };
+      const body = { shares: Number(sShares.value), [totals ? 'total_cost' : 'cost_basis']: Number(sCost.value) };
       if (sDate.value) body.purchased_on = sDate.value;
       const isNew = !mine.some((x) => x.ticker === symbol);
       await api('PUT', base(symbol), body);
@@ -131,13 +141,13 @@ export async function renderGroup(main, group) {
     });
     const edit = h('button', {
       type: 'button', class: 'btn btn-ghost', text: 'Edit totals', 'aria-label': `Edit totals for ${x.ticker}`,
-      onClick: () => { sTicker.value = x.ticker; sShares.value = x.shares; sCost.value = x.cost_basis; sDate.value = x.purchased_on || ''; sShares.focus(); setForm.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
+      onClick: () => { sTicker.value = x.ticker; sShares.value = x.shares; sCost.value = totals ? costOf(x).toFixed(2) : x.cost_basis; sDate.value = x.purchased_on || ''; sShares.focus(); setForm.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
     });
     return h('tr', null,
       h('td', { class: 'text' }, h('div', null, h('strong', { text: x.ticker })),
         otherTickers.has(x.ticker) ? h('div', { class: 'sub muted', text: `Also in ${GROUPS[otherGroup].label} (tracked separately)` }) : null),
       h('td', { text: fmt.num(x.shares, 6) }),
-      h('td', { text: fmt.money(x.cost_basis) }),
+      h('td', { text: fmt.money(totals ? costOf(x) : x.cost_basis) }),
       h('td', { text: p.price == null ? 'Loading…' : fmt.money(p.price) }),
       h('td', { text: fmt.money(p.value) }),
       h('td', { class: tone(p.gain) }, h('div', { text: fmt.signedMoney(p.gain) }), h('div', { class: 'sub', text: fmt.signedPct(p.gain_pct, 1) })),
@@ -155,18 +165,18 @@ export async function renderGroup(main, group) {
         stat('Gain / loss', fmt.signedMoney(summary.total_gain), tone(summary.total_gain)))),
     h('section', { class: 'card', 'aria-labelledby': 'buy-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'buy-h', text: 'Record a purchase' }),
-        h('span', { class: 'muted small', text: 'Adds to your shares in this group and recalculates the average cost.' })),
+        h('span', { class: 'muted small', text: totals ? 'Enter the shares and dollars from each automatic buy; the cost basis adds up.' : 'Adds to your shares in this group and recalculates the average cost.' })),
       purchaseForm, pPreview, pError),
     h('section', { class: 'card', 'aria-labelledby': 'list-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'list-h', text: `Your ${info.label.toLowerCase()}` })),
       mine.length
         ? h('div', { class: 'table-wrap' }, h('table', null,
-          h('thead', null, h('tr', null, ['Ticker', 'Shares', 'Avg cost', 'Price', 'Value', 'Gain / loss', ''].map((t, i) => h('th', { scope: 'col', class: i === 0 ? 'text' : null, text: t })))),
+          h('thead', null, h('tr', null, ['Ticker', 'Shares', totals ? 'Cost basis' : 'Avg cost', 'Price', 'Value', 'Gain / loss', ''].map((t, i) => h('th', { scope: 'col', class: i === 0 ? 'text' : null, text: t })))),
           h('tbody', null, rows)))
         : h('p', { class: 'muted', text: `Nothing in ${info.label} yet. Record your first purchase above.` })),
     h('section', { class: 'card', 'aria-labelledby': 'set-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'set-h', text: 'Set totals directly' }),
-        h('span', { class: 'muted small', text: "Use your broker's total shares and average cost. Replaces what's saved in this group." })),
+        h('span', { class: 'muted small', text: totals ? "Use your plan's total shares and total invested. Replaces what's saved in this group." : "Use your broker's total shares and average cost. Replaces what's saved in this group." })),
       setForm, sError),
   );
 }

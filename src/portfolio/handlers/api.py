@@ -120,11 +120,12 @@ def put_holding(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     group = _group(event)
     ticker = _ticker(event.get("pathParameters", {}).get("ticker"))
     body = _body(event)
+    shares = _number(body, "shares", 0.000001, 1_000_000_000)
     holding: dict[str, Any] = {
         "ticker": ticker,
         "group": group,
-        "shares": _number(body, "shares", 0.000001, 1_000_000_000),
-        "cost_basis": _number(body, "cost_basis", 0, 10_000_000),
+        "shares": shares,
+        "cost_basis": _per_share(body, shares, per_share="cost_basis", total="total_cost"),
     }
     purchased_on = _purchase_date(body)
     if purchased_on:
@@ -134,6 +135,16 @@ def put_holding(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     if new_ticker:
         _request_backfill(ticker)
     return _response(200, saved)
+
+
+def _per_share(body: dict[str, Any], shares: float, per_share: str, total: str) -> float:
+    """Accept either a per-share value or a dollar total (e.g. "amount invested") and return per share."""
+    has_per_share, has_total = body.get(per_share) is not None, body.get(total) is not None
+    if has_per_share == has_total:
+        raise ApiError(400, f"Send either {per_share} (per share) or {total} (total dollars), not both")
+    if has_per_share:
+        return _number(body, per_share, 0, 10_000_000)
+    return round(_number(body, total, 0, 10_000_000_000) / shares, 8)
 
 
 def _purchase_date(body: dict[str, Any]) -> str | None:
@@ -158,7 +169,7 @@ def record_purchase(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     ticker = _ticker(event.get("pathParameters", {}).get("ticker"))
     body = _body(event)
     shares = _number(body, "shares", 0.000001, 1_000_000_000)
-    price = _number(body, "price", 0, 10_000_000)
+    price = _per_share(body, shares, per_share="price", total="amount")
     purchased_on = _purchase_date(body)
 
     new_ticker = False
@@ -173,7 +184,7 @@ def record_purchase(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
             old_shares = float(current["shares"])
             total = old_shares + shares
             average = (old_shares * float(current["cost_basis"]) + shares * price) / total
-            updated = {"ticker": ticker, "group": group, "shares": round(total, 6), "cost_basis": round(average, 6)}
+            updated = {"ticker": ticker, "group": group, "shares": round(total, 6), "cost_basis": round(average, 8)}
             dates = [d for d in (current.get("purchased_on"), purchased_on) if d]
             if dates:
                 updated["purchased_on"] = min(dates)  # keep the first purchase date

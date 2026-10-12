@@ -28,8 +28,8 @@ All routes need `Authorization: Bearer <Cognito token>`.
 | Route | Purpose |
 |---|---|
 | `GET /holdings[?group=stocks\|auto]` | List holdings (each has a `group`) |
-| `PUT/DELETE /groups/{group}/holdings/{ticker}` | Set or remove a holding in a group (`stocks` or `auto`): `{"shares": 40, "cost_basis": 230}` |
-| `POST /groups/{group}/holdings/{ticker}/purchases` | Record a buy: `{"shares": 5, "price": 280}`. Updates that group's total shares and weighted average cost |
+| `PUT/DELETE /groups/{group}/holdings/{ticker}` | Set or remove a holding in a group (`stocks` or `auto`): `{"shares": 40, "cost_basis": 230}` (average per share) or `{"shares": 40, "total_cost": 9200}` (total invested) |
+| `POST /groups/{group}/holdings/{ticker}/purchases` | Record a buy: `{"shares": 5, "price": 280}` or `{"shares": 0.28, "amount": 200}`. Updates that group's total shares and weighted average cost |
 | `GET /portfolio` | Value, gains, allocation and history vs. SPY for Stock Holdings, Automatic Investment and Overall |
 | `GET /signals` | RSI, moving averages, drawdown, sentiment |
 | `GET /news?ticker=VTI` | AI briefing and scored headlines |
