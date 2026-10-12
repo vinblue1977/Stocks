@@ -336,6 +336,8 @@ class PortfolioTrackerStack(Stack):
             "BEDROCK_MODEL_ID": model_id,
             "BEDROCK_API": bedrock_api,
             "NEWS_EXCLUDED_TICKERS": ",".join(self.node.try_get_context("newsExcludedTickers") or []),
+            # cdk.json gives a bool, `-c partnerNews=false` a string
+            "PARTNER_NEWS": "false" if str(self.node.try_get_context("partnerNews")).lower() == "false" else "true",
             "BEDROCK_REGION": Aws.REGION,
             "OWNER_NAME": owner_name,
             "PARTNER_NAME": partner_name,

@@ -16,7 +16,7 @@ from typing import Any
 
 from portfolio import llm
 from portfolio.config import get_config
-from portfolio.db import Repository
+from portfolio.db import Repository, news_off
 from portfolio.logs import get_logger, log
 from portfolio.providers.news import FinnhubNewsProvider, NewsProvider
 from portfolio.secrets import get_secret
@@ -96,8 +96,10 @@ def handler(
     repo = repo or Repository()
     provider = provider or FinnhubNewsProvider(get_secret(get_config().news_api_key_param))
     now = datetime.now(UTC)
-    excluded = get_config().news_excluded  # e.g. broad index funds that rarely get headlines
-    tickers = sorted({h["ticker"] for h in repo.all_holdings()} - excluded)
+    cfg = get_config()
+    holdings = repo.all_holdings()
+    # Skips e.g. broad index funds that rarely get headlines, and partner-only tickers if partner news is off.
+    tickers = sorted({h["ticker"] for h in holdings} - news_off(holdings, cfg.news_excluded, cfg.partner_news))
 
     briefs: dict[str, str] = {}
     scores: list[float] = []

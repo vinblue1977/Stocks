@@ -12,7 +12,7 @@ from typing import Any
 
 from portfolio import analytics, notify, rules, signals
 from portfolio.config import get_config
-from portfolio.db import Repository
+from portfolio.db import Repository, news_off
 from portfolio.logs import get_logger, log
 
 logger = get_logger(__name__)
@@ -29,10 +29,11 @@ def handler(event: dict[str, Any] | None, context: Any, repo: Repository | None 
 
     snapshots: dict[str, dict[str, Any]] = {}
     latest: dict[str, float] = {}
-    news_off = get_config().news_excluded
+    cfg = get_config()
+    no_news = news_off(repo.all_holdings(), cfg.news_excluded, cfg.partner_news)
     for ticker in repo.tracked_tickers():
         history = repo.price_history(ticker, since)
-        brief = None if ticker in news_off else repo.latest_brief(ticker)  # no stale sentiment once news is off
+        brief = None if ticker in no_news else repo.latest_brief(ticker)  # no stale sentiment once news is off
         sentiment = brief.get("sentiment_7d") if brief else None
         snapshot = signals.compute_signals(ticker, history, sentiment, extra_windows)
         if snapshot:

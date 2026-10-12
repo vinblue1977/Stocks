@@ -179,6 +179,12 @@ def test_person_names_reach_the_functions(tmp_path_factory):
     assert env["OWNER_NAME"] == "Ana" and env["PARTNER_NAME"] == "Ben"
 
 
+@pytest.mark.parametrize("value, expected", [(None, "true"), (False, "false"), ("false", "false")])
+def test_partner_news_setting(tmp_path_factory, value, expected):
+    template = synth(tmp_path_factory, **({} if value is None else {"partnerNews": value}))
+    assert app_functions(template)[0]["Properties"]["Environment"]["Variables"]["PARTNER_NEWS"] == expected
+
+
 def test_budget_can_be_turned_off(tmp_path_factory):
     synth(tmp_path_factory, monthlyBudgetUsd=0).resource_count_is("AWS::Budgets::Budget", 0)
 

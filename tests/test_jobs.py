@@ -336,3 +336,39 @@ def test_portfolio_brief_regenerates_when_alerts_change(repo):
     repo.put_rule_state("u1", rule["rule_id"], True, "VTI 14-day RSI is 25.0")
     result = news_ingest.handler({}, None, repo=repo, provider=news, summarizer=CountingSummarizer)
     assert result["reused"] == ["VTI"] and result["claude_calls"] == 1  # only the portfolio briefing
+
+
+def test_partner_only_tickers_skip_news_when_partner_news_off(repo, monkeypatch):
+    import dataclasses
+
+    from portfolio import config
+
+    class Spy(FakeNews):
+        def __init__(self):
+            self.asked = []
+
+        def company_news(self, ticker, from_date, to_date):
+            self.asked.append(ticker)
+            return super().company_news(ticker, from_date, to_date)
+
+    repo.put_holding("u1", {"ticker": "VTI", "group": "stocks", "shares": 1, "cost_basis": 1})
+    repo.put_holding("u1", {"ticker": "VTI", "group": "partner_auto", "shares": 1, "cost_basis": 1})  # shared
+    repo.put_holding("u1", {"ticker": "SCHD", "group": "partner_stocks", "shares": 1, "cost_basis": 1})  # partner only
+    spy = Spy()
+    news_ingest.handler({}, None, repo=repo, provider=spy, summarizer=FakeSummarizer)
+    assert sorted(spy.asked) == ["SCHD", "VTI"]  # default: partner news on
+
+    cfg = dataclasses.replace(config.get_config(), partner_news=False)
+    monkeypatch.setattr(news_ingest, "get_config", lambda: cfg)
+    spy = Spy()
+    assert news_ingest.handler({}, None, repo=repo, provider=spy, summarizer=FakeSummarizer)["tickers"] == ["VTI"]
+    assert spy.asked == ["VTI"]
+
+    # Signals ignore any earlier SCHD brief once its news is off
+    start = (datetime.now(UTC).date() - timedelta(days=60)).isoformat()
+    for t in ("SCHD", "VTI", "SPY"):
+        repo.put_prices(t, price_series(100, 0, 60, start))
+    repo.put_brief("SCHD", "2026-10-09", {"summary": "old", "sentiment_7d": 0.6})
+    monkeypatch.setattr(evaluate_signals, "get_config", lambda: cfg)
+    evaluate_signals.handler({}, None, repo=repo)
+    assert repo.get_signal("SCHD").get("sentiment_7d") is None

@@ -47,6 +47,15 @@ def group_for(person: str, kind: str) -> str:
 GROUPS = tuple(group_for(p, k) for p in PEOPLE for k in KINDS)  # stocks, auto, partner_stocks, partner_auto
 
 
+def news_off(holdings: Iterable[Mapping[str, Any]], excluded: Iterable[str], partner_news: bool) -> set[str]:
+    """Tickers to skip for news: the configured exclusions, plus partner-only tickers when partner news is off."""
+    off = set(excluded)
+    if not partner_news:
+        mine = {h["ticker"] for h in holdings if person_of(h.get("group", DEFAULT_GROUP)) == "mine"}
+        off |= {h["ticker"] for h in holdings} - mine
+    return off
+
+
 def person_of(group: str) -> str:
     return "partner" if group.startswith("partner_") else "mine"
 

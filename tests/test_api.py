@@ -391,3 +391,16 @@ def test_profile_names_and_partner_visibility(repo, monkeypatch):
     monkeypatch.setenv("OWNER_NAME", "Alex")
     monkeypatch.setenv("PARTNER_NAME", "Sam")
     assert call(repo, "GET /profile")[1] == {"owner_name": "Alex", "partner_name": "Sam", "has_partner": True}
+
+
+def test_news_lists_partner_only_tickers_as_off(repo, monkeypatch):
+    import dataclasses
+
+    from portfolio import config
+
+    cfg = dataclasses.replace(config.get_config(), news_excluded=frozenset(), partner_news=False)
+    monkeypatch.setattr(api, "get_config", lambda: cfg)
+    put(repo, "stocks", "VTI", 1, 1)
+    put(repo, "partner_stocks", "VTI", 1, 1)
+    put(repo, "partner_auto", "SCHD", 1, 1)
+    assert call(repo, "GET /news")[1]["news_excluded"] == ["SCHD"]

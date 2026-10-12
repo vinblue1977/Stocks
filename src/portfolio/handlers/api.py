@@ -18,7 +18,7 @@ import boto3
 
 from portfolio import analytics, rules
 from portfolio.config import get_config
-from portfolio.db import GROUPS, KINDS, PEOPLE, ConcurrentUpdateError, Repository, kind_of, person_of
+from portfolio.db import GROUPS, KINDS, PEOPLE, ConcurrentUpdateError, Repository, kind_of, news_off, person_of
 from portfolio.llm import sentiment_label
 from portfolio.logs import get_logger, log
 
@@ -325,8 +325,10 @@ def get_signals(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
 def get_news(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     user_id = _user_id(event)
     params = event.get("queryStringParameters") or {}
-    excluded = get_config().news_excluded
-    held = sorted({h["ticker"] for h in repo.list_holdings(user_id)})
+    cfg = get_config()
+    holdings = repo.list_holdings(user_id)
+    excluded = news_off(holdings, cfg.news_excluded, cfg.partner_news)
+    held = sorted({h["ticker"] for h in holdings})
     requested = params.get("ticker")
     tickers = [_ticker(requested)] if requested else [t for t in held if t not in excluded]
     if requested and tickers[0] not in held:

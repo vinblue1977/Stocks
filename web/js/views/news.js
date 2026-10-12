@@ -123,7 +123,7 @@ export async function renderNews(main) {
   main.replaceChildren(
     pageHead('News & signals', 'Headlines from Finnhub, scored and summarized each weekday evening', groupChips),
     chips,
-    offHere.length ? h('p', { class: 'xsmall muted', style: { margin: '-12px 0 0' }, text: `News is turned off for ${offHere.join(', ')} (they rarely get headlines). Their price signals still appear below.` }) : null,
+    offHere.length ? h('p', { class: 'xsmall muted', style: { margin: '-12px 0 0' }, text: `News is turned off for ${offHere.join(', ')} to save on summaries. Their price signals still appear below.` }) : null,
     briefCard(news.brief, selected === 'All' ? 'All' : selected),
     h('div', { class: 'row' }, headlinesCard(news.articles), trendCard(news.articles)),
     signalsCard(signalsRes.signals, rulesRes.rules),
