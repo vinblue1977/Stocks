@@ -12,6 +12,7 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+  # Also covers layer/requirements.txt (pulled in by requirements-dev.txt).
   - package-ecosystem: pip
     directory: /
     schedule:
@@ -26,10 +27,3 @@ updates:
       # cdk-nag 3 replaces the suppression API (experimental, no grouped acknowledgments yet).
       - dependency-name: cdk-nag
         versions: [">=3.0.0"]
-  - package-ecosystem: pip
-    directory: /layer
-    schedule:
-      interval: weekly
-    commit-message:
-      prefix: build
-      include: scope
