@@ -31,6 +31,12 @@ function pricesNote(data) {
   return data.as_of ? `Prices as of ${fmt.date(data.as_of)} close` : 'Waiting for the first price sync';
 }
 
+/** Marks a live-prices view so the app keeps refreshing it until the evening close is stored. */
+function liveMarker(el, live) {
+  if (live) el.dataset.live = '';
+  return el;
+}
+
 /** The selected person's Stock Holdings, Automatic Investment and total. */
 function summaryTable(views, dayLabel) {
   const total = views.overall.total_value || 0;
@@ -174,7 +180,7 @@ export async function renderOverview(main) {
         })))
       : null;
     main.replaceChildren(
-      pageHead('Overview', pricesNote(data), switcher),
+      liveMarker(pageHead('Overview', pricesNote(data), switcher), data.live_as_of),
       summaryTable(portfolios[person], data.live_as_of ? 'Today' : 'Last day'),
       h('section', { class: 'tiles', 'aria-label': `Summary for ${viewLabel()}` },
         tile(`Total value · ${viewLabel()}`, fmt.money(s.total_value), `Cost basis ${fmt.money(s.total_cost)}`),
