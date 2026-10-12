@@ -99,3 +99,7 @@ tests/          Unit, handler and infrastructure tests
 ## Roadmap
 
 Rule backtesting, transaction history, and a custom domain for the dashboard.
+
+## License
+
+[MIT](LICENSE)
