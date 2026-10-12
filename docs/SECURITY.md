@@ -27,5 +27,5 @@ Accepted cdk-nag exceptions and their reasons are in [`infra/nag.py`](../infra/n
 2. **Require MFA:** set `Mfa.REQUIRED` once the web app supports MFA setup.
 3. **Cognito Plus plan:** adds threat protection (paid).
 4. **WAF and custom domain:** add AWS WAF (about $6+/month) and a custom domain with an ACM certificate to enforce TLS 1.2+ on the dashboard.
-5. **CI:** pin Actions to commit SHAs and enable Dependabot.
+5. **CI:** done: Actions are pinned to commit SHAs, the runner is pinned, and Dependabot proposes weekly updates.
 6. **Deploy role:** limit the OIDC role to the CDK bootstrap roles for this repo's `production` environment.
