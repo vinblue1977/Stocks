@@ -12,8 +12,9 @@ from typing import Any
 
 from portfolio import analytics, notify, rules, signals
 from portfolio.config import get_config
-from portfolio.db import Repository, news_off
+from portfolio.db import Repository
 from portfolio.logs import get_logger, log
+from portfolio.news_policy import news_off
 
 logger = get_logger(__name__)
 
@@ -30,7 +31,8 @@ def handler(event: dict[str, Any] | None, context: Any, repo: Repository | None 
     snapshots: dict[str, dict[str, Any]] = {}
     latest: dict[str, float] = {}
     cfg = get_config()
-    no_news = news_off(repo.all_holdings(), cfg.news_excluded, cfg.partner_news)
+    holdings = repo.all_holdings()
+    no_news = news_off(holdings, cfg.news_excluded, cfg.partner_news)
     for ticker in repo.tracked_tickers():
         history = repo.price_history(ticker, since)
         brief = None if ticker in no_news else repo.latest_brief(ticker)  # no stale sentiment once news is off
@@ -41,7 +43,7 @@ def handler(event: dict[str, Any] | None, context: Any, repo: Repository | None 
             snapshots[ticker] = snapshot
             latest[ticker] = snapshot["price"]
 
-    weights = _weights_by_user(repo, latest)
+    weights = _weights_by_user(holdings, latest)
     fired = 0
     for rule in all_rules:
         signal = snapshots.get(rule["ticker"])
@@ -61,9 +63,9 @@ def handler(event: dict[str, Any] | None, context: Any, repo: Repository | None 
     return {"tickers": sorted(snapshots), "rules_evaluated": len(all_rules), "alerts_sent": fired}
 
 
-def _weights_by_user(repo: Repository, latest: dict[str, float]) -> dict[str, dict[str, float]]:
-    """Per user, each ticker's share of the whole portfolio (both groups combined)."""
+def _weights_by_user(holdings: list[dict[str, Any]], latest: dict[str, float]) -> dict[str, dict[str, float]]:
+    """Per user, each ticker's share of the whole portfolio (all groups combined)."""
     by_user: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for holding in repo.all_holdings():
+    for holding in holdings:
         by_user[holding["user_id"]].append(holding)
     return {user_id: analytics.combined_weights(holdings, latest) for user_id, holdings in by_user.items()}

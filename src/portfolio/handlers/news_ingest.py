@@ -16,8 +16,9 @@ from typing import Any
 
 from portfolio import llm
 from portfolio.config import get_config
-from portfolio.db import Repository, news_off
+from portfolio.db import Repository
 from portfolio.logs import get_logger, log
+from portfolio.news_policy import news_off
 from portfolio.providers.news import FinnhubNewsProvider, NewsProvider
 from portfolio.secrets import get_secret
 

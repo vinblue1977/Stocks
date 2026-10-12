@@ -179,7 +179,9 @@ def test_person_names_reach_the_functions(tmp_path_factory):
     assert env["OWNER_NAME"] == "Ana" and env["PARTNER_NAME"] == "Ben"
 
 
-@pytest.mark.parametrize("value, expected", [(None, "true"), (False, "false"), ("false", "false")])
+@pytest.mark.parametrize(
+    "value, expected", [(None, "true"), (False, "false"), ("false", "false"), ("off", "false"), (True, "true")]
+)
 def test_partner_news_setting(tmp_path_factory, value, expected):
     template = synth(tmp_path_factory, **({} if value is None else {"partnerNews": value}))
     assert app_functions(template)[0]["Properties"]["Environment"]["Variables"]["PARTNER_NEWS"] == expected

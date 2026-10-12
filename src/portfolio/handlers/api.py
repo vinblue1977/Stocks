@@ -18,9 +18,10 @@ import boto3
 
 from portfolio import analytics, rules
 from portfolio.config import get_config
-from portfolio.db import GROUPS, KINDS, PEOPLE, ConcurrentUpdateError, Repository, kind_of, news_off, person_of
+from portfolio.db import GROUPS, KINDS, PEOPLE, ConcurrentUpdateError, Repository, kind_of, person_of
 from portfolio.llm import sentiment_label
 from portfolio.logs import get_logger, log
+from portfolio.news_policy import news_off
 
 logger = get_logger(__name__)
 
@@ -333,6 +334,8 @@ def get_news(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     tickers = [_ticker(requested)] if requested else [t for t in held if t not in excluded]
     if requested and tickers[0] not in held:
         raise ApiError(404, "Ticker is not in your portfolio")
+    if requested and tickers[0] in excluded:  # don't show old headlines or briefs once news is off
+        return _response(200, {"brief": None, "articles": [], "news_excluded": sorted(excluded)})
     since = (datetime.now(UTC) - timedelta(days=7)).isoformat(timespec="seconds")
     articles = []
     for ticker in tickers:
