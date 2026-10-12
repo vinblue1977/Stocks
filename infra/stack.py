@@ -22,6 +22,7 @@ from aws_cdk import (
     Stack,
     Tags,
 )
+from aws_cdk import aws_accessanalyzer as accessanalyzer
 from aws_cdk import aws_apigatewayv2 as apigw
 from aws_cdk import aws_apigatewayv2_authorizers as authorizers
 from aws_cdk import aws_apigatewayv2_integrations as integrations
@@ -529,6 +530,13 @@ class PortfolioTrackerStack(Stack):
             schedule=events.Schedule.cron(minute="0", hour="14", week_day="SUN"),
             targets=[targets.LambdaFunction(weekly, retry_attempts=2)],
         )
+
+        # ------------------------------------------------------------------ external-access findings
+        # Free account-level analyzer: flags any resource in this region (buckets, keys, roles, queues,
+        # topics, functions) reachable from outside the account. Findings are in the IAM console.
+        # Only one per account and region, so `accessAnalyzer: false` skips it if the account has one.
+        if _flag(self.node.try_get_context("accessAnalyzer"), default=True):
+            accessanalyzer.CfnAnalyzer(self, "ExternalAccessAnalyzer", type="ACCOUNT")
 
         # ------------------------------------------------------------------ monitoring
         alarm_action = cw_actions.SnsAction(ops_topic)

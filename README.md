@@ -83,6 +83,7 @@ Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <Pi
 | `bedrockModelId` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Model for news summaries |
 | `bedrockApi` | `runtime` | `runtime` for Haiku 4.5; `mantle` for newer models such as `anthropic.claude-haiku-5-5` once your account has access |
 | `monthlyBudgetUsd` | `5` | Whole-account budget alert threshold; `0` skips it (e.g. if the account already has a budget) |
+| `accessAnalyzer` | `true` | Free IAM Access Analyzer that flags resources reachable from outside the account (findings in the IAM console). Only one per account and region; set `false` if the account already has one |
 | `useCustomerManagedKey` | `false` | Use your own KMS key (about $1/month) instead of AWS default encryption |
 
 ## Cost

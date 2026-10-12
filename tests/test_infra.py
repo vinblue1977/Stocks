@@ -202,6 +202,11 @@ def test_intraday_quotes_can_be_turned_off(tmp_path_factory, value):
     assert not any("0/15" in s for s in schedules(synth(tmp_path_factory, intradayQuotes=value)))
 
 
+def test_free_external_access_analyzer(any_template, tmp_path_factory):
+    any_template.has_resource_properties("AWS::AccessAnalyzer::Analyzer", {"Type": "ACCOUNT"})
+    synth(tmp_path_factory, accessAnalyzer=False).resource_count_is("AWS::AccessAnalyzer::Analyzer", 0)
+
+
 def test_budget_can_be_turned_off(tmp_path_factory):
     synth(tmp_path_factory, monthlyBudgetUsd=0).resource_count_is("AWS::Budgets::Budget", 0)
 
