@@ -217,8 +217,12 @@ def test_access_analyzer_is_opt_in(tmp_path_factory, value):
     template.resource_count_is("AWS::AccessAnalyzer::Analyzer", 0)
 
 
-def test_github_deploy_role_pinned_to_production_environment(tmp_path_factory):
-    template = synth(tmp_path_factory, githubDeploy=True, githubRepo="example/repo")
+@pytest.mark.parametrize(
+    ("repo", "subject"),
+    [("example/repo", "example/repo"), ("repo:owner@123/repo@456", "owner@123/repo@456")],
+)
+def test_github_deploy_role_pinned_to_production_environment(tmp_path_factory, repo, subject):
+    template = synth(tmp_path_factory, githubDeploy=True, githubRepo=repo)
     template.resource_count_is("AWS::IAM::OIDCProvider", 1)
     gh = "token.actions.githubusercontent.com"
     template.has_resource_properties(
@@ -233,7 +237,7 @@ def test_github_deploy_role_pinned_to_production_environment(tmp_path_factory):
                             "Condition": {
                                 "StringEquals": {
                                     f"{gh}:aud": "sts.amazonaws.com",
-                                    f"{gh}:sub": "repo:example/repo:environment:production",
+                                    f"{gh}:sub": f"repo:{subject}:environment:production",
                                 }
                             },
                         }
@@ -256,9 +260,10 @@ def test_github_deploy_is_opt_in(tmp_path_factory, value):
     template.resource_count_is("AWS::IAM::OIDCProvider", 0)
 
 
-def test_github_deploy_needs_repo(tmp_path_factory):
+@pytest.mark.parametrize("repo", [None, "owner/repo:", "owner/*", " owner/repo"])
+def test_github_deploy_needs_valid_repo(tmp_path_factory, repo):
     with pytest.raises(ValueError, match="githubRepo"):
-        synth(tmp_path_factory, githubDeploy=True)
+        synth(tmp_path_factory, githubDeploy=True, **({} if repo is None else {"githubRepo": repo}))
 
 
 def test_budget_can_be_turned_off(tmp_path_factory):

@@ -31,7 +31,7 @@
     "intradayQuotes": true,
     "accessAnalyzer": true,
     "githubDeploy": true,
-    "githubRepo": "vinblue1977/Stocks",
+    "githubRepo": "vinblue1977@13391763/Stocks@1415035954",
     "bedrockModelId": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
     "bedrockApi": "runtime",
     "monthlyBudgetUsd": 0,
