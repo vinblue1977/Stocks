@@ -1,10 +1,10 @@
 import { api } from '../api.js';
 import { sentimentBars } from '../charts.js';
-import { GROUPS } from '../groups.js';
+import { GROUPS, KINDS, hasPartner, possessive } from '../groups.js';
 import { fmt, h, icon, pageHead, sentimentTag, tone } from '../ui.js';
 
 let selected = 'All';
-let groupFilter = 'all';
+let groupFilter = 'all'; // all, a person (mine / partner) or a kind (stocks / auto)
 
 function safeUrl(url) {
   try { return new URL(url).protocol === 'https:' ? url : null; } catch { return null; }
@@ -93,7 +93,12 @@ function signalsCard(signals, rules) {
 
 export async function renderNews(main) {
   const [holdingsRes, signalsRes, rulesRes] = await Promise.all([api('GET', '/holdings'), api('GET', '/signals'), api('GET', '/rules')]);
-  const inGroup = holdingsRes.holdings.filter((x) => groupFilter === 'all' || x.group === groupFilter);
+  const filters = hasPartner()
+    ? [['all', 'Everyone'], ['mine', possessive('mine')], ['partner', possessive('partner')]]
+    : [['all', 'All groups'], ['stocks', KINDS.stocks.label], ['auto', KINDS.auto.label]];
+  if (!filters.some(([key]) => key === groupFilter)) groupFilter = 'all';
+  const matches = (x) => groupFilter === 'all' || GROUPS[x.group]?.person === groupFilter || GROUPS[x.group]?.kind === groupFilter;
+  const inGroup = holdingsRes.holdings.filter(matches);
   const allTickers = [...new Set(inGroup.map((x) => x.ticker))].sort();
   if (selected !== 'All' && !allTickers.includes(selected)) selected = 'All';
   const news = await api('GET', selected === 'All' ? '/news' : `/news?ticker=${encodeURIComponent(selected)}`);
@@ -105,7 +110,7 @@ export async function renderNews(main) {
   const offHere = allTickers.filter((t) => newsOff.has(t));
 
   const groupChips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Filter by group' },
-    [['all', 'All groups'], ['stocks', GROUPS.stocks.label], ['auto', GROUPS.auto.label]].map(([key, label]) => h('button', {
+    filters.map(([key, label]) => h('button', {
       type: 'button', class: 'chip-btn', 'aria-pressed': String(key === groupFilter), text: label,
       onClick: () => { groupFilter = key; selected = 'All'; renderNews(main); },
     })));

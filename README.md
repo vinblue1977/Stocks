@@ -27,10 +27,11 @@ All routes need `Authorization: Bearer <Cognito token>`.
 
 | Route | Purpose |
 |---|---|
-| `GET /holdings[?group=stocks\|auto]` | List holdings (each has a `group`) |
-| `PUT/DELETE /groups/{group}/holdings/{ticker}` | Set or remove a holding in a group (`stocks` or `auto`): `{"shares": 40, "cost_basis": 230}` (average per share) or `{"shares": 40, "total_cost": 9200}` (total invested) |
+| `GET /holdings[?group=…]` | List holdings (each has a `group`: `stocks`, `auto`, `partner_stocks` or `partner_auto`) |
+| `PUT/DELETE /groups/{group}/holdings/{ticker}` | Set or remove a holding in a group: `{"shares": 40, "cost_basis": 230}` (average per share) or `{"shares": 40, "total_cost": 9200}` (total invested) |
 | `POST /groups/{group}/holdings/{ticker}/purchases` | Record a buy: `{"shares": 5, "price": 280}` or `{"shares": 0.28, "amount": 200}`. Updates that group's total shares and weighted average cost |
-| `GET /portfolio` | Value, gains, allocation and history vs. SPY for Stock Holdings, Automatic Investment and Overall |
+| `GET /profile` | Display names (`owner_name`, `partner_name`) and whether to show the partner page |
+| `GET /portfolio` | Value, gains, allocation and history vs. SPY, under `portfolios.<household\|mine\|partner>.<overall\|stocks\|auto>` |
 | `GET /signals` | RSI, moving averages, drawdown, sentiment |
 | `GET /news?ticker=VTI` | AI briefing and scored headlines |
 | `GET/POST/DELETE /rules[/{ruleId}]`, `GET /rule-types` | Alert rules, e.g. `{"type": "drawdown_below", "ticker": "VTI", "params": {"pct": 10}}` |
@@ -64,7 +65,7 @@ curl -X PUT "$API/holdings/VTI" -H "Authorization: Bearer $TOKEN" -d '{"shares":
 
 Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <PipelineArn>`.
 
-**Dashboard:** open the `DashboardUrl` output and sign in with the same email and password. It has Overview (switchable between Overall, Stock Holdings and Automatic Investment), a tab for each group, News & signals, and Alerts. A ticker can be held in both groups; each keeps its own shares and average cost, and Overall combines them. The 40-ticker limit counts unique tickers across both groups. The code is plain HTML/CSS/JS in `web/` and is uploaded on every deploy.
+**Dashboard:** open the `DashboardUrl` output and sign in with the same email and password. It has Overview, a portfolio page per person (yours, plus an optional partner's such as a spouse's, each with Stock Holdings and Automatic Investment tabs), News & signals, and Alerts. Overview switches between Household and each person, with a Stock Holdings / Automatic Investment / Total table. A ticker can be held in several groups; each keeps its own shares and average cost, and totals combine them. The 40-ticker limit counts unique tickers across all groups, and `weight_above` rules use the household total. The code is plain HTML/CSS/JS in `web/` and is uploaded on every deploy.
 
 ## Configuration (`cdk.json` or `-c key=value`)
 
@@ -73,6 +74,7 @@ Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <Pi
 | `alertEmail` | none | Alerts, reports, alarms, budget warnings |
 | `allowedOrigins` | `localhost:5173` | CORS origins |
 | `benchmarkTicker` | `SPY` | Performance benchmark |
+| `ownerName` / `partnerName` | none | Names on the portfolio pages and weekly email, e.g. `-c ownerName=Alex -c partnerName=Sam` (or `make deploy OWNER_NAME=Alex PARTNER_NAME=Sam`); the partner page appears only when `partnerName` is set. Pass them at deploy time rather than committing them; they're served only to signed-in users |
 | `newsExcludedTickers` | `["ITOT", "MGV", "DGRO", "DVY", "IWB", "ONEQ", "SPYD"]` | Tickers to skip when fetching news (e.g. broad index funds with no headlines); price signals still apply |
 | `bedrockModelId` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Model for news summaries |
 | `bedrockApi` | `runtime` | `runtime` for Haiku 4.5; `mantle` for newer models such as `anthropic.claude-haiku-5-5` once your account has access |

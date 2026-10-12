@@ -123,6 +123,24 @@ def test_weekly_report(repo, monkeypatch):
     assert weekly_report.handler({}, None, repo=repo) == {"reports_sent": 1}
     assert "Total value: $1,090.00" in sent[0]
     assert "No alerts fired this week." in sent[0]
+    assert "By person" not in sent[0] and "By group" not in sent[0]  # only one group in use
+
+
+def test_weekly_report_by_person(repo, monkeypatch):
+    sent = []
+    monkeypatch.setattr(weekly_report.notify, "send_email", lambda s, b: sent.append(b))
+    monkeypatch.setenv("OWNER_NAME", "Ana")
+    monkeypatch.setenv("PARTNER_NAME", "Ben")
+    weekly_report.get_config.cache_clear()
+    start = (datetime.now(UTC).date() - timedelta(days=10)).isoformat()
+    repo.put_prices("VTI", price_series(100, 0, 10, start))
+    repo.put_holding("u1", {"ticker": "VTI", "group": "stocks", "shares": 1, "cost_basis": 100})
+    repo.put_holding("u1", {"ticker": "VTI", "group": "partner_auto", "shares": 3, "cost_basis": 100})
+    weekly_report.handler({}, None, repo=repo)
+    weekly_report.get_config.cache_clear()
+    assert "Total value: $400.00" in sent[0]
+    assert "  Ana: $100.00" in sent[0] and "  Ben: $300.00" in sent[0]
+    assert "  Ana · Stock Holdings: $100.00" in sent[0] and "  Ben · Automatic Investment: $300.00" in sent[0]
 
 
 def test_prices_written_newest_first(repo):

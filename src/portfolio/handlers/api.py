@@ -18,14 +18,14 @@ import boto3
 
 from portfolio import analytics, rules
 from portfolio.config import get_config
-from portfolio.db import GROUPS, ConcurrentUpdateError, Repository
+from portfolio.db import GROUPS, KINDS, PEOPLE, ConcurrentUpdateError, Repository, kind_of, person_of
 from portfolio.llm import sentiment_label
 from portfolio.logs import get_logger, log
 
 logger = get_logger(__name__)
 
 MAX_BODY_BYTES = 10_000
-MAX_HOLDINGS = 40  # unique tickers across both groups; keeps the price sync under Tiingo's free 50 requests/hour
+MAX_HOLDINGS = 40  # unique tickers across all groups; keeps the price sync under Tiingo's free 50 requests/hour
 MAX_RULES = 50
 HISTORY_DAYS = 400  # calendar days of history for the performance chart (about 1 trading year + margin)
 
@@ -89,8 +89,8 @@ def _number(body: dict[str, Any], name: str, low: float, high: float) -> float:
 
 
 # ---------------------------------------------------------------- holdings
-# Holdings live in a group: "stocks" (Stock Holdings) or "auto" (Automatic Investment).
-# The same ticker can be in both; the 40-ticker cap counts unique tickers across groups.
+# Holdings live in a group: Stock Holdings or Automatic Investment, for the owner or the partner
+# (see db.GROUPS). The same ticker can be in several; the 40-ticker cap counts unique tickers across all.
 def _group(event: dict[str, Any]) -> str:
     group = (event.get("pathParameters") or {}).get("group", "")
     if group not in GROUPS:
@@ -111,7 +111,7 @@ def _admit_ticker(repo: Repository, user_id: str, ticker: str) -> bool:
 def list_holdings(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     group = (event.get("queryStringParameters") or {}).get("group")
     if group is not None and group not in GROUPS:
-        raise ApiError(400, "group must be stocks or auto")
+        raise ApiError(400, f"group must be one of {', '.join(GROUPS)}")
     return _response(200, {"holdings": repo.list_holdings(_user_id(event), group)})
 
 
@@ -263,7 +263,7 @@ def list_alerts(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
 
 # ---------------------------------------------------------------- portfolio, signals, news
 def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
-    """Summaries for Stock Holdings, Automatic Investment and Overall (both combined)."""
+    """Summaries per person (household = everyone, mine, partner) and kind (overall, stocks, auto)."""
     user_id = _user_id(event)
     holdings = repo.list_holdings(user_id)
     since = (datetime.now(UTC).date() - timedelta(days=HISTORY_DAYS)).isoformat()
@@ -273,24 +273,48 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     benchmark_ticker = get_config().benchmark_ticker
     benchmark = repo.price_history(benchmark_ticker, since)
 
+    built: dict[tuple[str, ...], dict[str, Any]] = {}
+
     def build(subset: list[dict[str, Any]]) -> dict[str, Any]:
+        # Views with the same holdings (e.g. household = mine when there's no partner) are built once.
+        key = tuple(sorted(f"{h['group']}#{h['ticker']}" for h in subset))
+        if key not in built:
+            built[key] = _summary(subset)
+        return built[key]
+
+    def _summary(subset: list[dict[str, Any]]) -> dict[str, Any]:
         summary = analytics.summarize(subset, latest, previous)
         series = analytics.value_history(subset, histories)
         summary["benchmark"] = {"ticker": benchmark_ticker, **analytics.compare_to_benchmark(series, benchmark)}
         summary["history"] = [{"date": d, "value": v} for d, v in series]
         return summary
 
-    groups = {g: build([h for h in holdings if h["group"] == g]) for g in GROUPS}
-    groups["overall"] = build(holdings)
+    def pick(person: str, kind: str) -> list[dict[str, Any]]:
+        return [
+            h for h in holdings if person in ("household", person_of(h["group"])) and kind in ("overall", kind_of(h["group"]))
+        ]
+
+    portfolios = {p: {k: build(pick(p, k)) for k in ("overall", *KINDS)} for p in ("household", *PEOPLE)}
     return _response(
         200,
         {
             "as_of": max((h[-1][0] for h in histories.values() if h), default=None),
             "benchmark_ticker": benchmark_ticker,
             "benchmark_history": [{"date": d, "close": c} for d, c in benchmark],
-            "groups": groups,
+            "portfolios": portfolios,
         },
     )
+
+
+def get_profile(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """Display names for the dashboard. Served behind sign-in (not in the public config.json).
+
+    The partner page shows when a partner name is configured or the partner already has holdings,
+    so a deploy without the name can't hide holdings that still count in household totals.
+    """
+    owner, partner = os.environ.get("OWNER_NAME", ""), os.environ.get("PARTNER_NAME", "")
+    has_partner = bool(partner) or any(person_of(h["group"]) == "partner" for h in repo.list_holdings(_user_id(event)))
+    return _response(200, {"owner_name": owner, "partner_name": partner, "has_partner": has_partner})
 
 
 def get_signals(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
@@ -332,6 +356,7 @@ ROUTES: dict[str, Route] = {
     "DELETE /rules/{ruleId}": delete_rule,
     "GET /alerts": list_alerts,
     "GET /portfolio": get_portfolio,
+    "GET /profile": get_profile,
     "GET /signals": get_signals,
     "GET /news": get_news,
 }
