@@ -237,3 +237,84 @@ def test_excluded_ticker_has_no_stale_sentiment(repo, monkeypatch):
     monkeypatch.setattr(evaluate_signals, "get_config", lambda: cfg)
     evaluate_signals.handler({}, None, repo=repo)
     assert repo.get_signal("DVY").get("sentiment_7d") is None  # news off: no stale score
+
+
+class CountingSummarizer(FakeSummarizer):
+    ticker_calls = 0
+    portfolio_calls = 0
+
+    @classmethod
+    def brief_for_ticker(cls, ticker, articles):
+        cls.ticker_calls += 1
+        brief = FakeSummarizer.brief_for_ticker(ticker, articles)
+        if len(articles) > 1:  # new coverage changes the summary text, as it would with Claude
+            brief.summary = f"{ticker} summary ({len(articles)} headlines)"
+        return brief
+
+    @classmethod
+    def brief_for_portfolio(cls, briefs, alerts):
+        cls.portfolio_calls += 1
+        return f"Portfolio summary {cls.portfolio_calls}"
+
+
+class GrowingNews:
+    """Returns the same headlines until told to add a new one."""
+
+    def __init__(self):
+        self.extra = False
+
+    def company_news(self, ticker, from_date, to_date):
+        now = datetime.now(UTC).isoformat(timespec="seconds")
+        items = [
+            {
+                "article_id": f"{ticker}-1",
+                "headline": "Up",
+                "summary": "",
+                "source": "Wire",
+                "url": "https://x/1",
+                "published_at": now,
+            }
+        ]
+        if self.extra:
+            items.append(
+                {
+                    "article_id": f"{ticker}-9",
+                    "headline": "New",
+                    "summary": "",
+                    "source": "Wire",
+                    "url": "https://x/9",
+                    "published_at": now,
+                }
+            )
+        return items
+
+
+def test_news_reuses_summaries_when_nothing_is_new(repo):
+    CountingSummarizer.ticker_calls = CountingSummarizer.portfolio_calls = 0
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "cost_basis": 1})
+    news = GrowingNews()
+
+    first = news_ingest.handler({}, None, repo=repo, provider=news, summarizer=CountingSummarizer)
+    assert first["summarized"] == ["VTI"] and first["claude_calls"] == 2
+
+    second = news_ingest.handler({}, None, repo=repo, provider=news, summarizer=CountingSummarizer)
+    assert second["reused"] == ["VTI"] and second["claude_calls"] == 0
+    assert CountingSummarizer.ticker_calls == 1 and CountingSummarizer.portfolio_calls == 1
+    brief = repo.latest_brief("VTI")
+    assert brief["summary"] == "VTI summary" and brief["reused"] is True and brief["sentiment_7d"] == pytest.approx(0.8)
+    assert repo.latest_brief("ALL")["summary"] == "Portfolio summary 1"
+
+    news.extra = True  # a new headline arrives
+    third = news_ingest.handler({}, None, repo=repo, provider=news, summarizer=CountingSummarizer)
+    assert third["summarized"] == ["VTI"] and third["claude_calls"] == 2
+
+
+def test_portfolio_brief_regenerates_when_alerts_change(repo):
+    CountingSummarizer.ticker_calls = CountingSummarizer.portfolio_calls = 0
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "cost_basis": 1})
+    news = GrowingNews()
+    news_ingest.handler({}, None, repo=repo, provider=news, summarizer=CountingSummarizer)
+    rule = repo.create_rule("u1", {"type": "rsi_below", "ticker": "VTI", "params": {"threshold": 30}, "enabled": True})
+    repo.put_rule_state("u1", rule["rule_id"], True, "VTI 14-day RSI is 25.0")
+    result = news_ingest.handler({}, None, repo=repo, provider=news, summarizer=CountingSummarizer)
+    assert result["reused"] == ["VTI"] and result["claude_calls"] == 1  # only the portfolio briefing
