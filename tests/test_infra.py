@@ -231,6 +231,12 @@ def test_site_bucket_private_and_served_only_via_cloudfront(any_template):
     assert any(stmt.get("Condition", {}).get("Bool", {}).get("aws:SecureTransport") == "false" for stmt in statements)
 
 
+def test_site_files_revalidate_on_every_load(any_template):
+    deployment = next(iter(any_template.find_resources("Custom::CDKBucketDeployment").values()))
+    header = deployment["Properties"]["SystemMetadata"]["cache-control"]
+    assert header == "max-age=0, must-revalidate, s-maxage=31536000"
+
+
 def test_site_https_only_with_strict_headers(any_template):
     dist = next(iter(any_template.find_resources("AWS::CloudFront::Distribution").values()))
     behavior = dist["Properties"]["DistributionConfig"]["DefaultCacheBehavior"]
