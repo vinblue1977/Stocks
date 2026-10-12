@@ -54,6 +54,7 @@ h2 { margin: 0; font-size: 17px; font-weight: 600; }
 /* Layout */
 .main { max-width: 1240px; margin: 0 auto; padding: 32px 24px 48px; display: flex; flex-direction: column; gap: 24px; }
 .main:focus { outline: none; }
+.page { display: contents; } /* wrapper from a background refresh; children stay in .main's layout */
 .page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 24px; }
 .page-head p { margin: 6px 0 0; }
 .row { display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch; }
