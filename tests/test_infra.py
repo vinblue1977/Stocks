@@ -242,8 +242,8 @@ def test_github_deploy_role_pinned_to_production_environment(tmp_path_factory):
             },
         },
     )
-    roles = template.find_resources("AWS::IAM::Role", {"Properties": {"MaxSessionDuration": 3600}})
-    (role_id,) = roles
+    roles = template.find_resources("AWS::IAM::Role")
+    (role_id,) = [k for k, r in roles.items() if gh in json.dumps(r["Properties"]["AssumeRolePolicyDocument"])]
     policies = [p for p in template.find_resources("AWS::IAM::Policy").values() if {"Ref": role_id} in p["Properties"]["Roles"]]
     statements = [s for p in policies for s in p["Properties"]["PolicyDocument"]["Statement"]]
     assert [s["Action"] for s in statements] == ["sts:AssumeRole"]

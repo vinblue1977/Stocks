@@ -17,6 +17,7 @@ from typing import Any
 from aws_cdk import (
     Aws,
     CfnOutput,
+    DefaultStackSynthesizer,
     Duration,
     RemovalPolicy,
     Stack,
@@ -567,6 +568,10 @@ class PortfolioTrackerStack(Stack):
             if not github_repo:
                 raise ValueError("githubDeploy needs githubRepo (owner/name)")
             github = "token.actions.githubusercontent.com"
+            synthesizer = self.synthesizer
+            qualifier = (
+                synthesizer.bootstrap_qualifier if isinstance(synthesizer, DefaultStackSynthesizer) else None
+            ) or DefaultStackSynthesizer.DEFAULT_QUALIFIER
             provider = iam.OidcProviderNative(
                 self, "GitHubOidcProvider", url=f"https://{github}", client_ids=["sts.amazonaws.com"]
             )
@@ -588,7 +593,7 @@ class PortfolioTrackerStack(Stack):
             deploy_role.add_to_policy(
                 iam.PolicyStatement(
                     actions=["sts:AssumeRole"],
-                    resources=[f"arn:{self.partition}:iam::{self.account}:role/cdk-hnb659fds-*-{self.account}-{self.region}"],
+                    resources=[f"arn:{self.partition}:iam::{self.account}:role/cdk-{qualifier}-*-{self.account}-{self.region}"],
                 )
             )
             CfnOutput(self, "GitHubDeployRoleArn", value=deploy_role.role_arn)

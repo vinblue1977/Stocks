@@ -15,9 +15,10 @@ on:
 permissions:
   contents: read
 
-# Superseded PR runs are cancelled; runs on main finish so a deploy is never cut off mid-way.
+# Superseded PR runs are cancelled. Each run on main gets its own group so none is dropped while
+# pending; the deploy job queues on its own group below.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -54,7 +55,8 @@ jobs:
         env:
           CDK_DEFAULT_REGION: us-east-2
 
-  # Decides whether a push to main deploys: anything outside docs, Markdown, CI config and tests.
+  # Decides whether a push to main deploys: anything outside docs, Markdown, tests and CI config
+  # (except this workflow, which holds the deploy step).
   changes:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
@@ -64,14 +66,22 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          fetch-depth: 2
+          fetch-depth: 0
           persist-credentials: false
       - id: diff
         run: |
-          changed="$(git diff --name-only HEAD~1 HEAD)"
+          # The whole push range; an unknown base (new branch, force push) deploys.
+          if git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            changed="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
+          else
+            changed="unknown-base"
+          fi
           echo "$changed"
           deployable="$(grep -Ev '^(docs/|\.github/|tests/|LICENSE$)|\.md$' <<<"$changed" || true)"
+          if grep -qx '.github/workflows/ci.yml' <<<"$changed"; then deployable=yes; fi
           echo "deploy=$([ -n "$deployable" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        env:
+          BEFORE: ${{ github.event.before }}
 
   deploy:
     needs: [checks, changes]
@@ -109,6 +119,8 @@ jobs:
           python -m venv .venv
           .venv/bin/pip install -r requirements-dev.txt
           make layer
+          # A missing secret would silently drop the email subscriptions or names, so fail instead.
+          : "${ALERT_EMAIL:?set the ALERT_EMAIL secret}" "${OWNER_NAME:?set the OWNER_NAME secret}"
           . .venv/bin/activate
           npx --yes aws-cdk@2 deploy --require-approval never \
             -c alertEmail="${ALERT_EMAIL}" -c ownerName="${OWNER_NAME}" -c partnerName="${PARTNER_NAME}"
