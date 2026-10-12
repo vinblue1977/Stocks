@@ -1,8 +1,10 @@
 import { api } from '../api.js';
 import { sentimentBars } from '../charts.js';
+import { GROUPS } from '../groups.js';
 import { fmt, h, icon, pageHead, sentimentTag, tone } from '../ui.js';
 
 let selected = 'All';
+let groupFilter = 'all';
 
 function safeUrl(url) {
   try { return new URL(url).protocol === 'https:' ? url : null; } catch { return null; }
@@ -91,9 +93,19 @@ function signalsCard(signals, rules) {
 
 export async function renderNews(main) {
   const [holdingsRes, signalsRes, rulesRes] = await Promise.all([api('GET', '/holdings'), api('GET', '/signals'), api('GET', '/rules')]);
-  const tickers = holdingsRes.holdings.map((x) => x.ticker).sort();
+  const inGroup = holdingsRes.holdings.filter((x) => groupFilter === 'all' || x.group === groupFilter);
+  const tickers = [...new Set(inGroup.map((x) => x.ticker))].sort();
   if (selected !== 'All' && !tickers.includes(selected)) selected = 'All';
   const news = await api('GET', selected === 'All' ? '/news' : `/news?ticker=${encodeURIComponent(selected)}`);
+  const visible = new Set(tickers);
+  news.articles = news.articles.filter((a) => visible.has(a.ticker));
+  signalsRes.signals = signalsRes.signals.filter((sg) => visible.has(sg.ticker));
+
+  const groupChips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Filter by group' },
+    [['all', 'All groups'], ['stocks', GROUPS.stocks.label], ['auto', GROUPS.auto.label]].map(([key, label]) => h('button', {
+      type: 'button', class: 'chip-btn', 'aria-pressed': String(key === groupFilter), text: label,
+      onClick: () => { groupFilter = key; selected = 'All'; renderNews(main); },
+    })));
 
   const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Filter by ticker' },
     ['All', ...tickers].map((t) => h('button', {
@@ -101,8 +113,9 @@ export async function renderNews(main) {
       onClick: () => { selected = t; renderNews(main); },
     })));
   main.replaceChildren(
-    pageHead('News & signals', 'Headlines from Finnhub, scored and summarized each weekday evening', chips),
-    briefCard(news.brief, selected),
+    pageHead('News & signals', 'Headlines from Finnhub, scored and summarized each weekday evening', groupChips),
+    chips,
+    briefCard(news.brief, selected === 'All' ? 'All' : selected),
     h('div', { class: 'row' }, headlinesCard(news.articles), trendCard(news.articles)),
     signalsCard(signalsRes.signals, rulesRes.rules),
     h('div', { class: 'footer-note' }, h('span', { text: 'Signals describe data; they are not buy or sell recommendations.' })),

@@ -14,7 +14,7 @@ export async function renderAlerts(main) {
     api('GET', '/rule-types'), api('GET', '/rules'), api('GET', '/holdings'), api('GET', '/alerts'),
   ]);
   const types = typesRes.rule_types;
-  const tickers = holdingsRes.holdings.map((x) => x.ticker).sort();
+  const tickers = [...new Set(holdingsRes.holdings.map((x) => x.ticker))].sort();
 
   // ---------- new rule form
   const typeSelect = h('select', { id: 'r-type' }, Object.entries(types).map(([name, spec]) => h('option', { value: name, text: spec.description })));

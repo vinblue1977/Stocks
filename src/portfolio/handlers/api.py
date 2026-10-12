@@ -18,14 +18,14 @@ import boto3
 
 from portfolio import analytics, rules
 from portfolio.config import get_config
-from portfolio.db import ConcurrentUpdateError, Repository
+from portfolio.db import GROUPS, ConcurrentUpdateError, Repository
 from portfolio.llm import sentiment_label
 from portfolio.logs import get_logger, log
 
 logger = get_logger(__name__)
 
 MAX_BODY_BYTES = 10_000
-MAX_HOLDINGS = 40  # keeps the price sync under Tiingo's free limit of 50 requests/hour
+MAX_HOLDINGS = 40  # unique tickers across both groups; keeps the price sync under Tiingo's free 50 requests/hour
 MAX_RULES = 50
 HISTORY_DAYS = 400  # calendar days of history for the performance chart (about 1 trading year + margin)
 
@@ -89,27 +89,49 @@ def _number(body: dict[str, Any], name: str, low: float, high: float) -> float:
 
 
 # ---------------------------------------------------------------- holdings
+# Holdings live in a group: "stocks" (Stock Holdings) or "auto" (Automatic Investment).
+# The same ticker can be in both; the 40-ticker cap counts unique tickers across groups.
+def _group(event: dict[str, Any]) -> str:
+    group = (event.get("pathParameters") or {}).get("group", "")
+    if group not in GROUPS:
+        raise ApiError(404, "Unknown group")
+    return group
+
+
+def _admit_ticker(repo: Repository, user_id: str, ticker: str) -> bool:
+    """Enforce the unique-ticker cap; return True if the ticker is new to the whole portfolio."""
+    held = {h["ticker"] for h in repo.list_holdings(user_id)}
+    if ticker in held:
+        return False
+    if len(held) >= MAX_HOLDINGS:
+        raise ApiError(409, f"You can track up to {MAX_HOLDINGS} different tickers")
+    return True
+
+
 def list_holdings(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
-    return _response(200, {"holdings": repo.list_holdings(_user_id(event))})
+    group = (event.get("queryStringParameters") or {}).get("group")
+    if group is not None and group not in GROUPS:
+        raise ApiError(400, "group must be stocks or auto")
+    return _response(200, {"holdings": repo.list_holdings(_user_id(event), group)})
 
 
 def put_holding(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     user_id = _user_id(event)
+    group = _group(event)
     ticker = _ticker(event.get("pathParameters", {}).get("ticker"))
     body = _body(event)
     holding: dict[str, Any] = {
         "ticker": ticker,
+        "group": group,
         "shares": _number(body, "shares", 0.000001, 1_000_000_000),
         "cost_basis": _number(body, "cost_basis", 0, 10_000_000),
     }
     purchased_on = _purchase_date(body)
     if purchased_on:
         holding["purchased_on"] = purchased_on
-    existing = {h["ticker"] for h in repo.list_holdings(user_id)}
-    if ticker not in existing and len(existing) >= MAX_HOLDINGS:
-        raise ApiError(409, f"You can track up to {MAX_HOLDINGS} holdings")
+    new_ticker = repo.get_holding(user_id, group, ticker) is None and _admit_ticker(repo, user_id, ticker)
     saved = repo.put_holding(user_id, holding)
-    if ticker not in existing:
+    if new_ticker:
         _request_backfill(ticker)
     return _response(200, saved)
 
@@ -127,30 +149,31 @@ def _purchase_date(body: dict[str, Any]) -> str | None:
 
 
 def record_purchase(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
-    """Add shares bought at a price; updates total shares and the weighted average cost.
+    """Add shares bought at a price; updates the group's total shares and weighted average cost.
 
     new average = (old shares x old average + new shares x price) / total shares
     """
     user_id = _user_id(event)
+    group = _group(event)
     ticker = _ticker(event.get("pathParameters", {}).get("ticker"))
     body = _body(event)
     shares = _number(body, "shares", 0.000001, 1_000_000_000)
     price = _number(body, "price", 0, 10_000_000)
     purchased_on = _purchase_date(body)
 
+    new_ticker = False
     for _ in range(3):  # retry if another request changed the holding between read and write
-        current = repo.get_holding(user_id, ticker)
+        current = repo.get_holding(user_id, group, ticker)
         if current is None:
-            if len(repo.list_holdings(user_id)) >= MAX_HOLDINGS:
-                raise ApiError(409, f"You can track up to {MAX_HOLDINGS} holdings")
-            updated: dict[str, Any] = {"ticker": ticker, "shares": shares, "cost_basis": price}
+            new_ticker = _admit_ticker(repo, user_id, ticker)
+            updated: dict[str, Any] = {"ticker": ticker, "group": group, "shares": shares, "cost_basis": price}
             if purchased_on:
                 updated["purchased_on"] = purchased_on
         else:
             old_shares = float(current["shares"])
             total = old_shares + shares
             average = (old_shares * float(current["cost_basis"]) + shares * price) / total
-            updated = {"ticker": ticker, "shares": round(total, 6), "cost_basis": round(average, 6)}
+            updated = {"ticker": ticker, "group": group, "shares": round(total, 6), "cost_basis": round(average, 6)}
             dates = [d for d in (current.get("purchased_on"), purchased_on) if d]
             if dates:
                 updated["purchased_on"] = min(dates)  # keep the first purchase date
@@ -162,14 +185,15 @@ def record_purchase(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     else:
         raise ApiError(409, "The holding changed while saving. Please try again.")
 
-    if current is None:
+    if new_ticker:
         _request_backfill(ticker)
     return _response(201 if current is None else 200, {"holding": saved, "previous": current})
 
 
 def delete_holding(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    group = _group(event)
     ticker = _ticker(event.get("pathParameters", {}).get("ticker"))
-    repo.delete_holding(_user_id(event), ticker)
+    repo.delete_holding(_user_id(event), group, ticker)
     return _response(204, {})
 
 
@@ -228,21 +252,34 @@ def list_alerts(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
 
 # ---------------------------------------------------------------- portfolio, signals, news
 def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """Summaries for Stock Holdings, Automatic Investment and Overall (both combined)."""
     user_id = _user_id(event)
     holdings = repo.list_holdings(user_id)
     since = (datetime.now(UTC).date() - timedelta(days=HISTORY_DAYS)).isoformat()
-    histories = {h["ticker"]: repo.price_history(h["ticker"], since) for h in holdings}
+    histories = {t: repo.price_history(t, since) for t in {h["ticker"] for h in holdings}}
     latest = {t: h[-1][1] for t, h in histories.items() if h}
     previous = {t: h[-2][1] for t, h in histories.items() if len(h) > 1}
-    summary = analytics.summarize(holdings, latest, previous)
-    series = analytics.value_history(holdings, histories)
     benchmark_ticker = get_config().benchmark_ticker
     benchmark = repo.price_history(benchmark_ticker, since)
-    summary["benchmark"] = {"ticker": benchmark_ticker, **analytics.compare_to_benchmark(series, benchmark)}
-    summary["history"] = [{"date": d, "value": v} for d, v in series]
-    summary["benchmark_history"] = [{"date": d, "close": c} for d, c in benchmark]
-    summary["as_of"] = max((h[-1][0] for h in histories.values() if h), default=None)
-    return _response(200, summary)
+
+    def build(subset: list[dict[str, Any]]) -> dict[str, Any]:
+        summary = analytics.summarize(subset, latest, previous)
+        series = analytics.value_history(subset, histories)
+        summary["benchmark"] = {"ticker": benchmark_ticker, **analytics.compare_to_benchmark(series, benchmark)}
+        summary["history"] = [{"date": d, "value": v} for d, v in series]
+        return summary
+
+    groups = {g: build([h for h in holdings if h["group"] == g]) for g in GROUPS}
+    groups["overall"] = build(holdings)
+    return _response(
+        200,
+        {
+            "as_of": max((h[-1][0] for h in histories.values() if h), default=None),
+            "benchmark_ticker": benchmark_ticker,
+            "benchmark_history": [{"date": d, "close": c} for d, c in benchmark],
+            "groups": groups,
+        },
+    )
 
 
 def get_signals(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
@@ -274,9 +311,9 @@ Route = Callable[[dict[str, Any], Repository], dict[str, Any]]
 
 ROUTES: dict[str, Route] = {
     "GET /holdings": list_holdings,
-    "PUT /holdings/{ticker}": put_holding,
-    "POST /holdings/{ticker}/purchases": record_purchase,
-    "DELETE /holdings/{ticker}": delete_holding,
+    "PUT /groups/{group}/holdings/{ticker}": put_holding,
+    "POST /groups/{group}/holdings/{ticker}/purchases": record_purchase,
+    "DELETE /groups/{group}/holdings/{ticker}": delete_holding,
     "GET /rule-types": list_rule_types,
     "GET /rules": list_rules,
     "POST /rules": create_rule,

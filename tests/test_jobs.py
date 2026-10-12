@@ -160,3 +160,38 @@ def test_interrupted_backfill_is_redone(repo):
     # Afterwards only new days are requested
     price_sync.sync_ticker("AVGO", repo, provider, today)
     assert provider.calls[-1][1] > (today - timedelta(days=30)).isoformat()
+
+
+def test_migration_moves_legacy_holdings_once(repo, table):
+    table.put_item(
+        Item={
+            "pk": "USER#u1",
+            "sk": "HOLDING#VTI",
+            "gsi1pk": "HOLDINGS",
+            "gsi1sk": "VTI#u1",
+            "ticker": "VTI",
+            "shares": 3,
+            "cost_basis": 200,
+        }
+    )
+    repo.put_holding("u1", {"ticker": "BND", "group": "auto", "shares": 1, "cost_basis": 70})
+    assert repo.migrate_legacy_holdings() == ["u1:VTI"]
+    assert repo.migrate_legacy_holdings() == []  # idempotent
+    holdings = {(h["group"], h["ticker"]): h for h in repo.list_holdings("u1")}
+    assert set(holdings) == {("stocks", "VTI"), ("auto", "BND")}
+    assert holdings[("stocks", "VTI")]["shares"] == 3 and holdings[("stocks", "VTI")]["cost_basis"] == 200
+    assert table.get_item(Key={"pk": "USER#u1", "sk": "HOLDING#VTI"}).get("Item") is None
+
+
+def test_weight_rule_uses_combined_portfolio(repo, monkeypatch):
+    sent = []
+    monkeypatch.setattr(evaluate_signals.notify, "send_email", lambda s, b: sent.append(s))
+    start = (datetime.now(UTC).date() - timedelta(days=60)).isoformat()
+    for t, p in (("VOO", 100), ("BND", 100), ("SPY", 400)):
+        repo.put_prices(t, price_series(p, 0, 60, start))
+    # Combined across groups: 6 VOO ($600) vs 4 BND ($400) => VOO is 60% of the whole portfolio
+    repo.put_holding("u1", {"ticker": "VOO", "group": "stocks", "shares": 2, "cost_basis": 100})
+    repo.put_holding("u1", {"ticker": "VOO", "group": "auto", "shares": 4, "cost_basis": 100})
+    repo.put_holding("u1", {"ticker": "BND", "group": "auto", "shares": 4, "cost_basis": 100})
+    repo.create_rule("u1", {"type": "weight_above", "ticker": "VOO", "params": {"pct": 55}, "enabled": True})
+    assert evaluate_signals.handler({}, None, repo=repo)["alerts_sent"] == 1

@@ -2,11 +2,17 @@ import { setApiBase } from './api.js';
 import { currentEmail, initAuth, logout } from './auth.js';
 import { errorCard, h } from './ui.js';
 import { renderAlerts } from './views/alerts.js';
-import { renderHoldings } from './views/holdings.js';
+import { renderGroup } from './views/holdings.js';
 import { renderNews } from './views/news.js';
 import { renderOverview } from './views/overview.js';
 
-const ROUTES = { overview: renderOverview, holdings: renderHoldings, news: renderNews, alerts: renderAlerts };
+const ROUTES = {
+  overview: renderOverview,
+  stocks: (main) => renderGroup(main, 'stocks'),
+  auto: (main) => renderGroup(main, 'auto'),
+  news: renderNews,
+  alerts: renderAlerts,
+};
 const main = document.getElementById('main');
 
 function currentRoute() {

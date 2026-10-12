@@ -28,8 +28,11 @@ def summarize(
         cost_basis = float(holding["cost_basis"])
         price = latest.get(ticker)
         cost = shares * cost_basis
+        group = holding.get("group")
         if price is None:
-            positions.append({"ticker": ticker, "shares": shares, "cost_basis": cost_basis, "price": None, "value": None})
+            positions.append(
+                {"ticker": ticker, "group": group, "shares": shares, "cost_basis": cost_basis, "price": None, "value": None}
+            )
             continue
         value = shares * price
         total_value += value
@@ -38,6 +41,7 @@ def summarize(
         positions.append(
             {
                 "ticker": ticker,
+                "group": group,
                 "shares": shares,
                 "cost_basis": cost_basis,
                 "price": price,
@@ -71,11 +75,13 @@ def value_history(
     chart shows. It ignores past buys and sells; transaction-level history is a later feature.
     """
     by_ticker = {t: dict(h) for t, h in histories.items()}
-    tickers = [h["ticker"] for h in holdings if h["ticker"] in by_ticker]
+    tickers = sorted({h["ticker"] for h in holdings if h["ticker"] in by_ticker})
     if not tickers:
         return []
     common_dates = sorted(set.intersection(*(set(by_ticker[t]) for t in tickers)))
-    shares = {h["ticker"]: float(h["shares"]) for h in holdings}
+    shares: dict[str, float] = {}
+    for h in holdings:  # a ticker held in two groups counts once, with both groups' shares
+        shares[h["ticker"]] = shares.get(h["ticker"], 0.0) + float(h["shares"])
     return [(d, round(sum(shares[t] * by_ticker[t][d] for t in tickers), 2)) for d in common_dates]
 
 
@@ -100,3 +106,14 @@ def compare_to_benchmark(
         "benchmark_return": None if benchmark_return is None else round(benchmark_return, 4),
         "difference": difference,
     }
+
+
+def combined_weights(holdings: Sequence[Mapping[str, Any]], latest: Mapping[str, float]) -> dict[str, float]:
+    """Share of the whole portfolio (all groups) per ticker, combining a ticker held in several groups."""
+    values: dict[str, float] = {}
+    for h in holdings:
+        price = latest.get(h["ticker"])
+        if price is not None:
+            values[h["ticker"]] = values.get(h["ticker"], 0.0) + float(h["shares"]) * price
+    total = sum(values.values())
+    return {t: v / total for t, v in values.items()} if total else {}

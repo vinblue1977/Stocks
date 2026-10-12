@@ -447,8 +447,8 @@ class PortfolioTrackerStack(Stack):
         integration = integrations.HttpLambdaIntegration("ApiIntegration", api_fn)
         routes = {
             "/holdings": [apigw.HttpMethod.GET],
-            "/holdings/{ticker}": [apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
-            "/holdings/{ticker}/purchases": [apigw.HttpMethod.POST],
+            "/groups/{group}/holdings/{ticker}": [apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
+            "/groups/{group}/holdings/{ticker}/purchases": [apigw.HttpMethod.POST],
             "/rule-types": [apigw.HttpMethod.GET],
             "/rules": [apigw.HttpMethod.GET, apigw.HttpMethod.POST],
             "/rules/{ruleId}": [apigw.HttpMethod.DELETE],

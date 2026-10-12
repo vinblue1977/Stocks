@@ -59,11 +59,8 @@ def handler(event: dict[str, Any] | None, context: Any, repo: Repository | None 
 
 
 def _weights_by_user(repo: Repository, latest: dict[str, float]) -> dict[str, dict[str, float]]:
+    """Per user, each ticker's share of the whole portfolio (both groups combined)."""
     by_user: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for holding in repo.all_holdings():
         by_user[holding["user_id"]].append(holding)
-    weights: dict[str, dict[str, float]] = {}
-    for user_id, holdings in by_user.items():
-        summary = analytics.summarize(holdings, latest, latest)
-        weights[user_id] = {p["ticker"]: p["weight"] for p in summary["positions"] if p.get("value") is not None}
-    return weights
+    return {user_id: analytics.combined_weights(holdings, latest) for user_id, holdings in by_user.items()}

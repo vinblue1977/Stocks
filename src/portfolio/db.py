@@ -1,7 +1,8 @@
 """DynamoDB single-table repository.
 
 Key design (pk / sk):
-    USER#<uid>      HOLDING#<ticker>             a position: shares + average cost per share (gsi1: HOLDINGS / <ticker>#<uid>)
+    USER#<uid>      HOLDING#<group>#<ticker>     a position: shares + average cost per share; group is
+                                                 stocks or auto (gsi1: HOLDINGS / <ticker>#<uid>#<group>)
     USER#<uid>      RULE#<rule_id>               an alert rule (gsi1: RULES / <uid>#<rule_id>)
     USER#<uid>      RULESTATE#<rule_id>          whether the rule is currently triggered
     USER#<uid>      ALERT#<iso_ts>#<rule_id>     alert history (expires after 180 days)
@@ -29,6 +30,10 @@ from portfolio.config import get_config
 
 NEWS_TTL_SECONDS = 30 * 24 * 3600
 ALERT_TTL_SECONDS = 180 * 24 * 3600
+
+
+GROUPS = ("stocks", "auto")
+DEFAULT_GROUP = "stocks"
 
 
 class ConcurrentUpdateError(Exception):
@@ -80,26 +85,38 @@ class Repository:
             kwargs["ExclusiveStartKey"] = last
 
     # ---------- holdings ----------
-    def list_holdings(self, user_id: str) -> list[dict[str, Any]]:
+    # A holding belongs to a group ("stocks" = Stock Holdings, "auto" = Automatic Investment).
+    # The same ticker can exist in both groups, each with its own shares and average cost.
+    @staticmethod
+    def _holding_keys(user_id: str, group: str, ticker: str) -> dict[str, str]:
+        return {
+            "pk": f"USER#{user_id}",
+            "sk": f"HOLDING#{group}#{ticker}",
+            "gsi1pk": "HOLDINGS",
+            "gsi1sk": f"{ticker}#{user_id}#{group}",
+        }
+
+    @staticmethod
+    def _holding_out(item: Mapping[str, Any]) -> dict[str, Any]:
+        clean = _clean(item)
+        clean.setdefault("group", DEFAULT_GROUP)  # items written before groups existed
+        return clean
+
+    def list_holdings(self, user_id: str, group: str | None = None) -> list[dict[str, Any]]:
         items = self._query_all(KeyConditionExpression=Key("pk").eq(f"USER#{user_id}") & Key("sk").begins_with("HOLDING#"))
-        return [_clean(i) for i in items]
+        holdings = [self._holding_out(i) for i in items]
+        return [h for h in holdings if group is None or h["group"] == group]
 
     def put_holding(self, user_id: str, holding: Mapping[str, Any]) -> dict[str, Any]:
-        ticker = holding["ticker"]
-        item = {
-            "pk": f"USER#{user_id}",
-            "sk": f"HOLDING#{ticker}",
-            "gsi1pk": "HOLDINGS",
-            "gsi1sk": f"{ticker}#{user_id}",
-            "updated_at": _now_iso(),
-            **holding,
-        }
+        group = holding.get("group", DEFAULT_GROUP)
+        item = {**self._holding_keys(user_id, group, holding["ticker"]), "updated_at": _now_iso(), **holding, "group": group}
         self.table.put_item(Item=to_dynamo(item))
-        return _clean(item)
+        return self._holding_out(item)
 
-    def get_holding(self, user_id: str, ticker: str) -> dict[str, Any] | None:
-        item = self.table.get_item(Key={"pk": f"USER#{user_id}", "sk": f"HOLDING#{ticker}"}, ConsistentRead=True).get("Item")
-        return _clean(item) if item else None
+    def get_holding(self, user_id: str, group: str, ticker: str) -> dict[str, Any] | None:
+        key = {"pk": f"USER#{user_id}", "sk": f"HOLDING#{group}#{ticker}"}
+        item = self.table.get_item(Key=key, ConsistentRead=True).get("Item")
+        return self._holding_out(item) if item else None
 
     def replace_holding_if_unchanged(
         self, user_id: str, holding: Mapping[str, Any], previous: Mapping[str, Any] | None
@@ -109,15 +126,8 @@ class Repository:
         Prevents two purchases recorded at the same moment from overwriting each other's math.
         Raises ConcurrentUpdateError when someone else changed the holding first.
         """
-        ticker = holding["ticker"]
-        item = {
-            "pk": f"USER#{user_id}",
-            "sk": f"HOLDING#{ticker}",
-            "gsi1pk": "HOLDINGS",
-            "gsi1sk": f"{ticker}#{user_id}",
-            "updated_at": _now_iso(),
-            **holding,
-        }
+        group = holding.get("group", DEFAULT_GROUP)
+        item = {**self._holding_keys(user_id, group, holding["ticker"]), "updated_at": _now_iso(), **holding, "group": group}
         if previous is None:
             condition: Any = Attr("pk").not_exists()
         else:
@@ -127,11 +137,33 @@ class Repository:
         try:
             self.table.put_item(Item=to_dynamo(item), ConditionExpression=condition)
         except self.table.meta.client.exceptions.ConditionalCheckFailedException as exc:
-            raise ConcurrentUpdateError(ticker) from exc
-        return _clean(item)
+            raise ConcurrentUpdateError(holding["ticker"]) from exc
+        return self._holding_out(item)
 
-    def delete_holding(self, user_id: str, ticker: str) -> None:
-        self.table.delete_item(Key={"pk": f"USER#{user_id}", "sk": f"HOLDING#{ticker}"})
+    def delete_holding(self, user_id: str, group: str, ticker: str) -> None:
+        self.table.delete_item(Key={"pk": f"USER#{user_id}", "sk": f"HOLDING#{group}#{ticker}"})
+
+    def migrate_legacy_holdings(self) -> list[str]:
+        """Move holdings stored before groups existed (sk HOLDING#<ticker>) into Stock Holdings.
+
+        Idempotent: new-format items are left alone. Returns "<user>:<ticker>" for each item moved.
+        """
+        moved = []
+        for item in self._query_all(IndexName="gsi1", KeyConditionExpression=Key("gsi1pk").eq("HOLDINGS")):
+            if item["sk"].count("#") != 1:
+                continue
+            user_id = item["pk"].removeprefix("USER#")
+            ticker = item["sk"].removeprefix("HOLDING#")
+            data = {k: v for k, v in item.items() if k not in ("pk", "sk", "gsi1pk", "gsi1sk")}
+            new_item = {**data, **self._holding_keys(user_id, DEFAULT_GROUP, ticker), "group": DEFAULT_GROUP}
+            # Write the new item first (only if absent), then delete the old one.
+            try:
+                self.table.put_item(Item=new_item, ConditionExpression=Attr("pk").not_exists())
+            except self.table.meta.client.exceptions.ConditionalCheckFailedException:
+                pass  # already migrated earlier; just remove the old copy
+            self.table.delete_item(Key={"pk": item["pk"], "sk": item["sk"]})
+            moved.append(f"{user_id}:{ticker}")
+        return moved
 
     def all_holdings(self) -> list[dict[str, Any]]:
         """Every holding across all users (used by scheduled jobs). Adds `user_id`."""

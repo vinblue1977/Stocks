@@ -24,7 +24,7 @@ def build_report(user_id: str, holdings: list[dict[str, Any]], repo: Repository,
     movers = []
     for position in current["positions"]:
         start = week_ago.get(position["ticker"])
-        if position["price"] is not None and start:
+        if position["price"] is not None and start and all(t != position["ticker"] for _, t in movers):
             movers.append((position["price"] / start - 1.0, position["ticker"]))
     movers.sort(reverse=True)
 
@@ -40,8 +40,17 @@ def build_report(user_id: str, holdings: list[dict[str, Any]], repo: Repository,
     if movers:
         best, worst = movers[0], movers[-1]
         lines += ["", f"Best this week: {best[1]} {best[0] * 100:+.2f}%", f"Worst this week: {worst[1]} {worst[0] * 100:+.2f}%"]
+    groups = {"stocks": "Stock Holdings", "auto": "Automatic Investment"}
+    present = [g for g in groups if any(h.get("group", "stocks") == g for h in holdings)]
+    if len(present) > 1:
+        lines += ["", "By group:"]
+        for g in present:
+            part = analytics.summarize([h for h in holdings if h.get("group", "stocks") == g], latest, week_ago)
+            change = f" ({part['day_change_pct'] * 100:+.2f}% this week)" if part["day_change_pct"] is not None else ""
+            lines.append(f"  {groups[g]}: ${part['total_value']:,.2f}{change}")
     lines += ["", "Allocation:"]
-    lines += [f"  {p['ticker']:<6} {p.get('weight', 0) * 100:5.1f}%" for p in current["positions"] if p.get("value")]
+    for ticker, weight in sorted(analytics.combined_weights(holdings, latest).items(), key=lambda kv: -kv[1]):
+        lines.append(f"  {ticker:<6} {weight * 100:5.1f}%")
 
     cutoff = (now - timedelta(days=7)).isoformat(timespec="seconds")
     alerts = [a for a in repo.list_alerts(user_id) if a["created_at"] >= cutoff]

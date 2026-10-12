@@ -27,9 +27,10 @@ All routes need `Authorization: Bearer <Cognito token>`.
 
 | Route | Purpose |
 |---|---|
-| `GET/PUT/DELETE /holdings[/{ticker}]` | Manage holdings: `{"shares": 40, "cost_basis": 230}` |
-| `POST /holdings/{ticker}/purchases` | Record a buy: `{"shares": 5, "price": 280}`. Updates total shares and the weighted average cost |
-| `GET /portfolio` | Value, gains, allocation, history vs. SPY |
+| `GET /holdings[?group=stocks\|auto]` | List holdings (each has a `group`) |
+| `PUT/DELETE /groups/{group}/holdings/{ticker}` | Set or remove a holding in a group (`stocks` or `auto`): `{"shares": 40, "cost_basis": 230}` |
+| `POST /groups/{group}/holdings/{ticker}/purchases` | Record a buy: `{"shares": 5, "price": 280}`. Updates that group's total shares and weighted average cost |
+| `GET /portfolio` | Value, gains, allocation and history vs. SPY for Stock Holdings, Automatic Investment and Overall |
 | `GET /signals` | RSI, moving averages, drawdown, sentiment |
 | `GET /news?ticker=VTI` | AI briefing and scored headlines |
 | `GET/POST/DELETE /rules[/{ruleId}]`, `GET /rule-types` | Alert rules, e.g. `{"type": "drawdown_below", "ticker": "VTI", "params": {"pct": 10}}` |
@@ -63,7 +64,7 @@ curl -X PUT "$API/holdings/VTI" -H "Authorization: Bearer $TOKEN" -d '{"shares":
 
 Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <PipelineArn>`.
 
-**Dashboard:** open the `DashboardUrl` output and sign in with the same email and password. It has Overview, Holdings, News & signals, and Alerts (create and delete rules). The code is plain HTML/CSS/JS in `web/` and is uploaded on every deploy.
+**Dashboard:** open the `DashboardUrl` output and sign in with the same email and password. It has Overview (switchable between Overall, Stock Holdings and Automatic Investment), a tab for each group, News & signals, and Alerts. A ticker can be held in both groups; each keeps its own shares and average cost, and Overall combines them. The 40-ticker limit counts unique tickers across both groups. The code is plain HTML/CSS/JS in `web/` and is uploaded on every deploy.
 
 ## Configuration (`cdk.json` or `-c key=value`)
 
