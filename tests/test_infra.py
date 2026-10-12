@@ -173,6 +173,10 @@ def test_budget_and_alarms(any_template):
     assert len(any_template.find_resources("AWS::CloudWatch::Alarm")) == 7
 
 
+def test_budget_can_be_turned_off(tmp_path_factory):
+    synth(tmp_path_factory, monthlyBudgetUsd=0).resource_count_is("AWS::Budgets::Budget", 0)
+
+
 # ---------------------------------------------------------------- dashboard hosting and login
 def test_site_bucket_private_and_served_only_via_cloudfront(any_template):
     any_template.has_resource_properties(

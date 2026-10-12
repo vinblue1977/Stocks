@@ -104,7 +104,8 @@ class PortfolioTrackerStack(Stack):
         bedrock_api: str = self.node.try_get_context("bedrockApi") or "runtime"
         if bedrock_api not in ("runtime", "mantle"):
             raise ValueError("bedrockApi must be 'runtime' or 'mantle'")
-        monthly_budget = float(self.node.try_get_context("monthlyBudgetUsd") or 5)
+        budget_setting = self.node.try_get_context("monthlyBudgetUsd")
+        monthly_budget = float(5 if budget_setting is None else budget_setting)  # 0 = no budget
         layer_path = Path(self.node.try_get_context("layerPath") or ROOT / "build" / "layer")
         if not layer_path.is_dir():
             raise FileNotFoundError(f"Lambda layer not found at {layer_path}. Run `make layer` first.")
@@ -541,7 +542,7 @@ class PortfolioTrackerStack(Stack):
             alarm_description="A price backfill failed and landed in the dead-letter queue",
         ).add_alarm_action(alarm_action)
 
-        if alert_email:
+        if alert_email and monthly_budget > 0:
             budgets.CfnBudget(
                 self,
                 "MonthlyBudget",

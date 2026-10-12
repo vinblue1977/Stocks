@@ -76,7 +76,7 @@ Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <Pi
 | `newsExcludedTickers` | `["ITOT", "MGV", "DGRO", "DVY", "IWB", "ONEQ", "SPYD"]` | Tickers to skip when fetching news (e.g. broad index funds with no headlines); price signals still apply |
 | `bedrockModelId` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Model for news summaries |
 | `bedrockApi` | `runtime` | `runtime` for Haiku 4.5; `mantle` for newer models such as `anthropic.claude-haiku-5-5` once your account has access |
-| `monthlyBudgetUsd` | `5` | Budget alert threshold |
+| `monthlyBudgetUsd` | `5` | Whole-account budget alert threshold; `0` skips it (e.g. if the account already has a budget) |
 | `useCustomerManagedKey` | `false` | Use your own KMS key (about $1/month) instead of AWS default encryption |
 
 ## Cost
