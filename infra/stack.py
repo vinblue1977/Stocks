@@ -533,34 +533,6 @@ class PortfolioTrackerStack(Stack):
             targets=[targets.LambdaFunction(weekly, retry_attempts=2)],
         )
 
-        # ------------------------------------------------------------------ external-access findings
-        # Free account-level analyzer: flags any resource in this region (buckets, keys, roles, queues,
-        # topics, functions) reachable from outside the account, and emails new findings to the ops topic.
-        # Opt-in (`accessAnalyzer: true`), since an account allows only one and may already have it.
-        analyzer: accessanalyzer.CfnAnalyzer | None = None
-        if _flag(self.node.try_get_context("accessAnalyzer")):
-            analyzer = accessanalyzer.CfnAnalyzer(self, "ExternalAccessAnalyzer", type="ACCOUNT")
-            events.Rule(
-                self,
-                "AccessAnalyzerFindings",
-                event_pattern=events.EventPattern(
-                    source=["aws.access-analyzer"],
-                    detail_type=["Access Analyzer Finding"],
-                    detail={"status": ["ACTIVE"]},
-                ),
-                targets=[
-                    targets.SnsTopic(
-                        ops_topic,
-                        message=events.RuleTargetInput.from_text(
-                            f"IAM Access Analyzer: {events.EventField.from_path('$.detail.resourceType')} "
-                            f"{events.EventField.from_path('$.detail.resource')} is accessible from outside the account "
-                            f"(public: {events.EventField.from_path('$.detail.isPublic')}). "
-                            "Review it in the IAM console under Access Analyzer; archive it there if it is intended."
-                        ),
-                    )
-                ],
-            )
-
         # ------------------------------------------------------------------ GitHub Actions deploy role
         # Keyless CI deploys: GitHub's OIDC token is exchanged for this role, which can only assume the CDK
         # bootstrap roles. Trust is pinned to the repo's `production` environment, which only allows `main`.
@@ -568,6 +540,7 @@ class PortfolioTrackerStack(Stack):
         # `owner@id/repo@id`, not `owner/repo` (see the repo's actions/oidc/customization/sub).
         # Opt-in (`githubDeploy: true` plus `githubRepo`), since an account allows one provider per URL.
         github_repo: str = (self.node.try_get_context("githubRepo") or "").removeprefix("repo:")
+        github_deploy: tuple[iam.Role, iam.OidcProviderNative] | None = None
         if _flag(self.node.try_get_context("githubDeploy")):
             if not re.fullmatch(r"[\w.-]+(@\d+)?/[\w.-]+(@\d+)?", github_repo):
                 raise ValueError("githubDeploy needs githubRepo: owner/repo or owner@id/repo@id")
@@ -601,14 +574,50 @@ class PortfolioTrackerStack(Stack):
                 )
             )
             CfnOutput(self, "GitHubDeployRoleArn", value=deploy_role.role_arn)
-            if analyzer:
-                # GitHub assuming this role is the intended external access; other roles still alert.
-                analyzer.archive_rules = [
+            github_deploy = (deploy_role, provider)
+        # ------------------------------------------------------------------ external-access findings
+        # Free account-level analyzer: flags any resource in this region (buckets, keys, roles, queues,
+        # topics, functions) reachable from outside the account, and emails new findings to the ops topic.
+        # Opt-in (`accessAnalyzer: true`), since an account allows only one and may already have it.
+        # GitHub assuming the deploy role is intended, so that exact finding (that role, GitHub's provider, not
+        # public) is archived; any other external access to it, or to anything else, still alerts.
+        if _flag(self.node.try_get_context("accessAnalyzer")):
+            archive_rules = None
+            if github_deploy:
+                deploy_role, provider = github_deploy
+                archive_rules = [
                     accessanalyzer.CfnAnalyzer.ArchiveRuleProperty(
                         rule_name="ExpectedGitHubDeployRole",
-                        filter=[accessanalyzer.CfnAnalyzer.FilterProperty(property="resource", eq=[deploy_role.role_arn])],
+                        filter=[
+                            accessanalyzer.CfnAnalyzer.FilterProperty(property="resource", eq=[deploy_role.role_arn]),
+                            accessanalyzer.CfnAnalyzer.FilterProperty(
+                                property="principal.Federated", eq=[provider.oidc_provider_arn]
+                            ),
+                            accessanalyzer.CfnAnalyzer.FilterProperty(property="isPublic", eq=["false"]),
+                        ],
                     )
                 ]
+            accessanalyzer.CfnAnalyzer(self, "ExternalAccessAnalyzer", type="ACCOUNT", archive_rules=archive_rules)
+            events.Rule(
+                self,
+                "AccessAnalyzerFindings",
+                event_pattern=events.EventPattern(
+                    source=["aws.access-analyzer"],
+                    detail_type=["Access Analyzer Finding"],
+                    detail={"status": ["ACTIVE"]},
+                ),
+                targets=[
+                    targets.SnsTopic(
+                        ops_topic,
+                        message=events.RuleTargetInput.from_text(
+                            f"IAM Access Analyzer: {events.EventField.from_path('$.detail.resourceType')} "
+                            f"{events.EventField.from_path('$.detail.resource')} is accessible from outside the account "
+                            f"(public: {events.EventField.from_path('$.detail.isPublic')}). "
+                            "Review it in the IAM console under Access Analyzer; archive it there if it is intended."
+                        ),
+                    )
+                ],
+            )
 
         # ------------------------------------------------------------------ monitoring
         alarm_action = cw_actions.SnsAction(ops_topic)

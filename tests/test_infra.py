@@ -256,14 +256,20 @@ def test_github_deploy_role_pinned_to_production_environment(tmp_path_factory, r
 
 def test_analyzer_archives_only_the_deploy_role(tmp_path_factory):
     template = synth(tmp_path_factory, accessAnalyzer=True, githubDeploy=True, githubRepo="example/repo")
-    (role_id,) = template.find_resources("AWS::IAM::Role", {"Properties": {"MaxSessionDuration": 3600}})
+    roles = template.find_resources("AWS::IAM::Role")
+    (role_id,) = [k for k in roles if k.startswith("GitHubDeployRole")]
+    (provider_id,) = template.find_resources("AWS::IAM::OIDCProvider")
     template.has_resource_properties(
         "AWS::AccessAnalyzer::Analyzer",
         {
             "ArchiveRules": [
                 {
                     "RuleName": "ExpectedGitHubDeployRole",
-                    "Filter": [{"Property": "resource", "Eq": [{"Fn::GetAtt": [role_id, "Arn"]}]}],
+                    "Filter": [
+                        {"Property": "resource", "Eq": [{"Fn::GetAtt": [role_id, "Arn"]}]},
+                        {"Property": "principal.Federated", "Eq": [{"Ref": provider_id}]},
+                        {"Property": "isPublic", "Eq": ["false"]},
+                    ],
                 }
             ]
         },
@@ -273,6 +279,12 @@ def test_analyzer_archives_only_the_deploy_role(tmp_path_factory):
 def test_analyzer_has_no_archive_rules_without_github_deploy(tmp_path_factory):
     template = synth(tmp_path_factory, accessAnalyzer=True)
     template.has_resource_properties("AWS::AccessAnalyzer::Analyzer", {"ArchiveRules": Match.absent()})
+
+
+def test_github_deploy_without_analyzer(tmp_path_factory):
+    template = synth(tmp_path_factory, githubDeploy=True, githubRepo="example/repo")
+    template.resource_count_is("AWS::AccessAnalyzer::Analyzer", 0)
+    template.resource_count_is("AWS::IAM::OIDCProvider", 1)
 
 
 @pytest.mark.parametrize("value", [None, False, "false"])
