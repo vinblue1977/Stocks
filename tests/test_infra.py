@@ -254,6 +254,27 @@ def test_github_deploy_role_pinned_to_production_environment(tmp_path_factory, r
     assert "role/cdk-hnb659fds-*-111111111111-us-east-1" in json.dumps(statements[0]["Resource"])
 
 
+def test_analyzer_archives_only_the_deploy_role(tmp_path_factory):
+    template = synth(tmp_path_factory, accessAnalyzer=True, githubDeploy=True, githubRepo="example/repo")
+    (role_id,) = template.find_resources("AWS::IAM::Role", {"Properties": {"MaxSessionDuration": 3600}})
+    template.has_resource_properties(
+        "AWS::AccessAnalyzer::Analyzer",
+        {
+            "ArchiveRules": [
+                {
+                    "RuleName": "ExpectedGitHubDeployRole",
+                    "Filter": [{"Property": "resource", "Eq": [{"Fn::GetAtt": [role_id, "Arn"]}]}],
+                }
+            ]
+        },
+    )
+
+
+def test_analyzer_has_no_archive_rules_without_github_deploy(tmp_path_factory):
+    template = synth(tmp_path_factory, accessAnalyzer=True)
+    template.has_resource_properties("AWS::AccessAnalyzer::Analyzer", {"ArchiveRules": Match.absent()})
+
+
 @pytest.mark.parametrize("value", [None, False, "false"])
 def test_github_deploy_is_opt_in(tmp_path_factory, value):
     template = synth(tmp_path_factory, **({} if value is None else {"githubDeploy": value}))

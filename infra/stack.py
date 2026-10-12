@@ -537,8 +537,9 @@ class PortfolioTrackerStack(Stack):
         # Free account-level analyzer: flags any resource in this region (buckets, keys, roles, queues,
         # topics, functions) reachable from outside the account, and emails new findings to the ops topic.
         # Opt-in (`accessAnalyzer: true`), since an account allows only one and may already have it.
+        analyzer: accessanalyzer.CfnAnalyzer | None = None
         if _flag(self.node.try_get_context("accessAnalyzer")):
-            accessanalyzer.CfnAnalyzer(self, "ExternalAccessAnalyzer", type="ACCOUNT")
+            analyzer = accessanalyzer.CfnAnalyzer(self, "ExternalAccessAnalyzer", type="ACCOUNT")
             events.Rule(
                 self,
                 "AccessAnalyzerFindings",
@@ -600,6 +601,14 @@ class PortfolioTrackerStack(Stack):
                 )
             )
             CfnOutput(self, "GitHubDeployRoleArn", value=deploy_role.role_arn)
+            if analyzer:
+                # GitHub assuming this role is the intended external access; other roles still alert.
+                analyzer.archive_rules = [
+                    accessanalyzer.CfnAnalyzer.ArchiveRuleProperty(
+                        rule_name="ExpectedGitHubDeployRole",
+                        filter=[accessanalyzer.CfnAnalyzer.FilterProperty(property="resource", eq=[deploy_role.role_arn])],
+                    )
+                ]
 
         # ------------------------------------------------------------------ monitoring
         alarm_action = cw_actions.SnsAction(ops_topic)
