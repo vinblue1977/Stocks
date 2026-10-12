@@ -33,7 +33,7 @@ All routes need `Authorization: Bearer <Cognito token>`.
 | `PUT/DELETE /groups/{group}/holdings/{ticker}` | Set or remove a holding in a group: `{"shares": 40, "cost_basis": 230}` (average per share) or `{"shares": 40, "total_cost": 9200}` (total invested) |
 | `POST /groups/{group}/holdings/{ticker}/purchases` | Record a buy: `{"shares": 5, "price": 280}` or `{"shares": 0.28, "amount": 200}`. Updates that group's total shares and weighted average cost |
 | `GET /profile` | Display names (`owner_name`, `partner_name`) and whether to show the partner page |
-| `GET /portfolio` | Value, gains, allocation and history vs. SPY, under `portfolios.<household\|mine\|partner>.<overall\|stocks\|auto>`. During market hours values use intraday prices (`live_as_of` is the quote time, otherwise null); history stays on closing prices |
+| `GET /portfolio` | Value, gains, allocation and history vs. SPY, under `portfolios.<household\|mine\|partner>.<overall\|stocks\|auto>`. During market hours values use intraday prices (`live_as_of` is the quote time, otherwise null); history stays on closing prices. The Overview re-fetches every 15 minutes while open and visible |
 | `GET /signals` | RSI, moving averages, drawdown, sentiment |
 | `GET /news?ticker=VTI` | AI briefing and scored headlines |
 | `GET/POST/DELETE /rules[/{ruleId}]`, `GET /rule-types` | Alert rules, e.g. `{"type": "drawdown_below", "ticker": "VTI", "params": {"pct": 10}}` |
