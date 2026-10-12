@@ -32,6 +32,8 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 13 | Ask about my portfolio | M | Questions answered by Claude from your own data. Small Bedrock cost per question |
 
 ## Also planned
+- Overview: drop the SPY comparison (column, tile, dashed chart line), keep your own 1Y return, and stop syncing SPY prices.
+- Overview: pie chart of holdings value and profit (design to agree first).
 - Rule backtesting: how an alert rule would have fired historically.
 - Factual-only news summaries.
 - Rename the API field `cost_basis` to `avg_cost` (accept both names for a while and migrate stored holdings).
