@@ -54,6 +54,8 @@ npx aws-cdk@2 bootstrap                      # once per account/region
 make deploy ALERT_EMAIL=you@example.com      # then confirm the SNS emails
 ```
 
+**Auto-deploy (optional):** with `githubDeploy` on, deploy once, then add a `production` environment (branch `main` only) with secrets `AWS_DEPLOY_ROLE_ARN` (stack output), `ALERT_EMAIL`, `OWNER_NAME`, `PARTNER_NAME`. Merges to `main` then deploy, except docs/tests/CI-only changes.
+
 Create your user and call the API, using the stack outputs:
 
 ```bash
@@ -84,6 +86,7 @@ Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <Pi
 | `bedrockApi` | `runtime` | `runtime` for Haiku 4.5; `mantle` for newer models such as `anthropic.claude-haiku-5-5` once your account has access |
 | `monthlyBudgetUsd` | `5` | Whole-account budget alert threshold; `0` skips it (e.g. if the account already has a budget) |
 | `accessAnalyzer` | `false` (this repo's `cdk.json`: `true`) | Free IAM Access Analyzer that flags resources reachable from outside the account and emails new findings to `alertEmail`. Only one is allowed per account and region, so check first with `aws accessanalyzer list-analyzers --type ACCOUNT` |
+| `githubDeploy` / `githubRepo` | `false` / none (this repo: `true` / its own repo) | Keyless GitHub deploy role, usable only from this repo's `production` environment |
 | `useCustomerManagedKey` | `false` | Use your own KMS key (about $1/month) instead of AWS default encryption |
 
 ## Commits

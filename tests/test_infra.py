@@ -217,6 +217,50 @@ def test_access_analyzer_is_opt_in(tmp_path_factory, value):
     template.resource_count_is("AWS::AccessAnalyzer::Analyzer", 0)
 
 
+def test_github_deploy_role_pinned_to_production_environment(tmp_path_factory):
+    template = synth(tmp_path_factory, githubDeploy=True, githubRepo="example/repo")
+    template.resource_count_is("AWS::IAM::OIDCProvider", 1)
+    gh = "token.actions.githubusercontent.com"
+    template.has_resource_properties(
+        "AWS::IAM::Role",
+        {
+            "MaxSessionDuration": 3600,
+            "AssumeRolePolicyDocument": {
+                "Statement": [
+                    Match.object_like(
+                        {
+                            "Action": "sts:AssumeRoleWithWebIdentity",
+                            "Condition": {
+                                "StringEquals": {
+                                    f"{gh}:aud": "sts.amazonaws.com",
+                                    f"{gh}:sub": "repo:example/repo:environment:production",
+                                }
+                            },
+                        }
+                    )
+                ]
+            },
+        },
+    )
+    roles = template.find_resources("AWS::IAM::Role", {"Properties": {"MaxSessionDuration": 3600}})
+    (role_id,) = roles
+    policies = [p for p in template.find_resources("AWS::IAM::Policy").values() if {"Ref": role_id} in p["Properties"]["Roles"]]
+    statements = [s for p in policies for s in p["Properties"]["PolicyDocument"]["Statement"]]
+    assert [s["Action"] for s in statements] == ["sts:AssumeRole"]
+    assert "role/cdk-hnb659fds-*-111111111111-us-east-1" in json.dumps(statements[0]["Resource"])
+
+
+@pytest.mark.parametrize("value", [None, False, "false"])
+def test_github_deploy_is_opt_in(tmp_path_factory, value):
+    template = synth(tmp_path_factory, **({} if value is None else {"githubDeploy": value}))
+    template.resource_count_is("AWS::IAM::OIDCProvider", 0)
+
+
+def test_github_deploy_needs_repo(tmp_path_factory):
+    with pytest.raises(ValueError, match="githubRepo"):
+        synth(tmp_path_factory, githubDeploy=True)
+
+
 def test_budget_can_be_turned_off(tmp_path_factory):
     synth(tmp_path_factory, monthlyBudgetUsd=0).resource_count_is("AWS::Budgets::Budget", 0)
 

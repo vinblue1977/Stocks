@@ -17,7 +17,7 @@
 | Data loss | PITR, deletion protection, resources retained on stack delete |
 | Data exposure | Encryption at rest (AWS default or optional customer key); TLS-only SNS/SQS; HTTPS-only outbound |
 | Runaway cost | Throttling, recursive-loop guard, pipeline timeout, budget alert |
-| Vulnerable deps / CI | `pip-audit`; OIDC deploys with no stored keys; protected `production` environment |
+| Vulnerable deps / CI | `pip-audit`; OIDC deploys with no stored keys, from `main` only via the `production` environment |
 
 Accepted cdk-nag exceptions and their reasons are in [`infra/nag.py`](../infra/nag.py).
 
@@ -28,4 +28,4 @@ Accepted cdk-nag exceptions and their reasons are in [`infra/nag.py`](../infra/n
 3. **Cognito Plus plan:** adds threat protection (paid).
 4. **WAF and custom domain:** add AWS WAF (about $6+/month) and a custom domain with an ACM certificate to enforce TLS 1.2+ on the dashboard.
 5. **CI:** done: Actions are pinned to commit SHAs, the runner is pinned, and Dependabot proposes weekly updates.
-6. **Deploy role:** limit the OIDC role to the CDK bootstrap roles for this repo's `production` environment.
+6. **Deploy role:** done: the OIDC role (`githubDeploy`) trusts only this repo's `production` environment, which allows only `main`, and can only assume the CDK bootstrap roles.
