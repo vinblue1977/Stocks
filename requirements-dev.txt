@@ -1,8 +1,8 @@
 -r requirements.txt
 -r layer/requirements.txt
-boto3>=1.40
-moto[dynamodb,sns,ssm]>=5.1
-pytest>=8.3
-pytest-cov>=6.0
-ruff>=0.12
-pip-audit>=2.9
+boto3>=1.43.110
+moto[dynamodb,sns,ssm]>=5.2.3
+pytest>=9.1.1
+pytest-cov>=7.1.0
+ruff>=0.16.10
+pip-audit>=2.10.1

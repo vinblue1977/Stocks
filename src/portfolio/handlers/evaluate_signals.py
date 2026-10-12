@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from portfolio import analytics, notify, rules, signals
+from portfolio.config import get_config
 from portfolio.db import Repository
 from portfolio.logs import get_logger, log
 
@@ -28,9 +29,10 @@ def handler(event: dict[str, Any] | None, context: Any, repo: Repository | None 
 
     snapshots: dict[str, dict[str, Any]] = {}
     latest: dict[str, float] = {}
+    news_off = get_config().news_excluded
     for ticker in repo.tracked_tickers():
         history = repo.price_history(ticker, since)
-        brief = repo.latest_brief(ticker)
+        brief = None if ticker in news_off else repo.latest_brief(ticker)  # no stale sentiment once news is off
         sentiment = brief.get("sentiment_7d") if brief else None
         snapshot = signals.compute_signals(ticker, history, sentiment, extra_windows)
         if snapshot:

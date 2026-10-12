@@ -218,3 +218,22 @@ def test_news_skips_excluded_tickers(repo, monkeypatch):
     spy = Spy()
     result = news_ingest.handler({}, None, repo=repo, provider=spy, summarizer=FakeSummarizer)
     assert spy.asked == ["VTI"] and result["tickers"] == ["VTI"]
+
+
+def test_excluded_ticker_has_no_stale_sentiment(repo, monkeypatch):
+    import dataclasses
+
+    from portfolio import config
+
+    start = (datetime.now(UTC).date() - timedelta(days=60)).isoformat()
+    for t in ("DVY", "SPY"):
+        repo.put_prices(t, price_series(100, 0, 60, start))
+    repo.put_holding("u1", {"ticker": "DVY", "group": "auto", "shares": 1, "cost_basis": 1})
+    repo.put_brief("DVY", "2026-10-09", {"summary": "old", "sentiment_7d": 0.6})
+    evaluate_signals.handler({}, None, repo=repo)
+    assert repo.get_signal("DVY")["sentiment_7d"] == 0.6  # news on: uses the brief
+
+    cfg = dataclasses.replace(config.get_config(), news_excluded=frozenset({"DVY"}))
+    monkeypatch.setattr(evaluate_signals, "get_config", lambda: cfg)
+    evaluate_signals.handler({}, None, repo=repo)
+    assert repo.get_signal("DVY").get("sentiment_7d") is None  # news off: no stale score

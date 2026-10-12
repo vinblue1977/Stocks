@@ -20,7 +20,12 @@
     "benchmarkTicker": "SPY",
     "newsExcludedTickers": [
       "ITOT",
-      "MGV"
+      "MGV",
+      "DGRO",
+      "DVY",
+      "IWB",
+      "ONEQ",
+      "SPYD"
     ],
     "bedrockModelId": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
     "bedrockApi": "runtime",

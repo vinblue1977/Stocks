@@ -1,4 +1,4 @@
 # Infrastructure (CDK app)
-aws-cdk-lib>=2.200.0,<3
-constructs>=10.4,<11
-cdk-nag>=2.35,<3
+aws-cdk-lib>=2.273.0,<3
+constructs>=10.8.1,<11
+cdk-nag>=2.38,<3  # v3 is a rewrite (experimental suppressions API); revisit when stable

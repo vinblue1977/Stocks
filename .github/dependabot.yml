@@ -15,6 +15,10 @@ updates:
     groups:
       python:
         patterns: ["*"]
+    ignore:
+      # cdk-nag 3 replaces the suppression API (experimental, no grouped acknowledgments yet).
+      - dependency-name: cdk-nag
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: pip
     directory: /layer
     schedule:
