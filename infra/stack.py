@@ -87,8 +87,10 @@ def bedrock_statements(api: str, model_id: str) -> list[iam.PolicyStatement]:
     ]
 
 
-def _flag(value: Any) -> bool:
+def _flag(value: Any, default: bool = False) -> bool:
     """Context values from `-c key=value` arrive as strings; from cdk.json as booleans."""
+    if value is None:
+        return default
     if isinstance(value, str):
         return value.strip().lower() in ("1", "true", "yes", "on")
     return bool(value)
@@ -336,10 +338,7 @@ class PortfolioTrackerStack(Stack):
             "BEDROCK_MODEL_ID": model_id,
             "BEDROCK_API": bedrock_api,
             "NEWS_EXCLUDED_TICKERS": ",".join(self.node.try_get_context("newsExcludedTickers") or []),
-            # cdk.json gives a bool, `-c partnerNews=false` a string
-            "PARTNER_NEWS": "false"
-            if str(self.node.try_get_context("partnerNews")).lower() in ("false", "0", "no", "off")
-            else "true",
+            "PARTNER_NEWS": str(_flag(self.node.try_get_context("partnerNews"), default=True)).lower(),
             "BEDROCK_REGION": Aws.REGION,
             "OWNER_NAME": owner_name,
             "PARTNER_NAME": partner_name,
@@ -385,16 +384,10 @@ class PortfolioTrackerStack(Stack):
         )
         price_sync = make_function("PriceSync", "price_sync", timeout=300)
         price_sync.configure_async_invoke(on_failure=destinations.SqsDestination(price_sync_dlq), retry_attempts=1)
-        table.grant_read_write_data(price_sync)
-        price_sync.add_to_role_policy(
-            iam.PolicyStatement(actions=["ssm:GetParameter"], resources=[ssm_param_arn("tiingo-api-key")])
-        )
-
         intraday = make_function("IntradayQuotes", "intraday_quotes", timeout=60)
-        table.grant_read_write_data(intraday)
-        intraday.add_to_role_policy(
-            iam.PolicyStatement(actions=["ssm:GetParameter"], resources=[ssm_param_arn("tiingo-api-key")])
-        )
+        for fn in (price_sync, intraday):
+            table.grant_read_write_data(fn)
+            fn.add_to_role_policy(iam.PolicyStatement(actions=["ssm:GetParameter"], resources=[ssm_param_arn("tiingo-api-key")]))
 
         news_ingest = make_function("NewsIngest", "news_ingest", timeout=600, memory=512)
         table.grant_read_write_data(news_ingest)
@@ -523,8 +516,7 @@ class PortfolioTrackerStack(Stack):
         )
         # Every 15 min across 9:30-16:00 New York time in both EDT and EST (13:00-21:45 UTC);
         # the function returns without calling Tiingo outside market hours. One request per run.
-        intraday_setting = self.node.try_get_context("intradayQuotes")
-        if intraday_setting is None or _flag(intraday_setting):
+        if _flag(self.node.try_get_context("intradayQuotes"), default=True):
             events.Rule(
                 self,
                 "IntradaySchedule",

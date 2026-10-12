@@ -55,7 +55,13 @@ def parse_iex(raw: Any) -> dict[str, dict[str, Any]]:
             continue
         # Tiingo timestamps carry the New York offset, so the first 10 chars are the trading day.
         # Fractional seconds (nanoseconds) are dropped so every client can parse the stored UTC time.
-        moment = datetime.fromisoformat(re.sub(r"\.\d+", "", timestamp)).astimezone(UTC)
+        try:
+            moment = datetime.fromisoformat(re.sub(r"\.\d+", "", str(timestamp)))
+        except ValueError:
+            continue
+        if moment.tzinfo is None:
+            continue  # without an offset the trading day and time are ambiguous
+        moment = moment.astimezone(UTC)
         quotes[str(ticker).upper()] = {
             "last": float(price),
             "timestamp": moment.isoformat(timespec="seconds"),

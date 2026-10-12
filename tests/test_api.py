@@ -129,31 +129,42 @@ def test_portfolio_summary(repo):
 def test_portfolio_uses_intraday_quote_until_the_close_is_stored(repo):
     from datetime import UTC, datetime, timedelta
 
-    call(
-        repo,
-        "PUT /groups/{group}/holdings/{ticker}",
-        path={"group": "stocks", "ticker": "VTI"},
-        body=json.dumps({"shares": 10, "cost_basis": 100}),
-    )
-    start = (datetime.now(UTC).date() - timedelta(days=30)).isoformat()
-    rows = price_series(100, 1, 30, start)  # last close 129, the one before 128
-    repo.put_prices("VTI", rows)
-    last_close_day = rows[-1]["date"]
-    next_day = (datetime.fromisoformat(last_close_day) + timedelta(days=1)).date().isoformat()
+    from portfolio.market import trading_day
 
-    repo.put_quotes({"VTI": {"last": 131.0, "timestamp": f"{next_day}T15:00:00+00:00", "date": next_day}})
+    for ticker in ("VTI", "FUND"):
+        call(
+            repo,
+            "PUT /groups/{group}/holdings/{ticker}",
+            path={"group": "stocks", "ticker": ticker},
+            body=json.dumps({"shares": 10, "cost_basis": 100}),
+        )
+    today = trading_day(datetime.now(UTC))
+    start = (today - timedelta(days=30)).isoformat()
+    for ticker in ("VTI", "FUND"):
+        repo.put_prices(ticker, price_series(100, 1, 30, start))  # closes through yesterday: 128, then 129
+    quote = {"last": 131.0, "timestamp": f"{today}T15:00:00+00:00", "date": today.isoformat()}
+
+    repo.put_quotes({"VTI": quote})
     _, body = call(repo, "GET /portfolio")
     overall = body["portfolios"]["household"]["overall"]
-    assert overall["total_value"] == pytest.approx(1310)
-    assert overall["day_change"] == pytest.approx(20)  # vs. the last close, 129
-    assert body["live_as_of"] == f"{next_day}T15:00:00+00:00"
+    assert overall["total_value"] == pytest.approx(1310 + 1290)
+    # Today: VTI +2 vs. its close; FUND has no quote, so it counts as unchanged (not yesterday's +1).
+    assert overall["day_change"] == pytest.approx(20)
+    assert body["live_as_of"] == quote["timestamp"]
     assert len(overall["history"]) == 30  # the chart stays on closing prices
 
-    # Once that day's close is stored, the quote is stale and ignored.
-    repo.put_quotes({"VTI": {"last": 131.0, "timestamp": f"{last_close_day}T15:00:00+00:00", "date": last_close_day}})
+    # A quote from an earlier day (e.g. the evening sync failed) is not shown as live.
+    repo.put_quotes({"VTI": {**quote, "date": (today - timedelta(days=1)).isoformat()}})
     _, body = call(repo, "GET /portfolio")
-    assert body["portfolios"]["household"]["overall"]["total_value"] == pytest.approx(1290)
     assert body["live_as_of"] is None
+    assert body["portfolios"]["household"]["overall"]["total_value"] == pytest.approx(2580)
+
+    # Once today's close is stored, the quote is ignored.
+    repo.put_quotes({"VTI": quote})
+    repo.put_prices("VTI", [{"date": today.isoformat(), "close": 132.0, "volume": 1}])
+    _, body = call(repo, "GET /portfolio")
+    assert body["live_as_of"] is None
+    assert body["portfolios"]["household"]["overall"]["total_value"] == pytest.approx(1320 + 1290)
 
 
 def test_news_only_for_held_tickers(repo):

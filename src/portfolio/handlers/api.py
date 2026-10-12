@@ -21,6 +21,7 @@ from portfolio.config import get_config
 from portfolio.db import GROUPS, KINDS, PEOPLE, ConcurrentUpdateError, Repository, kind_of, person_of
 from portfolio.llm import sentiment_label
 from portfolio.logs import get_logger, log
+from portfolio.market import trading_day
 from portfolio.news_policy import news_off
 
 logger = get_logger(__name__)
@@ -271,12 +272,21 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     histories = {t: repo.price_history(t, since) for t in {h["ticker"] for h in holdings}}
     latest = {t: h[-1][1] for t, h in histories.items() if h}
     previous = {t: h[-2][1] for t, h in histories.items() if len(h) > 1}
-    # During market hours an intraday quote newer than the last close becomes today's price, measured
-    # against that close. Once the evening sync stores today's close, the quote is no longer newer.
-    live = {t: q for t, q in repo.latest_quotes().items() if histories.get(t) and q["date"] > histories[t][-1][0]}
-    for ticker, quote in live.items():
-        previous[ticker] = latest[ticker]
-        latest[ticker] = quote["last"]
+    # During market hours today's intraday quote replaces the last close, and "today" is measured against
+    # that close. Tickers without a quote today count as unchanged, so the day change never mixes in
+    # yesterday's move. Once the evening sync stores today's close, the quote is no longer newer.
+    today = trading_day(datetime.now(UTC)).isoformat()
+    live = {
+        t: q
+        for t, q in repo.latest_quotes().items()
+        if q.get("date") == today and histories.get(t) and histories[t][-1][0] < today
+    }
+    if live:
+        for ticker, history in histories.items():
+            if history and history[-1][0] < today:
+                previous[ticker] = latest[ticker]
+                if ticker in live:
+                    latest[ticker] = live[ticker]["last"]
     benchmark_ticker = get_config().benchmark_ticker
     benchmark = repo.price_history(benchmark_ticker, since)
 
