@@ -586,9 +586,10 @@ class PortfolioTrackerStack(Stack):
 
         # ------------------------------------------------------------------ dashboard deployment
         # Uploads web/ plus a config.json with this stack's API URL and login settings, then
-        # invalidates the CloudFront cache so the new version is live immediately. `no-cache` makes
-        # browsers revalidate each file on load (a cheap 304 when unchanged), so after a deploy they
-        # never mix a new page with an old cached module.
+        # invalidates the CloudFront cache so the new version is live immediately. Browsers revalidate
+        # each file on load (max-age=0: a cheap 304 when unchanged) instead of guessing a cache lifetime,
+        # so a deploy doesn't leave them running a new page with an old module; CloudFront keeps its
+        # own long cache (s-maxage), which each deploy invalidates.
         s3deploy.BucketDeployment(
             self,
             "DeploySite",
@@ -604,7 +605,11 @@ class PortfolioTrackerStack(Stack):
                     },
                 ),
             ],
-            cache_control=[s3deploy.CacheControl.no_cache()],
+            cache_control=[
+                s3deploy.CacheControl.max_age(Duration.seconds(0)),
+                s3deploy.CacheControl.must_revalidate(),
+                s3deploy.CacheControl.s_max_age(Duration.days(365)),
+            ],
             distribution=distribution,
             distribution_paths=["/*"],
             memory_limit=256,
