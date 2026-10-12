@@ -22,6 +22,7 @@ from aws_cdk import (
     Stack,
     Tags,
 )
+from aws_cdk import aws_accessanalyzer as accessanalyzer
 from aws_cdk import aws_apigatewayv2 as apigw
 from aws_cdk import aws_apigatewayv2_authorizers as authorizers
 from aws_cdk import aws_apigatewayv2_integrations as integrations
@@ -131,7 +132,7 @@ class PortfolioTrackerStack(Stack):
                 enable_key_rotation=True,
                 removal_policy=RemovalPolicy.RETAIN,
             )
-            # CloudWatch Logs and CloudWatch alarms (publishing to the encrypted topic) need the key too.
+            # CloudWatch Logs, CloudWatch alarms and EventBridge (publishing to the encrypted topic) need it too.
             key.add_to_resource_policy(
                 iam.PolicyStatement(
                     principals=[iam.ServicePrincipal(f"logs.{Aws.REGION}.amazonaws.com")],
@@ -146,7 +147,7 @@ class PortfolioTrackerStack(Stack):
             )
             key.add_to_resource_policy(
                 iam.PolicyStatement(
-                    principals=[iam.ServicePrincipal("cloudwatch.amazonaws.com")],
+                    principals=[iam.ServicePrincipal("cloudwatch.amazonaws.com"), iam.ServicePrincipal("events.amazonaws.com")],
                     actions=["kms:Decrypt", "kms:GenerateDataKey*"],
                     resources=["*"],
                     conditions={"StringEquals": {"aws:SourceAccount": Aws.ACCOUNT_ID}},
@@ -529,6 +530,33 @@ class PortfolioTrackerStack(Stack):
             schedule=events.Schedule.cron(minute="0", hour="14", week_day="SUN"),
             targets=[targets.LambdaFunction(weekly, retry_attempts=2)],
         )
+
+        # ------------------------------------------------------------------ external-access findings
+        # Free account-level analyzer: flags any resource in this region (buckets, keys, roles, queues,
+        # topics, functions) reachable from outside the account, and emails new findings to the ops topic.
+        # Opt-in (`accessAnalyzer: true`), since an account allows only one and may already have it.
+        if _flag(self.node.try_get_context("accessAnalyzer")):
+            accessanalyzer.CfnAnalyzer(self, "ExternalAccessAnalyzer", type="ACCOUNT")
+            events.Rule(
+                self,
+                "AccessAnalyzerFindings",
+                event_pattern=events.EventPattern(
+                    source=["aws.access-analyzer"],
+                    detail_type=["Access Analyzer Finding"],
+                    detail={"status": ["ACTIVE"]},
+                ),
+                targets=[
+                    targets.SnsTopic(
+                        ops_topic,
+                        message=events.RuleTargetInput.from_text(
+                            f"IAM Access Analyzer: {events.EventField.from_path('$.detail.resourceType')} "
+                            f"{events.EventField.from_path('$.detail.resource')} is accessible from outside the account "
+                            f"(public: {events.EventField.from_path('$.detail.isPublic')}). "
+                            "Review it in the IAM console under Access Analyzer; archive it there if it is intended."
+                        ),
+                    )
+                ],
+            )
 
         # ------------------------------------------------------------------ monitoring
         alarm_action = cw_actions.SnsAction(ops_topic)

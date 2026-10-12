@@ -202,6 +202,21 @@ def test_intraday_quotes_can_be_turned_off(tmp_path_factory, value):
     assert not any("0/15" in s for s in schedules(synth(tmp_path_factory, intradayQuotes=value)))
 
 
+@pytest.mark.parametrize("value", [True, "true"])
+def test_access_analyzer_emails_findings_when_enabled(tmp_path_factory, value):
+    template = synth(tmp_path_factory, accessAnalyzer=value)
+    template.has_resource_properties("AWS::AccessAnalyzer::Analyzer", {"Type": "ACCOUNT"})
+    template.has_resource_properties(
+        "AWS::Events::Rule", {"EventPattern": {"source": ["aws.access-analyzer"], "detail": {"status": ["ACTIVE"]}}}
+    )
+
+
+@pytest.mark.parametrize("value", [None, False, "false"])
+def test_access_analyzer_is_opt_in(tmp_path_factory, value):
+    template = synth(tmp_path_factory, **({} if value is None else {"accessAnalyzer": value}))
+    template.resource_count_is("AWS::AccessAnalyzer::Analyzer", 0)
+
+
 def test_budget_can_be_turned_off(tmp_path_factory):
     synth(tmp_path_factory, monthlyBudgetUsd=0).resource_count_is("AWS::Budgets::Budget", 0)
 
