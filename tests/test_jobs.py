@@ -195,3 +195,26 @@ def test_weight_rule_uses_combined_portfolio(repo, monkeypatch):
     repo.put_holding("u1", {"ticker": "BND", "group": "auto", "shares": 4, "cost_basis": 100})
     repo.create_rule("u1", {"type": "weight_above", "ticker": "VOO", "params": {"pct": 55}, "enabled": True})
     assert evaluate_signals.handler({}, None, repo=repo)["alerts_sent"] == 1
+
+
+def test_news_skips_excluded_tickers(repo, monkeypatch):
+    import dataclasses
+
+    from portfolio import config
+
+    cfg = dataclasses.replace(config.get_config(), news_excluded=frozenset({"ITOT"}))
+    monkeypatch.setattr(news_ingest, "get_config", lambda: cfg)
+
+    class Spy(FakeNews):
+        def __init__(self):
+            self.asked = []
+
+        def company_news(self, ticker, from_date, to_date):
+            self.asked.append(ticker)
+            return super().company_news(ticker, from_date, to_date)
+
+    repo.put_holding("u1", {"ticker": "ITOT", "group": "auto", "shares": 1, "cost_basis": 1})
+    repo.put_holding("u1", {"ticker": "VTI", "group": "auto", "shares": 1, "cost_basis": 1})
+    spy = Spy()
+    result = news_ingest.handler({}, None, repo=repo, provider=spy, summarizer=FakeSummarizer)
+    assert spy.asked == ["VTI"] and result["tickers"] == ["VTI"]

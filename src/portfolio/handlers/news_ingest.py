@@ -58,7 +58,8 @@ def handler(
     repo = repo or Repository()
     provider = provider or FinnhubNewsProvider(get_secret(get_config().news_api_key_param))
     now = datetime.now(UTC)
-    tickers = sorted({h["ticker"] for h in repo.all_holdings()})
+    excluded = get_config().news_excluded  # e.g. broad index funds that rarely get headlines
+    tickers = sorted({h["ticker"] for h in repo.all_holdings()} - excluded)
 
     briefs: dict[str, str] = {}
     scores: list[float] = []

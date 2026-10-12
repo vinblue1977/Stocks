@@ -19,6 +19,7 @@ class Config:
     bedrock_region: str
     history_years: int
     news_lookback_days: int
+    news_excluded: frozenset[str]
 
 
 @lru_cache(maxsize=1)
@@ -34,4 +35,5 @@ def get_config() -> Config:
         bedrock_region=os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-2")),
         history_years=int(os.environ.get("HISTORY_YEARS", "5")),
         news_lookback_days=int(os.environ.get("NEWS_LOOKBACK_DAYS", "3")),
+        news_excluded=frozenset(t.strip().upper() for t in os.environ.get("NEWS_EXCLUDED_TICKERS", "").split(",") if t.strip()),
     )

@@ -301,9 +301,10 @@ def get_signals(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
 def get_news(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     user_id = _user_id(event)
     params = event.get("queryStringParameters") or {}
+    excluded = get_config().news_excluded
     held = sorted({h["ticker"] for h in repo.list_holdings(user_id)})
     requested = params.get("ticker")
-    tickers = [_ticker(requested)] if requested else held
+    tickers = [_ticker(requested)] if requested else [t for t in held if t not in excluded]
     if requested and tickers[0] not in held:
         raise ApiError(404, "Ticker is not in your portfolio")
     since = (datetime.now(UTC) - timedelta(days=7)).isoformat(timespec="seconds")
@@ -315,7 +316,7 @@ def get_news(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
             articles.append(article)
     articles.sort(key=lambda a: a["published_at"], reverse=True)
     brief = repo.latest_brief(tickers[0] if requested else "ALL")
-    return _response(200, {"brief": brief, "articles": articles[:60]})
+    return _response(200, {"brief": brief, "articles": articles[:60], "news_excluded": sorted(excluded)})
 
 
 Route = Callable[[dict[str, Any], Repository], dict[str, Any]]

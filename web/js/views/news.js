@@ -94,12 +94,15 @@ function signalsCard(signals, rules) {
 export async function renderNews(main) {
   const [holdingsRes, signalsRes, rulesRes] = await Promise.all([api('GET', '/holdings'), api('GET', '/signals'), api('GET', '/rules')]);
   const inGroup = holdingsRes.holdings.filter((x) => groupFilter === 'all' || x.group === groupFilter);
-  const tickers = [...new Set(inGroup.map((x) => x.ticker))].sort();
-  if (selected !== 'All' && !tickers.includes(selected)) selected = 'All';
+  const allTickers = [...new Set(inGroup.map((x) => x.ticker))].sort();
+  if (selected !== 'All' && !allTickers.includes(selected)) selected = 'All';
   const news = await api('GET', selected === 'All' ? '/news' : `/news?ticker=${encodeURIComponent(selected)}`);
+  const newsOff = new Set(news.news_excluded || []);
+  const tickers = allTickers.filter((t) => !newsOff.has(t));
   const visible = new Set(tickers);
   news.articles = news.articles.filter((a) => visible.has(a.ticker));
-  signalsRes.signals = signalsRes.signals.filter((sg) => visible.has(sg.ticker));
+  signalsRes.signals = signalsRes.signals.filter((sg) => allTickers.includes(sg.ticker));
+  const offHere = allTickers.filter((t) => newsOff.has(t));
 
   const groupChips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Filter by group' },
     [['all', 'All groups'], ['stocks', GROUPS.stocks.label], ['auto', GROUPS.auto.label]].map(([key, label]) => h('button', {
@@ -115,6 +118,7 @@ export async function renderNews(main) {
   main.replaceChildren(
     pageHead('News & signals', 'Headlines from Finnhub, scored and summarized each weekday evening', groupChips),
     chips,
+    offHere.length ? h('p', { class: 'xsmall muted', style: { margin: '-12px 0 0' }, text: `News is turned off for ${offHere.join(', ')} (they rarely get headlines). Their price signals still appear below.` }) : null,
     briefCard(news.brief, selected === 'All' ? 'All' : selected),
     h('div', { class: 'row' }, headlinesCard(news.articles), trendCard(news.articles)),
     signalsCard(signalsRes.signals, rulesRes.rules),

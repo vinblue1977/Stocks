@@ -331,6 +331,7 @@ class PortfolioTrackerStack(Stack):
             "NEWS_API_KEY_PARAM": f"{PARAM_PREFIX}/finnhub-api-key",
             "BEDROCK_MODEL_ID": model_id,
             "BEDROCK_API": bedrock_api,
+            "NEWS_EXCLUDED_TICKERS": ",".join(self.node.try_get_context("newsExcludedTickers") or []),
             "BEDROCK_REGION": Aws.REGION,
         }
 

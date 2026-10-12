@@ -73,6 +73,7 @@ Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <Pi
 | `alertEmail` | none | Alerts, reports, alarms, budget warnings |
 | `allowedOrigins` | `localhost:5173` | CORS origins |
 | `benchmarkTicker` | `SPY` | Performance benchmark |
+| `newsExcludedTickers` | `["ITOT", "MGV"]` | Tickers to skip when fetching news (e.g. broad index funds with no headlines); price signals still apply |
 | `bedrockModelId` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Model for news summaries |
 | `bedrockApi` | `runtime` | `runtime` for Haiku 4.5; `mantle` for newer models such as `anthropic.claude-haiku-5-5` once your account has access |
 | `monthlyBudgetUsd` | `5` | Budget alert threshold |

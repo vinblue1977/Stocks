@@ -334,3 +334,15 @@ def test_purchase_needs_exactly_one_of_price_or_amount(repo, payload):
         body=json.dumps(payload),
     )
     assert status == 400
+
+
+def test_news_lists_excluded_tickers(repo, monkeypatch):
+    import dataclasses
+
+    from portfolio import config
+
+    cfg = dataclasses.replace(config.get_config(), news_excluded=frozenset({"MGV"}))
+    monkeypatch.setattr(api, "get_config", lambda: cfg)
+    put(repo, "auto", "MGV", 1, 1)
+    status, body = call(repo, "GET /news")
+    assert status == 200 and body["news_excluded"] == ["MGV"]
