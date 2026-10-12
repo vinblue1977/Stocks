@@ -17,6 +17,7 @@ from typing import Any
 from aws_cdk import (
     Aws,
     CfnOutput,
+    DefaultStackSynthesizer,
     Duration,
     RemovalPolicy,
     Stack,
@@ -557,6 +558,45 @@ class PortfolioTrackerStack(Stack):
                     )
                 ],
             )
+
+        # ------------------------------------------------------------------ GitHub Actions deploy role
+        # Keyless CI deploys: GitHub's OIDC token is exchanged for this role, which can only assume the CDK
+        # bootstrap roles. Trust is pinned to the repo's `production` environment, which only allows `main`.
+        # Opt-in (`githubDeploy: true` plus `githubRepo: owner/name`), since an account allows one provider per URL.
+        github_repo: str = self.node.try_get_context("githubRepo") or ""
+        if _flag(self.node.try_get_context("githubDeploy")):
+            if not github_repo:
+                raise ValueError("githubDeploy needs githubRepo (owner/name)")
+            github = "token.actions.githubusercontent.com"
+            synthesizer = self.synthesizer
+            qualifier = (
+                synthesizer.bootstrap_qualifier if isinstance(synthesizer, DefaultStackSynthesizer) else None
+            ) or DefaultStackSynthesizer.DEFAULT_QUALIFIER
+            provider = iam.OidcProviderNative(
+                self, "GitHubOidcProvider", url=f"https://{github}", client_ids=["sts.amazonaws.com"]
+            )
+            deploy_role = iam.Role(
+                self,
+                "GitHubDeployRole",
+                description=f"GitHub Actions deploys from {github_repo} (production environment only)",
+                max_session_duration=Duration.hours(1),
+                assumed_by=iam.WebIdentityPrincipal(
+                    provider.oidc_provider_arn,
+                    conditions={
+                        "StringEquals": {
+                            f"{github}:aud": "sts.amazonaws.com",
+                            f"{github}:sub": f"repo:{github_repo}:environment:production",
+                        }
+                    },
+                ),
+            )
+            deploy_role.add_to_policy(
+                iam.PolicyStatement(
+                    actions=["sts:AssumeRole"],
+                    resources=[f"arn:{self.partition}:iam::{self.account}:role/cdk-{qualifier}-*-{self.account}-{self.region}"],
+                )
+            )
+            CfnOutput(self, "GitHubDeployRoleArn", value=deploy_role.role_arn)
 
         # ------------------------------------------------------------------ monitoring
         alarm_action = cw_actions.SnsAction(ops_topic)

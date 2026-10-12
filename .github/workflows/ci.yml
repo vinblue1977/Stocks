@@ -15,9 +15,11 @@ on:
 permissions:
   contents: read
 
+# Superseded PR runs are cancelled. Each run on main gets its own group so none is dropped while
+# pending; the deploy job queues on its own group below.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   checks:
@@ -53,12 +55,48 @@ jobs:
         env:
           CDK_DEFAULT_REGION: us-east-2
 
+  # Decides whether a push to main deploys: anything outside docs, Markdown, tests and CI config
+  # (except this workflow, which holds the deploy step).
+  changes:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 5
+    outputs:
+      deploy: ${{ steps.diff.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: diff
+        run: |
+          # The whole push range; an unknown base (new branch, force push) deploys.
+          if git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            changed="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
+          else
+            changed="unknown-base"
+          fi
+          echo "$changed"
+          deployable="$(grep -Ev '^(docs/|\.github/|tests/|LICENSE$)|\.md$' <<<"$changed" || true)"
+          if grep -qx '.github/workflows/ci.yml' <<<"$changed"; then deployable=yes; fi
+          echo "deploy=$([ -n "$deployable" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        env:
+          BEFORE: ${{ github.event.before }}
+
   deploy:
-    needs: checks
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy
+    needs: [checks, changes]
+    # Auto on merges that change code or infra; manual dispatch stays as a fallback. Main only, and the
+    # production environment and the AWS role trust both enforce that too.
+    if: >-
+      always() && needs.checks.result == 'success' && github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'push' && needs.changes.outputs.deploy == 'true') ||
+       (github.event_name == 'workflow_dispatch' && inputs.deploy))
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
     timeout-minutes: 30
-    environment: production   # add required reviewers to this environment in repo settings
+    environment: production   # deployment branches: main only (repo settings)
     permissions:
       contents: read
       id-token: write   # GitHub OIDC -> short-lived AWS credentials, no stored access keys
@@ -81,7 +119,13 @@ jobs:
           python -m venv .venv
           .venv/bin/pip install -r requirements-dev.txt
           make layer
+          # A missing secret would silently drop the email subscriptions or names, so fail instead.
+          : "${ALERT_EMAIL:?set the ALERT_EMAIL secret}" "${OWNER_NAME:?set the OWNER_NAME secret}"
           . .venv/bin/activate
-          npx --yes aws-cdk@2 deploy --require-approval never -c alertEmail="${ALERT_EMAIL}"
+          npx --yes aws-cdk@2 deploy --require-approval never \
+            -c alertEmail="${ALERT_EMAIL}" -c ownerName="${OWNER_NAME}" -c partnerName="${PARTNER_NAME}"
         env:
-          ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+          # Environment secrets, so they're masked in this public repo's logs.
+          ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+          OWNER_NAME: ${{ secrets.OWNER_NAME }}
+          PARTNER_NAME: ${{ secrets.PARTNER_NAME }}
