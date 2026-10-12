@@ -109,7 +109,7 @@ tests/          Unit, handler and infrastructure tests
 
 ## Roadmap
 
-Rule backtesting, transaction history, and a custom domain for the dashboard.
+See [docs/ROADMAP.md](docs/ROADMAP.md): transactions and sales, dividends, allocation targets, a watchlist, intraday alerts and more.
 
 ## License
 
