@@ -88,7 +88,7 @@ Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <Pi
 
 ## Commits
 
-PR titles follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) (`feat:`, `fix(api):`, `chore:`, …) and are checked in CI. PRs are squash-merged with the title as the commit title, so `main` stays in that format.
+PR titles follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) (`feat:`, `fix(api):`, `chore:`, …) and are checked in CI. The repo allows squash merges only, with the PR title as the commit title, so `main` stays in that format.
 
 ## Cost
 

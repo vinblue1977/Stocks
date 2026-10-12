@@ -27,3 +27,6 @@ updates:
       # cdk-nag 3 replaces the suppression API (experimental, no grouped acknowledgments yet).
       - dependency-name: cdk-nag
         versions: [">=3.0.0"]
+      # anthropic is capped <2 in layer/requirements.txt; a new major needs a deliberate upgrade.
+      - dependency-name: anthropic
+        versions: [">=2.0.0"]
