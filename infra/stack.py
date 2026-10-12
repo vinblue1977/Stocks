@@ -562,11 +562,11 @@ class PortfolioTrackerStack(Stack):
         # ------------------------------------------------------------------ GitHub Actions deploy role
         # Keyless CI deploys: GitHub's OIDC token is exchanged for this role, which can only assume the CDK
         # bootstrap roles. Trust is pinned to the repo's `production` environment, which only allows `main`.
-        # Opt-in (`githubDeploy: true` plus `githubRepo: owner/name`), since an account allows one provider per URL.
+        # Opt-in (`githubDeploy: true` plus `githubRepo`), since an account allows one provider per URL.
         github_repo: str = self.node.try_get_context("githubRepo") or ""
         if _flag(self.node.try_get_context("githubDeploy")):
             if not github_repo:
-                raise ValueError("githubDeploy needs githubRepo (owner/name)")
+                raise ValueError("githubDeploy needs githubRepo (the OIDC subject prefix, without `repo:`)")
             github = "token.actions.githubusercontent.com"
             synthesizer = self.synthesizer
             qualifier = (
