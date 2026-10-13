@@ -28,6 +28,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | # | Idea | Effort | Notes |
 |---|---|---|---|
 | 11 | CSV export and import | S–M | Download holdings and history; import a broker export. Also the simple route to broker sync |
+| 12 | Install on your phone | Done | Home-screen icon, full screen (PR #30) |
 | 13 | Ask about my portfolio | M | Questions answered by Claude from your own data. Small Bedrock cost per question |
 
 ## Also planned
