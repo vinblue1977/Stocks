@@ -97,6 +97,24 @@ window.addEventListener('pageshow', (event) => {
   }
 });
 
+/** The round account button in the top bar: email, Add passkey and Sign out in a small menu. */
+function setupAccountMenu() {
+  const email = currentEmail();
+  const button = document.getElementById('account-btn');
+  const menu = document.getElementById('account-menu');
+  document.getElementById('account-email').textContent = email;
+  document.getElementById('account-initial').textContent = (email[0] || '?').toUpperCase();
+  document.getElementById('add-passkey').href = addPasskeyUrl();
+  document.getElementById('sign-out').addEventListener('click', logout);
+  const setOpen = (open) => { menu.hidden = !open; button.setAttribute('aria-expanded', String(open)); };
+  button.addEventListener('click', (event) => { event.stopPropagation(); setOpen(menu.hidden); });
+  document.addEventListener('click', (event) => { if (!menu.contains(event.target)) setOpen(false); });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !menu.hidden) { setOpen(false); button.focus(); }
+  });
+  document.getElementById('account').hidden = false;
+}
+
 async function start() {
   try {
     const config = await (await fetch('config.json', { cache: 'no-store' })).json();
@@ -113,13 +131,7 @@ async function start() {
     main.replaceChildren(errorCard(e.message), h('p', null, h('a', { href: '/', text: 'Try again' })));
     return;
   }
-  document.getElementById('account-email').textContent = currentEmail();
-  const signOut = document.getElementById('sign-out');
-  signOut.hidden = false;
-  signOut.addEventListener('click', logout);
-  const addPasskey = document.getElementById('add-passkey');
-  addPasskey.href = addPasskeyUrl();
-  addPasskey.hidden = false;
+  setupAccountMenu();
   window.addEventListener('hashchange', () => route());
   setInterval(maybeRefresh, 60 * 1000);
   document.addEventListener('visibilitychange', maybeRefresh); // catch up when the tab comes back

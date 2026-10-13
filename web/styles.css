@@ -41,15 +41,23 @@ h2 { margin: 0; font-size: 17px; font-weight: 600; }
 
 /* Top bar */
 .topbar { background: var(--surface); border-bottom: 1px solid var(--border); }
-.topbar-inner { max-width: 1240px; margin: 0 auto; padding: 0 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 32px; min-height: 64px; }
+.topbar-inner { max-width: 1240px; margin: 0 auto; padding: 0 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; min-height: 64px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 17px; color: var(--text); text-decoration: none; }
 .brand svg { color: var(--accent); }
 .nav { display: flex; flex-wrap: wrap; gap: 4px; flex: 1 1 auto; }
-.nav a { text-decoration: none; color: var(--muted); font-size: 14px; padding: 12px 14px; border-bottom: 2px solid transparent; }
+.nav a { text-decoration: none; color: var(--muted); font-size: 14px; padding: 12px 10px; border-bottom: 2px solid transparent; }
 .nav a:hover { color: var(--text); }
 .nav a[aria-current="page"] { color: var(--text); font-weight: 500; border-bottom-color: var(--accent); }
-.account { display: flex; align-items: center; gap: 12px; }
-.account-email { font-size: 13px; color: var(--muted); }
+.account { position: relative; margin-left: auto; } /* right-aligned even when the bar wraps on a phone */
+.account-btn { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 50%; border: 1px solid #2A3A57; background: transparent; cursor: pointer; }
+.account-btn:hover, .account-btn[aria-expanded="true"] { border-color: var(--accent); }
+.avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-bg); color: var(--accent); display: grid; place-items: center; font-size: 14px; font-weight: 600; }
+.account-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 240px; max-width: calc(100vw - 32px); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.45); padding: 6px; z-index: 5; }
+.account-who { padding: 10px 12px; margin-bottom: 6px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--divider); overflow-wrap: anywhere; }
+.account-who strong { color: var(--text); font-weight: 500; }
+.account-menu a, .account-menu button { display: block; width: 100%; text-align: left; padding: 10px 12px; border-radius: 6px; background: none; border: 0; color: var(--text); font-size: 14px; text-decoration: none; cursor: pointer; }
+.account-menu a:hover, .account-menu button:hover { background: var(--chip-bg); color: var(--text); }
+.account-menu .danger { color: var(--warn); }
 
 /* Layout */
 .main { max-width: 1240px; margin: 0 auto; padding: 32px 24px 48px; display: flex; flex-direction: column; gap: 24px; }
@@ -141,7 +149,6 @@ tr.highlight { background: var(--chip-bg); }
 
 @media (max-width: 640px) {
   .topbar-inner, .main { padding-left: 16px; padding-right: 16px; }
-  .account-email { display: none; }
   .tile-value { font-size: 26px; }
 }
 
