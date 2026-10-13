@@ -420,6 +420,8 @@ class FakeQuotes:
         ("2026-10-12T13:29:00+00:00", False),  # 9:29 AM EDT
         ("2026-10-12T13:30:00+00:00", True),
         ("2026-10-12T20:00:00+00:00", True),  # 4:00 PM EDT, last run
+        ("2026-10-12T20:00:42+00:00", True),  # the 4:00 run as scheduled runs actually start (seen live)
+        ("2026-10-12T20:06:00+00:00", False),
         ("2026-10-12T20:15:00+00:00", False),
         ("2026-12-14T14:15:00+00:00", False),  # 9:15 AM EST
         ("2026-12-14T21:00:00+00:00", True),  # 4:00 PM EST
