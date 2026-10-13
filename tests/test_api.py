@@ -627,6 +627,7 @@ def test_targets_round_trip_and_checkup(repo):
         ({"areas": {"us": {"pct": 100, "fund": "../x"}}}, "fund must look like"),
         ({"areas": {"us": {"pct": 100}}, "overrides": {"VTI": "moon"}}, "overrides.VTI"),
         ({"areas": {"us": {"pct": 100}}, "sector_ceiling": 150}, "between"),
+        ({"areas": {"us": {"pct": 100}}, "sector_ceiling": 12.5}, "whole number"),
     ],
 )
 def test_targets_validation(repo, change, message):

@@ -487,16 +487,48 @@ def test_monthly_checkup_email_and_stored_summary(repo, monkeypatch):
     for ticker, shares in (("VTI", 6), ("SMH", 4)):
         repo.put_holding("u1", {"ticker": ticker, "shares": shares, "avg_cost": 1})
         repo.put_prices(ticker, price_series(100, 0.5, 300, start))
-    assert monthly_checkup.handler({}, None, repo=repo, summarizer=Summarizer) == {"emails_sent": 1}
+    assert monthly_checkup.handler({}, None, repo=repo, summarizer=Summarizer) == {"emails_sent": 1, "skipped": 0}
     assert "Set your target mix" in sent[0][1]  # no targets yet
 
     repo.put_targets(
         "u1", {"areas": {"us": {"pct": 80, "fund": "VTI"}, "sector": {"pct": 20, "fund": "SMH"}}, "sector_ceiling": 20}
     )
-    monthly_checkup.handler({}, None, repo=repo, summarizer=Summarizer)
+    monthly_checkup.handler({"force": True}, None, repo=repo, summarizer=Summarizer)  # same month: a manual re-run
     subject, body = sent[-1]
     assert subject.startswith("Your monthly portfolio checkup")
     assert "A calm month." in body and "YOUR MIX VS. TARGET" in body and "Single sector" in body
     assert "NEXT $1,000" in body and "(VTI)" in body
     assert Summarizer.seen["single_sector_ceiling"] == 20 and "u1" not in str(Summarizer.seen)
     assert repo.latest_checkup_summary("u1")["summary"] == "A calm month."
+    # A retry in the same month doesn't email again; a forced manual run does
+    count = len(sent)
+    assert monthly_checkup.handler({}, None, repo=repo, summarizer=Summarizer)["skipped"] == 1 and len(sent) == count
+    monthly_checkup.handler({"force": True}, None, repo=repo, summarizer=Summarizer)
+    assert len(sent) == count + 1
+
+
+def test_monthly_checkup_keeps_going_when_one_user_fails(repo, monkeypatch):
+    from portfolio.handlers import monthly_checkup
+
+    sent = []
+    monkeypatch.setattr(monthly_checkup.notify, "send_email", lambda subject, body: sent.append(body))
+
+    class Flaky:
+        calls = 0
+
+        @staticmethod
+        def checkup_summary(facts):
+            Flaky.calls += 1
+            if Flaky.calls == 1:
+                raise RuntimeError("bedrock down")
+            return "ok"
+
+    start = (datetime.now(UTC).date() - timedelta(days=30)).isoformat()
+    for user in ("u1", "u2"):
+        repo.put_holding(user, {"ticker": "VTI", "shares": 1, "avg_cost": 1})
+    repo.put_prices("VTI", price_series(100, 1, 20, start))
+    with pytest.raises(RuntimeError, match="1 user"):
+        monthly_checkup.handler({}, None, repo=repo, summarizer=Flaky)
+    assert len(sent) == 1
+    monthly_checkup.handler({}, None, repo=repo, summarizer=Flaky)  # the retry only does the failed user
+    assert len(sent) == 2

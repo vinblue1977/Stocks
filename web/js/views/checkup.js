@@ -139,11 +139,14 @@ function editor(data, rerender) {
       onInput: (e) => { values[key].pct = Number(e.target.value) || 0; update(); } }),
     h('input', { type: 'text', value: values[key].fund, maxlength: 10, class: 'upper', 'aria-label': `${label} fund`,
       onInput: (e) => { values[key].fund = e.target.value.toUpperCase().trim(); } })));
-  const unassigned = Object.entries(data.assigned).filter(([, area]) => area === 'unassigned').map(([t]) => t);
-  const assignRows = unassigned.map((ticker) => h('div', { class: 'ed-row' }, h('strong', { text: ticker }),
+  // Every holding with its area; unrecognised ones first. Changing one saves it as your own choice.
+  const tickers = Object.entries(data.assigned)
+    .sort(([a, x], [b, y]) => (x !== 'unassigned') - (y !== 'unassigned') || a.localeCompare(b));
+  const unassigned = tickers.filter(([, area]) => area === 'unassigned').length;
+  const assignRows = tickers.map(([ticker, area]) => h('div', { class: 'ed-row' }, h('strong', { text: ticker }),
     h('select', { 'aria-label': `Area for ${ticker}`, onChange: (e) => { overrides[ticker] = e.target.value; } },
-      h('option', { value: '', text: 'Choose an area' }),
-      Object.entries(data.areas).map(([key, label]) => h('option', { value: key, text: label, selected: overrides[ticker] === key })))));
+      area === 'unassigned' && !overrides[ticker] ? h('option', { value: '', text: 'Choose an area', selected: true }) : null,
+      Object.entries(data.areas).map(([key, label]) => h('option', { value: key, text: label, selected: (overrides[ticker] || area) === key })))));
   const ceiling = h('input', { id: 'ceiling', type: 'number', min: 0, max: 100, step: 1, value: saved?.sector_ceiling ?? 15 });
   const save = h('button', { type: 'button', class: 'btn btn-primary', text: 'Save' });
   save.addEventListener('click', async () => {
@@ -172,10 +175,12 @@ function editor(data, rerender) {
         h('div', { style: { display: 'flex', gap: '8px' } }, save,
           saved ? h('button', { type: 'button', class: 'btn btn-ghost', text: 'Cancel', onClick: () => { editing = false; rerender(); } }) : null)),
       error),
-    unassigned.length ? h('section', { class: 'card', 'aria-labelledby': 'un-h' },
-      h('h2', { id: 'un-h', text: 'Holdings the app doesn\'t recognise' }),
-      h('p', { class: 'small muted', style: { margin: '6px 0 10px' }, text: 'Choose an area so they count toward your mix.' }),
-      assignRows) : null,
+    h('section', { class: 'card', 'aria-labelledby': 'un-h' },
+      h('h2', { id: 'un-h', text: 'Which area each holding counts toward' }),
+      h('p', { class: 'small muted', style: { margin: '6px 0 10px' }, text: unassigned
+        ? `${unassigned} holding${unassigned === 1 ? ' isn\'t' : 's aren\'t'} recognised yet; choose an area so ${unassigned === 1 ? 'it counts' : 'they count'} toward your mix.`
+        : 'Known funds are placed automatically; change any of them here.' }),
+      assignRows),
     h('div', { class: 'footer-note' }, h('span', { text: 'You choose the targets and funds; the app only measures. Not investment advice.' })),
   ];
 }
@@ -199,7 +204,7 @@ export async function renderCheckup(main) {
     fill(main,
       pageHead('Checkup', `How your mix compares with the target you set · prices as of ${fmt.date(data.as_of)}`, switcher),
       tiles(view, data),
-      summaryCard(data.summary),
+      person === 'household' ? summaryCard(data.summary) : null, // the monthly summary covers the household
       mixCard(view, data, rerender),
       h('div', { class: 'row' }, riskCard(view), calcCard(view, data)),
       h('div', { class: 'footer-note' }, h('span', { text: 'You choose the targets and funds; the app only measures. Not investment advice.' })));

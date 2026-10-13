@@ -504,7 +504,10 @@ def put_targets(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         areas[key] = {"pct": int(pct), "fund": fund}
     if sum(a["pct"] for a in areas.values()) != 100:
         raise ApiError(400, "Target percentages must add up to 100")
-    ceiling = int(_number({"c": body.get("sector_ceiling", 100)}, "c", 0, 100))
+    ceiling = _number({"sector_ceiling": body.get("sector_ceiling", 100)}, "sector_ceiling", 0, 100)
+    if ceiling != int(ceiling):
+        raise ApiError(400, "sector_ceiling must be a whole number")
+    ceiling = int(ceiling)
     raw_overrides = body.get("overrides") or {}
     if not isinstance(raw_overrides, dict) or len(raw_overrides) > MAX_HOLDINGS + MAX_WATCHLIST:
         raise ApiError(400, "overrides must be an object of ticker: area")

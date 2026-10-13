@@ -67,3 +67,9 @@ def test_view_groups_overlap_and_small_positions():
     sector = next(d for d in v["drift"] if d["area"] == "sector")
     assert sector["now"] == pytest.approx(0.4348, abs=1e-3) and sector["target"] == 0.2
     assert checkup.view(holdings, histories, None, None)["drift"] is None
+
+
+def test_ticker_without_prices_does_not_erase_risk():
+    holdings = [{"ticker": "VTI", "shares": 1, "avg_cost": 1}, {"ticker": "NEW", "shares": 1, "avg_cost": 1}]
+    histories = {"VTI": [(f"2026-01-{d:02d}", 100.0 + d) for d in range(1, 29)], "NEW": []}
+    assert checkup.view(holdings, histories, None, None)["risk"]["volatility"] is not None

@@ -9,6 +9,8 @@ from __future__ import annotations
 import math
 import statistics
 from collections.abc import Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
 from typing import Any
 
 from portfolio import analytics
@@ -146,7 +148,8 @@ def view(
         "small_positions": sorted(
             ({"ticker": t, "value": round(v, 2)} for t, v in per_ticker.items() if v < SMALL_POSITION), key=lambda x: x["value"]
         ),
-        "risk": risk(analytics.value_history(holdings, histories), market),
+        # Tickers with no prices yet (new, still loading) would empty the shared-date history, so leave them out.
+        "risk": risk(analytics.value_history([h for h in holdings if histories.get(h["ticker"])], histories), market),
     }
 
 
@@ -157,11 +160,16 @@ def build(repo: Any, holdings: Sequence[Mapping[str, Any]], targets: Mapping[str
     """Loads prices and returns the Checkup for the household and each person who has holdings."""
     from portfolio.db import PEOPLE, person_of  # local import keeps this module free of AWS clients
 
-    histories = {t: repo.price_history(t) for t in {h["ticker"] for h in holdings}}
+    tickers = sorted({h["ticker"] for h in holdings})
+    with ThreadPoolExecutor(max_workers=8) as pool:  # one query per ticker; run them side by side
+        histories = dict(zip(tickers, pool.map(repo.price_history, tickers), strict=True))
+    as_of = max((h[-1][0] for h in histories.values() if h), default=None)
     market = histories.get(MARKET_TICKER) or repo.price_history(MARKET_TICKER) or None
+    if market and as_of and market[-1][0] < (date.fromisoformat(as_of) - timedelta(days=7)).isoformat():
+        market = None  # VTI is no longer synced (not held or watched): no stale comparison
     views = {"household": view(holdings, histories, market, targets)}
     for person in PEOPLE:
         subset = [h for h in holdings if person_of(h.get("group", "stocks")) == person]
         if subset:
             views[person] = view(subset, histories, market, targets)
-    return {"as_of": max((h[-1][0] for h in histories.values() if h), default=None), "views": views, "tickers": sorted(histories)}
+    return {"as_of": as_of, "views": views, "tickers": tickers}

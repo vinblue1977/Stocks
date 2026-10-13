@@ -92,21 +92,36 @@ def handler(event: dict[str, Any] | None, context: Any, repo: Repository | None 
     by_user: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for holding in repo.all_holdings():
         by_user[holding["user_id"]].append(holding)
-    sent = 0
+    month = now.strftime("%Y-%m")
+    force = bool((event or {}).get("force"))  # a manual run can send again in the same month
+    sent, skipped, failed = 0, 0, []
     for user_id, holdings in by_user.items():
-        targets = repo.get_targets(user_id)
-        built = checkup.build(repo, holdings, targets)
-        if not built["views"]["household"]["total_value"]:
+        # A retry after a partial failure skips users already emailed this month.
+        last = repo.latest_checkup_summary(user_id)
+        if last and last.get("month") == month and not force:
+            skipped += 1
             continue
-        cutoff = (now - timedelta(days=31)).isoformat(timespec="seconds")
-        alerts = sum(1 for a in repo.list_alerts(user_id) if a["created_at"] >= cutoff)
-        summary = summarizer.checkup_summary(facts(built, targets, alerts))
-        repo.put_checkup_summary(
-            user_id,
-            now.strftime("%Y-%m"),
-            {"summary": summary, "created_at": now.isoformat(timespec="seconds"), "as_of": built["as_of"]},
-        )
-        notify.send_email(f"Your monthly portfolio checkup, {now:%b %d}", email(built, targets, summary, now))
-        sent += 1
-    log(logger, "monthly_checkup_complete", emails=sent)
-    return {"emails_sent": sent}
+        try:
+            targets = repo.get_targets(user_id)
+            built = checkup.build(repo, holdings, targets)
+            if not built["views"]["household"]["total_value"]:
+                continue
+            cutoff = (now - timedelta(days=31)).isoformat(timespec="seconds")
+            alerts = sum(1 for a in repo.list_alerts(user_id, limit=500) if a["created_at"] >= cutoff)
+            summary = summarizer.checkup_summary(facts(built, targets, alerts))
+            notify.send_email(f"Your monthly portfolio checkup, {now:%b %d}", email(built, targets, summary, now))
+            record = {
+                "summary": summary,
+                "month": month,
+                "created_at": now.isoformat(timespec="seconds"),
+                "as_of": built["as_of"],
+            }
+            repo.put_checkup_summary(user_id, month, record)
+            sent += 1
+        except Exception:
+            logger.exception("monthly checkup failed")
+            failed.append(user_id)
+    log(logger, "monthly_checkup_complete", emails=sent, skipped=skipped, failed=len(failed))
+    if failed:
+        raise RuntimeError(f"Monthly checkup failed for {len(failed)} user(s)")  # retried; done users are skipped
+    return {"emails_sent": sent, "skipped": skipped}
