@@ -1,5 +1,6 @@
 """Asserts the security properties of the synthesized CloudFormation template, in both encryption modes."""
 
+import base64
 import json
 
 import aws_cdk as cdk
@@ -148,7 +149,9 @@ def test_passkeys_with_password_backup(any_template):
     assert branding["Settings"]["categories"]["global"]["colorSchemeMode"] == "DARK"
     (background,) = branding["Assets"]
     assert background["Category"] == "PAGE_BACKGROUND" and background["Extension"] == "JPEG"
+    assert base64.b64decode(background["Bytes"])[:3] == b"\xff\xd8\xff"  # really a JPEG
     assert len(background["Bytes"]) < 1_000_000  # Cognito's limit per asset
+    assert len(json.dumps(any_template.to_json())) < 800_000  # CloudFormation's template limit is 1 MB
 
 
 def test_topics_and_queue_require_tls(any_template):

@@ -75,8 +75,8 @@
           "itemTextColor": "e9ebedff"
         },
         "match": {
-          "itemBackgroundColor": "d1d5dbff",
-          "itemTextColor": "89bdeeff"
+          "itemBackgroundColor": "13283fff",
+          "itemTextColor": "7cc4faff"
         }
       },
       "lightMode": {
@@ -96,7 +96,7 @@
     },
     "focusState": {
       "darkMode": {
-        "borderColor": "539fe5ff"
+        "borderColor": "7cc4faff"
       },
       "lightMode": {
         "borderColor": "0972d3ff"
@@ -143,10 +143,10 @@
     "link": {
       "darkMode": {
         "defaults": {
-          "textColor": "539fe5ff"
+          "textColor": "7cc4faff"
         },
         "hover": {
-          "textColor": "89bdeeff"
+          "textColor": "b5ddfbff"
         }
       },
       "lightMode": {
@@ -165,8 +165,8 @@
           "borderColor": "7d8998ff"
         },
         "selected": {
-          "backgroundColor": "539fe5ff",
-          "foregroundColor": "000716ff"
+          "backgroundColor": "7cc4faff",
+          "foregroundColor": "0b1220ff"
         }
       },
       "lightMode": {
@@ -383,8 +383,9 @@
           "textColor": "0b1220ff"
         },
         "disabled": {
-          "backgroundColor": "ffffffff",
-          "borderColor": "ffffffff"
+          "backgroundColor": "1b2740ff",
+          "borderColor": "22304aff",
+          "textColor": "9aa8bfff"
         },
         "hover": {
           "backgroundColor": "b5ddfbff",
@@ -413,19 +414,19 @@
     "secondaryButton": {
       "darkMode": {
         "active": {
-          "backgroundColor": "354150ff",
-          "borderColor": "89bdeeff",
-          "textColor": "89bdeeff"
+          "backgroundColor": "13283fff",
+          "borderColor": "b5ddfbff",
+          "textColor": "b5ddfbff"
         },
         "defaults": {
-          "backgroundColor": "0f1b2aff",
-          "borderColor": "539fe5ff",
-          "textColor": "539fe5ff"
+          "backgroundColor": "121b2eff",
+          "borderColor": "7cc4faff",
+          "textColor": "7cc4faff"
         },
         "hover": {
-          "backgroundColor": "192534ff",
-          "borderColor": "89bdeeff",
-          "textColor": "89bdeeff"
+          "backgroundColor": "13283fff",
+          "borderColor": "b5ddfbff",
+          "textColor": "b5ddfbff"
         }
       },
       "lightMode": {
