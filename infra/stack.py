@@ -728,7 +728,8 @@ class PortfolioTrackerStack(Stack):
 
         # ------------------------------------------------------------------ dashboard deployment
         # Uploads web/ plus a config.json with this stack's API URL and login settings, then
-        # invalidates the CloudFront cache so the new version is live immediately. Browsers revalidate
+        # invalidates the CloudFront cache; the deploy doesn't wait for that to finish, so edges serve the
+        # new version within a minute or two (the CI smoke test waits for it). Browsers revalidate
         # each file on load (max-age=0: a cheap 304 when unchanged) instead of guessing a cache lifetime,
         # so a deploy doesn't leave them running a new page with an old module; CloudFront keeps its
         # own long cache (s-maxage), which each deploy invalidates.
@@ -754,6 +755,8 @@ class PortfolioTrackerStack(Stack):
             ],
             distribution=distribution,
             distribution_paths=["/*"],
+            # Don't hold the deploy for the cache clear (1-3+ minutes); see the comment above.
+            wait_for_distribution_invalidation=False,
             memory_limit=256,
             log_group=logs.LogGroup(
                 self,
