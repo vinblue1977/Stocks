@@ -35,9 +35,10 @@ All routes need `Authorization: Bearer <Cognito token>`.
 | `GET /profile` | Display names (`owner_name`, `partner_name`) and whether to show the partner page |
 | `GET /portfolio` | Value, gains, allocation and history vs. SPY, under `portfolios.<household\|mine\|partner>.<overall\|stocks\|auto>`. During market hours values use intraday prices (`live_as_of` is the quote time, otherwise null); history stays on closing prices. The Overview re-fetches every 15 minutes while open and visible |
 | `GET /signals` | RSI, moving averages, drawdown, sentiment |
-| `GET /news?ticker=VTI` | AI briefing and scored headlines |
+| `GET /news?ticker=VTI` | AI briefing and scored headlines (held or watched tickers) |
 | `GET/POST/DELETE /rules[/{ruleId}]`, `GET /rule-types` | Alert rules, e.g. `{"type": "drawdown_below", "ticker": "VTI", "params": {"pct": 10}}` |
 | `GET /alerts` | Alert history |
+| `GET /watchlist`, `PUT/DELETE /watchlist/{ticker}` | Tickers you follow but don't hold (up to 10): signals, live price and news, never in totals. Removing one you don't hold deletes its rules |
 
 ## Setup
 

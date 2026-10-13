@@ -217,6 +217,23 @@ def test_weight_rule_uses_combined_portfolio(repo, monkeypatch):
     assert evaluate_signals.handler({}, None, repo=repo)["alerts_sent"] == 1
 
 
+def test_news_covers_watched_tickers_but_not_in_the_portfolio_brief(repo):
+    class Recorder(FakeSummarizer):
+        portfolio_inputs = None
+
+        @staticmethod
+        def brief_for_portfolio(briefs, alerts):
+            Recorder.portfolio_inputs = sorted(briefs)
+            return "Portfolio summary"
+
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
+    repo.put_watch("u1", "NVDA")
+    result = news_ingest.handler({}, None, repo=repo, provider=FakeNews(), summarizer=Recorder)
+    assert result["summarized"] == ["NVDA", "VTI"]
+    assert repo.latest_brief("NVDA")["summary"] == "NVDA summary"
+    assert Recorder.portfolio_inputs == ["VTI"]
+
+
 def test_news_skips_excluded_tickers(repo, monkeypatch):
     import dataclasses
 
@@ -432,3 +449,19 @@ def test_intraday_quotes_keep_todays_quote_when_a_run_skips_a_ticker(repo):
     repo.put_quotes({"VTI": earlier, "OLD": stale})
     intraday_quotes.handler({}, None, repo=repo, provider=FakeQuotes(), now=datetime(2026, 10, 12, 15, 0, tzinfo=UTC))
     assert set(repo.latest_quotes()) == {"SPY", "VTI"} and repo.latest_quotes()["VTI"]["last"] == 9
+
+
+def test_watching_turns_news_on_for_a_partner_only_ticker(repo, monkeypatch):
+    import dataclasses
+
+    from portfolio import config
+    from portfolio.news_policy import news_off
+
+    holdings = [{"ticker": "VTI", "group": "stocks"}, {"ticker": "PQR", "group": "partner_stocks"}]
+    assert news_off(holdings, {"ITOT"}, partner_news=False) == {"ITOT", "PQR"}
+    assert news_off(holdings, {"ITOT"}, partner_news=False, watched={"PQR", "ITOT"}) == {"ITOT"}
+    cfg = dataclasses.replace(config.get_config(), partner_news=False)
+    monkeypatch.setattr(news_ingest, "get_config", lambda: cfg)
+    repo.put_holding("u1", {"ticker": "PQR", "group": "partner_stocks", "shares": 1, "avg_cost": 1})
+    repo.put_watch("u1", "PQR")
+    assert news_ingest.handler({}, None, repo=repo, provider=FakeNews(), summarizer=FakeSummarizer)["tickers"] == ["PQR"]

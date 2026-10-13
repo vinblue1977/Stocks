@@ -18,7 +18,7 @@ from portfolio.news_policy import news_off
 
 logger = get_logger(__name__)
 
-HISTORY_DAYS = 450  # calendar days, enough for a 200-day average plus a 1-year high
+HISTORY_DAYS = signals.HISTORY_DAYS
 
 
 def handler(event: dict[str, Any] | None, context: Any, repo: Repository | None = None) -> dict[str, Any]:
@@ -32,7 +32,7 @@ def handler(event: dict[str, Any] | None, context: Any, repo: Repository | None 
     latest: dict[str, float] = {}
     cfg = get_config()
     holdings = repo.all_holdings()
-    no_news = news_off(holdings, cfg.news_excluded, cfg.partner_news)
+    no_news = news_off(holdings, cfg.news_excluded, cfg.partner_news, {w["ticker"] for w in repo.all_watched()})
     for ticker in repo.tracked_tickers():
         history = repo.price_history(ticker, since)
         brief = None if ticker in no_news else repo.latest_brief(ticker)  # no stale sentiment once news is off

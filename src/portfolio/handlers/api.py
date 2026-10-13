@@ -16,7 +16,7 @@ from typing import Any
 
 import boto3
 
-from portfolio import analytics, rules
+from portfolio import analytics, rules, signals
 from portfolio.config import get_config
 from portfolio.db import GROUPS, KINDS, PEOPLE, ConcurrentUpdateError, Repository, kind_of, person_of
 from portfolio.llm import sentiment_label
@@ -29,6 +29,8 @@ logger = get_logger(__name__)
 MAX_BODY_BYTES = 10_000
 MAX_HOLDINGS = 40  # unique tickers across all groups; keeps the price sync under Tiingo's free 50 requests/hour
 MAX_RULES = 50
+MAX_WATCHLIST = 10
+MAX_TRACKED = 48  # unique tickers across holdings and the watchlist; the benchmark makes 49 of Tiingo's 50/hour
 HISTORY_DAYS = 400  # calendar days of history for the performance chart (about 1 trading year + margin)
 
 JSON_HEADERS = {
@@ -101,12 +103,17 @@ def _group(event: dict[str, Any]) -> str:
 
 
 def _admit_ticker(repo: Repository, user_id: str, ticker: str) -> bool:
-    """Enforce the unique-ticker cap; return True if the ticker is new to the whole portfolio."""
-    held = {h["ticker"] for h in repo.list_holdings(user_id)}
+    """Enforce the ticker caps; return True if the ticker is new to the tracked set (needs a price backfill)."""
+    held = repo.held_tickers(user_id)
     if ticker in held:
         return False
     if len(held) >= MAX_HOLDINGS:
         raise ApiError(409, f"You can track up to {MAX_HOLDINGS} different tickers")
+    watched = repo.watched_tickers(user_id)
+    if ticker in watched:
+        return False
+    if len(held | watched) >= MAX_TRACKED:
+        raise ApiError(409, f"You can follow up to {MAX_TRACKED} different tickers across holdings and the watchlist")
     return True
 
 
@@ -208,10 +215,23 @@ def record_purchase(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
 
 
 def delete_holding(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    user_id = _user_id(event)
     group = _group(event)
     ticker = _ticker(event.get("pathParameters", {}).get("ticker"))
-    repo.delete_holding(_user_id(event), group, ticker)
+    repo.delete_holding(user_id, group, ticker)
+    _prune_rules(repo, user_id, ticker)
     return _response(204, {})
+
+
+def _prune_rules(repo: Repository, user_id: str, ticker: str) -> None:
+    """Delete rules that can no longer be checked: any rule once the ticker is neither held nor watched,
+    and portfolio-share rules once it isn't held."""
+    if ticker in repo.held_tickers(user_id):
+        return
+    watched = ticker in repo.watched_tickers(user_id)
+    for rule in repo.list_rules(user_id):
+        if rule["ticker"] == ticker and (not watched or rule["type"] == "weight_above"):
+            repo.delete_rule(user_id, rule["rule_id"])
 
 
 def _request_backfill(ticker: str) -> None:
@@ -250,6 +270,11 @@ def create_rule(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         rule = rules.validate_rule(_body(event))
     except rules.RuleValidationError as exc:
         raise ApiError(400, str(exc)) from exc
+    held = repo.held_tickers(user_id)
+    if rule["ticker"] not in held | repo.watched_tickers(user_id):
+        raise ApiError(400, f"Add {rule['ticker']} to your holdings or watchlist first")
+    if rule["type"] == "weight_above" and rule["ticker"] not in held:
+        raise ApiError(400, "A portfolio-share rule needs a ticker you hold")
     if len(repo.list_rules(user_id)) >= MAX_RULES:
         raise ApiError(409, f"You can create up to {MAX_RULES} rules")
     return _response(201, repo.create_rule(user_id, rule))
@@ -340,7 +365,8 @@ def get_profile(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
 
 
 def get_signals(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
-    tickers = sorted({h["ticker"] for h in repo.list_holdings(_user_id(event))})
+    user_id = _user_id(event)
+    tickers = sorted(repo.held_tickers(user_id) | repo.watched_tickers(user_id))
     return _response(200, {"signals": [s for t in tickers if (s := repo.get_signal(t))]})
 
 
@@ -349,12 +375,13 @@ def get_news(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     params = event.get("queryStringParameters") or {}
     cfg = get_config()
     holdings = repo.list_holdings(user_id)
-    excluded = news_off(holdings, cfg.news_excluded, cfg.partner_news)
+    watched = repo.watched_tickers(user_id)
+    excluded = news_off(holdings, cfg.news_excluded, cfg.partner_news, watched)
     held = sorted({h["ticker"] for h in holdings})
     requested = params.get("ticker")
     tickers = [_ticker(requested)] if requested else [t for t in held if t not in excluded]
-    if requested and tickers[0] not in held:
-        raise ApiError(404, "Ticker is not in your portfolio")
+    if requested and tickers[0] not in held and tickers[0] not in watched:
+        raise ApiError(404, "Ticker is not in your portfolio or watchlist")
     if requested and tickers[0] in excluded:  # don't show old headlines or briefs once news is off
         return _response(200, {"brief": None, "articles": [], "news_excluded": sorted(excluded)})
     since = (datetime.now(UTC) - timedelta(days=7)).isoformat(timespec="seconds")
@@ -367,6 +394,73 @@ def get_news(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     articles.sort(key=lambda a: a["published_at"], reverse=True)
     brief = repo.latest_brief(tickers[0] if requested else "ALL")
     return _response(200, {"brief": brief, "articles": articles[:60], "news_excluded": sorted(excluded)})
+
+
+# ---------------------------------------------------------------- watchlist
+def list_watchlist(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """Watched tickers with everything the page shows: signals, today's live price and the news summary."""
+    user_id = _user_id(event)
+    holdings = repo.list_holdings(user_id)
+    held = {h["ticker"] for h in holdings}
+    watchlist = sorted(repo.list_watchlist(user_id), key=lambda w: w["ticker"])
+    cfg = get_config()
+    no_news = news_off(holdings, cfg.news_excluded, cfg.partner_news, {w["ticker"] for w in watchlist})
+    now = datetime.now(UTC)
+    today = trading_day(now).isoformat()
+    quotes = repo.latest_quotes()
+    since = (now.date() - timedelta(days=signals.HISTORY_DAYS)).isoformat()
+    items = []
+    for watch in watchlist:
+        ticker = watch["ticker"]
+        # The stored snapshot can be missing (new ticker) or stale (re-added after a while unwatched);
+        # then compute one from the prices until the evening run stores a fresh one.
+        signal = repo.get_signal(ticker)
+        latest_date = repo.latest_price_date(ticker)
+        if latest_date and (signal is None or signal["as_of"] < latest_date):
+            signal = signals.compute_signals(ticker, repo.price_history(ticker, since))
+        quote = quotes.get(ticker)
+        live = quote and signal and quote.get("date") == today and signal["as_of"] < today
+        brief = None if ticker in no_news else repo.latest_brief(ticker)
+        items.append(
+            {
+                **watch,
+                "held": ticker in held,
+                "signal": signal,
+                "live": {"last": quote["last"], "timestamp": quote.get("timestamp")} if live else None,
+                "brief": {k: brief.get(k) for k in ("summary", "sentiment_7d", "label", "headline_count", "generated_at")}
+                if brief
+                else None,
+                "news_off": ticker in no_news,
+            }
+        )
+    return _response(200, {"watchlist": items, "max": MAX_WATCHLIST})
+
+
+def put_watch(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    user_id = _user_id(event)
+    ticker = _ticker((event.get("pathParameters") or {}).get("ticker"))
+    watched = repo.watched_tickers(user_id)
+    if ticker in watched:
+        return _response(200, {"ticker": ticker})
+    if len(watched) >= MAX_WATCHLIST:
+        raise ApiError(409, f"You can watch up to {MAX_WATCHLIST} tickers")
+    held = repo.held_tickers(user_id)
+    new_ticker = ticker not in held
+    if new_ticker and len(held | watched) >= MAX_TRACKED:
+        raise ApiError(409, f"You can follow up to {MAX_TRACKED} different tickers across holdings and the watchlist")
+    saved = repo.put_watch(user_id, ticker)
+    if new_ticker:
+        _request_backfill(ticker)
+    return _response(201, saved)
+
+
+def delete_watch(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """Stop watching; a ticker that isn't held also loses its alert rules, which would have no data."""
+    user_id = _user_id(event)
+    ticker = _ticker((event.get("pathParameters") or {}).get("ticker"))
+    repo.delete_watch(user_id, ticker)
+    _prune_rules(repo, user_id, ticker)
+    return _response(204, {})
 
 
 Route = Callable[[dict[str, Any], Repository], dict[str, Any]]
@@ -385,6 +479,9 @@ ROUTES: dict[str, Route] = {
     "GET /profile": get_profile,
     "GET /signals": get_signals,
     "GET /news": get_news,
+    "GET /watchlist": list_watchlist,
+    "PUT /watchlist/{ticker}": put_watch,
+    "DELETE /watchlist/{ticker}": delete_watch,
 }
 
 

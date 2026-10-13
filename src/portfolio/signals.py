@@ -8,6 +8,7 @@ from typing import Any
 from portfolio import indicators
 
 TRADING_DAYS_PER_YEAR = 252
+HISTORY_DAYS = 450  # calendar days of prices a snapshot needs: a 200-day average plus a 1-year high
 
 
 def _round(value: float | None, digits: int = 4) -> float | None:

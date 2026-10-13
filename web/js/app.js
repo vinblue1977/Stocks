@@ -6,10 +6,12 @@ import { renderAlerts } from './views/alerts.js';
 import { renderPerson } from './views/holdings.js';
 import { renderNews } from './views/news.js';
 import { renderOverview } from './views/overview.js';
+import { renderWatchlist } from './views/watchlist.js';
 
 const ROUTES = {
   overview: renderOverview,
   news: renderNews,
+  watchlist: renderWatchlist,
   alerts: renderAlerts,
 };
 const main = document.getElementById('main');

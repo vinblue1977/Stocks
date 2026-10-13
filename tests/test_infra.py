@@ -104,6 +104,13 @@ def test_every_route_requires_jwt(any_template):
         assert route["Properties"]["AuthorizationType"] == "JWT"
 
 
+def test_stack_routes_match_the_handler(any_template):
+    from portfolio.handlers.api import ROUTES
+
+    keys = {r["Properties"]["RouteKey"] for r in any_template.find_resources("AWS::ApiGatewayV2::Route").values()}
+    assert keys == set(ROUTES)
+
+
 def test_api_is_throttled_and_logged(any_template):
     any_template.has_resource_properties(
         "AWS::ApiGatewayV2::Stage",

@@ -5,6 +5,7 @@ import { fmt, h, icon, pageHead, sentimentTag, tone } from '../ui.js';
 
 let selected = 'All';
 let groupFilter = 'all'; // all, a person (mine / partner) or a kind (stocks / auto)
+let watched = null; // a watched ticker opened from the Watchlist (#/news?ticker=X), shown as an extra chip
 
 function safeUrl(url) {
   try { return new URL(url).protocol === 'https:' ? url : null; } catch { return null; }
@@ -91,7 +92,15 @@ function signalsCard(signals, rules) {
     h('p', { class: 'muted small', style: { marginBottom: 0 }, text: 'RSI above 70 is commonly read as overbought, below 30 as oversold. News score runs from −1 (negative) to +1 (positive).' })));
 }
 
-export async function renderNews(main) {
+export async function renderNews(main, { keepWatched = false } = {}) {
+  const wanted = new URLSearchParams(location.hash.split('?')[1] || '').get('ticker');
+  if (wanted) {
+    selected = wanted.toUpperCase();
+    groupFilter = 'all';
+    history.replaceState(null, '', '#/news'); // later chip clicks re-render without re-applying it
+  } else if (!keepWatched) {
+    watched = null; // a fresh visit shows only your holdings
+  }
   const [holdingsRes, signalsRes, rulesRes] = await Promise.all([api('GET', '/holdings'), api('GET', '/signals'), api('GET', '/rules')]);
   const filters = hasPartner()
     ? [['all', 'Everyone'], ['mine', possessive('mine')], ['partner', possessive('partner')]]
@@ -100,6 +109,8 @@ export async function renderNews(main) {
   const matches = (x) => groupFilter === 'all' || GROUPS[x.group]?.person === groupFilter || GROUPS[x.group]?.kind === groupFilter;
   const inGroup = holdingsRes.holdings.filter(matches);
   const allTickers = [...new Set(inGroup.map((x) => x.ticker))].sort();
+  if (wanted && !allTickers.includes(selected)) watched = selected;
+  if (watched && !allTickers.includes(watched)) allTickers.push(watched);
   if (selected !== 'All' && !allTickers.includes(selected)) selected = 'All';
   const news = await api('GET', selected === 'All' ? '/news' : `/news?ticker=${encodeURIComponent(selected)}`);
   const newsOff = new Set(news.news_excluded || []);
@@ -112,13 +123,13 @@ export async function renderNews(main) {
   const groupChips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Filter by group' },
     filters.map(([key, label]) => h('button', {
       type: 'button', class: 'chip-btn', 'aria-pressed': String(key === groupFilter), text: label,
-      onClick: () => { groupFilter = key; selected = 'All'; renderNews(main); },
+      onClick: () => { groupFilter = key; selected = 'All'; watched = null; renderNews(main, { keepWatched: true }); },
     })));
 
   const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Filter by ticker' },
     ['All', ...tickers].map((t) => h('button', {
       type: 'button', class: 'chip-btn', 'aria-pressed': String(t === selected), text: t,
-      onClick: () => { selected = t; renderNews(main); },
+      onClick: () => { selected = t; if (t !== watched) watched = null; renderNews(main, { keepWatched: true }); },
     })));
   main.replaceChildren(
     pageHead('News & signals', 'Headlines from Finnhub, scored and summarized each weekday evening', groupChips),

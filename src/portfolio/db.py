@@ -6,6 +6,7 @@ Key design (pk / sk):
     USER#<uid>      RULE#<rule_id>               an alert rule (gsi1: RULES / <uid>#<rule_id>)
     USER#<uid>      RULESTATE#<rule_id>          whether the rule is currently triggered
     USER#<uid>      ALERT#<iso_ts>#<rule_id>     alert history (expires after 180 days)
+    USER#<uid>      WATCH#<ticker>               a watched ticker, not held (gsi1: WATCHLIST / <ticker>#<uid>)
     PRICE#<ticker>  <yyyy-mm-dd>                 daily adjusted close
     PRICEMETA#<ticker> BACKFILL                  set once the full history has loaded
     NEWS#<ticker>   <iso_ts>#<article_id>        scored headline (expires after 30 days)
@@ -230,10 +231,43 @@ class Repository:
         return result
 
     def tracked_tickers(self) -> list[str]:
+        """Tickers the jobs keep prices and signals for: held, watched and the benchmark."""
         cfg = get_config()
-        tickers = {h["ticker"] for h in self.all_holdings()}
+        tickers = {h["ticker"] for h in self.all_holdings()} | {w["ticker"] for w in self.all_watched()}
         tickers.add(cfg.benchmark_ticker)
         return sorted(tickers)
+
+    # ---------- watchlist ----------
+    # Tickers followed without holding them: prices, signals, news and rules, but never in totals.
+    def list_watchlist(self, user_id: str) -> list[dict[str, Any]]:
+        items = self._query_all(KeyConditionExpression=Key("pk").eq(f"USER#{user_id}") & Key("sk").begins_with("WATCH#"))
+        return [_clean(i) for i in items]
+
+    def held_tickers(self, user_id: str) -> set[str]:
+        return {h["ticker"] for h in self.list_holdings(user_id)}
+
+    def watched_tickers(self, user_id: str) -> set[str]:
+        return {w["ticker"] for w in self.list_watchlist(user_id)}
+
+    def put_watch(self, user_id: str, ticker: str) -> dict[str, Any]:
+        item = {
+            "pk": f"USER#{user_id}",
+            "sk": f"WATCH#{ticker}",
+            "gsi1pk": "WATCHLIST",
+            "gsi1sk": f"{ticker}#{user_id}",
+            "ticker": ticker,
+            "added_at": _now_iso(),
+        }
+        self.table.put_item(Item=item)
+        return _clean(item)
+
+    def delete_watch(self, user_id: str, ticker: str) -> None:
+        self.table.delete_item(Key={"pk": f"USER#{user_id}", "sk": f"WATCH#{ticker}"})
+
+    def all_watched(self) -> list[dict[str, Any]]:
+        """Every watched ticker across all users (used by scheduled jobs). Adds `user_id`."""
+        items = self._query_all(IndexName="gsi1", KeyConditionExpression=Key("gsi1pk").eq("WATCHLIST"))
+        return [{**_clean(i), "user_id": i["pk"].removeprefix("USER#")} for i in items]
 
     # ---------- rules ----------
     def list_rules(self, user_id: str) -> list[dict[str, Any]]:
