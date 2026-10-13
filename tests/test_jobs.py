@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from conftest import price_series
 
+from portfolio import llm
 from portfolio.handlers import evaluate_signals, intraday_quotes, news_ingest, price_sync, weekly_report
 from portfolio.llm import ArticleScore, TickerBrief
 from portfolio.market import market_open
@@ -326,6 +327,18 @@ def test_news_reuses_summaries_when_nothing_is_new(repo):
     news.extra = True  # a new headline arrives
     third = news_ingest.handler({}, None, repo=repo, provider=news, summarizer=CountingSummarizer)
     assert third["summarized"] == ["VTI"] and third["claude_calls"] == 2
+
+
+def test_news_resummarizes_after_prompt_change(repo, monkeypatch):
+    CountingSummarizer.ticker_calls = CountingSummarizer.portfolio_calls = 0
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
+    news = GrowingNews()
+    news_ingest.handler({}, None, repo=repo, provider=news, summarizer=CountingSummarizer)
+    assert repo.latest_brief("VTI")["prompt_version"] == llm.PROMPT_VERSION
+
+    monkeypatch.setattr(llm, "PROMPT_VERSION", llm.PROMPT_VERSION + 1)  # no new headlines, but new rules
+    again = news_ingest.handler({}, None, repo=repo, provider=news, summarizer=CountingSummarizer)
+    assert again["summarized"] == ["VTI"] and again["claude_calls"] == 2
 
 
 def test_portfolio_brief_regenerates_when_alerts_change(repo):
