@@ -30,6 +30,25 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 11 | CSV export and import | S–M | Download holdings and history; import a broker export. Also the simple route to broker sync |
 | 12 | Install on your phone | Done | Home-screen icon, full screen (PR #30) |
 | 13 | Ask about my portfolio | M | Questions answered by Claude from your own data. Small Bedrock cost per question |
+| 14 | Push notifications | M | Alerts as phone notifications (home-screen app on iOS 16.4+) |
+| 15 | Stay signed in on the phone | M | A few days, with Face ID on open. Security trade-off; design first |
+
+## Understand what you own
+| # | Idea | Effort | Notes |
+|---|---|---|---|
+| 16 | Fund overlap | M | Look through ETFs to real holdings, e.g. VTI and VOO overlap |
+| 17 | Sector and region mix | M | From fund holdings; fits the planned pie chart |
+| 18 | Fees in dollars | S | Expense ratios as dollars per year |
+
+## Track progress
+| # | Idea | Effort | Notes |
+|---|---|---|---|
+| 19 | Biggest movers | S | Top gainers and losers over a chosen period |
+| 20 | Daily gains calendar | S | Heatmap of up and down days |
+| 21 | Year-end summary | M | Growth, contributions, best and worst, dividends; optional PDF |
+| 22 | Notes per holding | S | "Why I bought" notes and a decision journal |
+| 23 | Net worth | M | Manually updated accounts (401k, savings, home) for one household total |
+| 24 | Ticker detail page | M | Price chart with your buys, news and signals |
 
 ## Also planned
 - Overview: drop the SPY comparison (column, tile, dashed chart line), keep your own 1Y return, and stop syncing SPY prices.
