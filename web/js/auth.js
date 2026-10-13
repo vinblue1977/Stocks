@@ -61,6 +61,13 @@ export async function login() {
   location.assign(url.toString());
 }
 
+// Cognito's page for registering a passkey on this device; it needs the sign-in session from login().
+export function addPasskeyUrl() {
+  const url = new URL(`${cfg.authDomain}/passkeys/add`);
+  url.search = new URLSearchParams({ client_id: cfg.clientId, redirect_uri: redirectUri() }).toString();
+  return url.toString();
+}
+
 export function logout() {
   sessionStorage.removeItem(STORE);
   const url = new URL(`${cfg.authDomain}/logout`);
