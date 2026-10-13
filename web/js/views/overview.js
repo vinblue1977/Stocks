@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { donut, valueChart } from '../charts.js';
 import { GROUPS, KINDS, groupChip, groupLabel, hasPartner, personName, portfolioTitle, possessive } from '../groups.js';
-import { fill, fmt, h, icon, pageHead, tone } from '../ui.js';
+import { add, fill, fmt, h, icon, pageHead, tone } from '../ui.js';
 
 const RANGES = { '1M': 22, '3M': 66, '1Y': 252, All: Infinity };
 const PALETTE = ['#BFE3FF', '#7CC4FA', '#3E8FD6', '#2A5F96', '#1D4573', '#F5A35C', '#F5C38F', '#C97B3F', '#8392AB', '#5A6B85'];
@@ -77,7 +77,7 @@ function performanceCard(summary) {
   const head = h('div', { class: 'card-head' }, h('h2', { id: 'perf-h', text: `Performance · ${viewLabel()}` }),
     h('div', { class: 'segmented', role: 'group', 'aria-label': 'Time range' }, buttons));
   if (points.length < 2) {
-    card.append(head, h('p', { class: 'muted small', text: 'Not enough price history yet for this view.' }));
+    add(card, head, h('p', { class: 'muted small', text: 'Not enough price history yet for this view.' }));
     return card;
   }
   const first = points[0];
@@ -85,7 +85,7 @@ function performanceCard(summary) {
   const change = last.value - first.value;
   const span = range === 'All' ? 'all history' : `the last ${range}`;
   const host = h('div', { class: 'chart-host' });
-  card.append(head,
+  add(card, head,
     h('div', { class: 'perf-summary' },
       h('span', { class: `perf-return ${tone(change)}`, text: fmt.signedPct(first.value ? change / first.value : null, 1) }),
       h('span', { class: tone(change), text: fmt.signedMoney(change) }),
@@ -132,12 +132,12 @@ function allocationCard(summary) {
       type: 'button', 'aria-pressed': String(key === by), text,
       onClick: () => { breakdown = key; swapCard(card, allocationCard(summary)); },
     })));
-  card.append(h('div', { class: 'card-head' }, h('h2', { id: 'alloc-h', text: `Allocation · ${viewLabel()}` }), switcher));
+  add(card, h('div', { class: 'card-head' }, h('h2', { id: 'alloc-h', text: `Allocation · ${viewLabel()}` }), switcher));
   if (!items.length) {
-    card.append(h('p', { class: 'muted', text: 'Nothing in this group yet.' }));
+    add(card, h('p', { class: 'muted', text: 'Nothing in this group yet.' }));
     return card;
   }
-  card.append(
+  add(card,
     h('div', { class: 'alloc-top' },
       donut(items, { label: 'Total', value: compactMoney(total), ariaLabel: `Allocation: ${items.map((x) => `${x.name} ${fmt.pct(x.weight)}`).join(', ')}` }),
       h('div', { class: 'alloc-list' }, items.map((x) => h('div', { class: 'alloc-row' },
@@ -254,7 +254,7 @@ function holdingsCard(summary) {
     [['both', 'Both'], ['stocks', 'Stocks'], ['auto', 'Auto']].map(([key, text]) => h('button', {
       type: 'button', 'aria-pressed': String(key === kindFilter), text, onClick: () => { kindFilter = key; redraw(); },
     })));
-  card.append(
+  add(card,
     h('div', { class: 'card-head' }, h('h2', { id: 'hold-h', text: `Holdings · ${viewLabel()}` }),
       h('div', { class: 'card-tools' },
         h('span', { class: 'muted small', text: `${rows.length} position${rows.length === 1 ? '' : 's'}` }), filter)),
