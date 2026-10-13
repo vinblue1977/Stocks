@@ -4,6 +4,7 @@
 
 const STORE = 'pt.tokens';
 const PKCE = 'pt.pkce';
+const RETRY = 'pt.retry';
 let cfg;
 
 function b64url(bytes) {
@@ -82,18 +83,31 @@ export async function initAuth(config) {
     const pkce = JSON.parse(sessionStorage.getItem(PKCE) || '{}');
     sessionStorage.removeItem(PKCE);
     history.replaceState(null, '', `${location.pathname}${location.hash || '#/overview'}`);
-    if (!pkce.state || pkce.state !== params.get('state')) {
+    try {
+      // Missing state: the callback opened in another tab, an old bookmark, or the back button.
+      if (!pkce.state || pkce.state !== params.get('state')) throw new Error('state mismatch');
+      save(await tokenRequest({
+        grant_type: 'authorization_code',
+        code: params.get('code'),
+        redirect_uri: redirectUri(),
+        code_verifier: pkce.verifier,
+      }));
+    } catch {
+      if (load()) { sessionStorage.removeItem(RETRY); return true; } // already signed in in this tab
+      // Restart sign-in once (Cognito's session usually makes it instant); a second failure in a row shows the error.
+      if (!sessionStorage.getItem(RETRY)) {
+        sessionStorage.setItem(RETRY, '1');
+        await login();
+        return false;
+      }
+      sessionStorage.removeItem(RETRY);
       throw new Error('Sign-in could not be verified. Please try again.');
     }
-    save(await tokenRequest({
-      grant_type: 'authorization_code',
-      code: params.get('code'),
-      redirect_uri: redirectUri(),
-      code_verifier: pkce.verifier,
-    }));
+    sessionStorage.removeItem(RETRY);
     return true;
   }
   if (params.has('error')) {
+    sessionStorage.removeItem(RETRY);
     history.replaceState(null, '', location.pathname);
     if (load()) return true; // e.g. a cancelled passkey registration: still signed in
     throw new Error(params.get('error_description') || 'Sign-in was cancelled.');
