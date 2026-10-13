@@ -1,6 +1,7 @@
 import email
 from datetime import UTC, date, datetime, timedelta
 
+from botocore.exceptions import ClientError
 from conftest import price_series
 
 from portfolio import checkup, notify, report_pdf
@@ -60,13 +61,38 @@ def test_deliver_sends_pdf_and_falls_back_to_text(repo, monkeypatch):
     pdfs, texts = [], []
     monkeypatch.setattr(monthly_checkup.notify, "send_email_with_pdf", lambda s, b, f, p: pdfs.append((b, f, p)))
     monkeypatch.setattr(monthly_checkup.notify, "send_email", lambda s, b: texts.append(b))
+    cfg = monthly_checkup.get_config()
+    monkeypatch.setattr(monthly_checkup, "get_config", lambda: type(cfg)(**{**cfg.__dict__, "report_email": "me@example.com"}))
     monthly_checkup.deliver(built, TARGETS, "One.\nTwo.", now)
     body, filename, pdf = pdfs[0]
     assert filename == "Checkup-2026-11.pdf" and pdf.startswith(b"%PDF") and "attached as a PDF" in body and not texts
 
     def broken(*args):
-        raise RuntimeError("SES says the address isn't verified")
+        raise ClientError({"Error": {"Code": "MessageRejected", "Message": "Email address is not verified."}}, "SendEmail")
 
     monkeypatch.setattr(monthly_checkup.notify, "send_email_with_pdf", broken)
     monthly_checkup.deliver(built, TARGETS, "One.\nTwo.", now)
     assert "YOUR MIX VS. TARGET" in texts[0]
+
+
+def test_minus_signs_stay_plain():
+    assert report_pdf._spct(-0.12) == "-12%" and report_pdf._escape("−5% → ≥ 3 <b>") == "-5% -&gt; &gt;= 3 &lt;b&gt;"
+
+
+def test_timeout_after_sending_does_not_send_twice(repo, monkeypatch):
+    import pytest
+    from botocore.exceptions import ReadTimeoutError
+
+    built = built_for(repo)
+    texts = []
+    cfg = monthly_checkup.get_config()
+    monkeypatch.setattr(monthly_checkup, "get_config", lambda: type(cfg)(**{**cfg.__dict__, "report_email": "me@example.com"}))
+    monkeypatch.setattr(monthly_checkup.notify, "send_email", lambda s, b: texts.append(b))
+
+    def timeout(*args):
+        raise ReadTimeoutError(endpoint_url="https://email.us-east-2.amazonaws.com")
+
+    monkeypatch.setattr(monthly_checkup.notify, "send_email_with_pdf", timeout)
+    with pytest.raises(ReadTimeoutError):
+        monthly_checkup.deliver(built, TARGETS, "One.\nTwo.", datetime(2026, 11, 7, tzinfo=UTC))
+    assert texts == []

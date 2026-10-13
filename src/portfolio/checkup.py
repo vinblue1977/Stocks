@@ -139,26 +139,22 @@ def view(
     groups: dict[str, list[str]] = {}
     for ticker in sorted(per_ticker, key=lambda t: -per_ticker[t]):
         groups.setdefault(area_of(ticker, overrides), []).append(ticker)
+    ranked = [
+        {"ticker": t, "value": round(v, 2), "area": area_of(t, overrides), "return_1y": analytics.trailing_return(histories[t])}
+        for t, v in sorted(per_ticker.items(), key=lambda kv: -kv[1])
+    ]
     return {
         "total_value": total,
+        "holdings": ranked,
+        "top": ranked[:5],
         "by_area": {k: round(v, 2) for k, v in by_area.items()},
         "drift": drift(by_area, total, area_pct) if targets else None,
         "effective_holdings": effective_holdings(per_ticker),
         "holdings_count": len(per_ticker),
-        "top": [{"ticker": t, "value": round(v, 2)} for t, v in sorted(per_ticker.items(), key=lambda kv: -kv[1])[:5]],
         "overlap": {k: [{"ticker": t, "value": round(per_ticker[t], 2)} for t in ts] for k, ts in groups.items() if len(ts) > 1},
         "small_positions": sorted(
             ({"ticker": t, "value": round(v, 2)} for t, v in per_ticker.items() if v < SMALL_POSITION), key=lambda x: x["value"]
         ),
-        "holdings": [
-            {
-                "ticker": t,
-                "value": round(v, 2),
-                "area": area_of(t, overrides),
-                "return_1y": analytics.trailing_return(histories[t]),
-            }
-            for t, v in sorted(per_ticker.items(), key=lambda kv: -kv[1])
-        ],
         "history_1y": _with_market(series[-(TRADING_DAYS + 1) :], market),
         "risk": risk(series, market),
     }

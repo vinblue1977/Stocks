@@ -10,6 +10,8 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from botocore.exceptions import BotoCoreError, ClientError
+
 from portfolio import checkup, llm, notify, report_pdf
 from portfolio.buckets import AREAS
 from portfolio.config import get_config
@@ -115,12 +117,20 @@ def short_email(built: dict[str, Any], targets: dict[str, Any] | None) -> str:
 def deliver(built: dict[str, Any], targets: dict[str, Any] | None, summary: str, now: datetime) -> None:
     """PDF by SES; if that fails (PDF, SES, unverified address), the plain-text email by SNS so the month isn't missed."""
     subject = f"Your monthly portfolio checkup, {now:%b %d}"
+    cfg = get_config()
+    if not cfg.report_email:  # no SES address configured: plain text is the normal path
+        notify.send_email(subject, email(built, targets, summary, now))
+        return
     try:
-        cfg = get_config()
         pdf = report_pdf.build_pdf(built, targets, summary, {"mine": cfg.owner_name, "partner": cfg.partner_name}, f"{now:%B %Y}")
         notify.send_email_with_pdf(subject, short_email(built, targets), f"Checkup-{now:%Y-%m}.pdf", pdf)
-    except Exception:
-        logger.exception("PDF checkup email failed; sending plain text")
+    except ClientError:  # SES refused it (e.g. address not verified), so nothing was sent
+        logger.exception("SES refused the PDF checkup; sending plain text")
+        notify.send_email(subject, email(built, targets, summary, now))
+    except (BotoCoreError, OSError):
+        raise  # timeouts etc.: SES may have sent it, so don't send a second email; the run retries
+    except Exception:  # building the PDF failed before anything was sent
+        logger.exception("PDF checkup failed; sending plain text")
         notify.send_email(subject, email(built, targets, summary, now))
 
 

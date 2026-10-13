@@ -36,7 +36,7 @@ def _pct(v: float | None, digits: int = 0) -> str:
 
 
 def _spct(v: float | None, digits: int = 0) -> str:
-    return "—" if v is None else f"{v * 100:+.{digits}f}%".replace("-", "−")
+    return "—" if v is None else f"{v * 100:+.{digits}f}%"  # ASCII minus: shows in every PDF viewer
 
 
 def _usd(v: float) -> str:
@@ -66,7 +66,7 @@ def _tiles(home: Mapping[str, Any]) -> Table:
             "—" if r["beta"] is None else f"{r['beta']:.1f}×",
             f"Volatility {_pct(r['volatility'])} vs {_pct(m.get('volatility'))}",
         ),
-        ("Spread", f"≈ {round(home['effective_holdings'] or 0)} holdings", f"{home['holdings_count']} tickers, by size"),
+        ("Spread", f"~{round(home['effective_holdings'] or 0)} holdings", f"{home['holdings_count']} tickers, by size"),
     ]
     label, big, sub = _style(8, 11, MUTED), _style(17, 22, bold=True), _style(8, 10, MUTED)
     table = Table([[[Paragraph(a, label), Paragraph(b, big), Paragraph(c, sub)] for a, b, c in cells]], colWidths=[WIDTH / 4] * 4)
@@ -188,7 +188,7 @@ def _history_chart(points: Sequence[Mapping[str, Any]], height: float = 2.4 * in
 
 
 def _table(rows: list[list[str]], widths: list[float], right_from: int = 1) -> Table:
-    table = Table(rows, colWidths=widths)
+    table = Table(rows, colWidths=widths, repeatRows=1)  # header repeats if a table runs onto the next page
     table.setStyle(
         TableStyle(
             [
@@ -343,6 +343,10 @@ def build_pdf(
     return buffer.getvalue()
 
 
+# Characters outside the built-in PDF fonts' set, which some viewers can't show; a lost minus would read as a gain.
+_PLAIN = str.maketrans({"\u2212": "-", "\u2248": "~", "\u2192": "->", "\u2265": ">=", "\u2264": "<="})
+
+
 def _escape(text: str) -> str:
     """Paragraph text is a small markup language; Claude's text must not be read as tags."""
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return text.translate(_PLAIN).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
