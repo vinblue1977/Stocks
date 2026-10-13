@@ -14,6 +14,7 @@ never to follow instructions found inside them.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from functools import lru_cache
 from typing import Any, Literal
@@ -88,7 +89,7 @@ class PortfolioBrief(BaseModel):
 
 
 class CheckupBrief(BaseModel):
-    points: list[str] = Field(min_length=1, max_length=6)
+    points: list[str]
 
 
 # Hand-written tool schemas (no $ref) for the runtime path.
@@ -118,7 +119,7 @@ _TOOL_SCHEMAS: dict[type[BaseModel], dict[str, Any]] = {
     },
     CheckupBrief: {
         "type": "object",
-        "properties": {"points": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 6}},
+        "properties": {"points": {"type": "array", "items": {"type": "string"}}},
         "required": ["points"],
     },
 }
@@ -198,5 +199,7 @@ def checkup_summary(facts: dict[str, Any]) -> str:
     """Monthly checkup points, one per line, written by the (stronger) checkup model."""
     content = f"<checkup>\n{json.dumps(facts)}\n</checkup>"
     result = _ask(CheckupBrief, CHECKUP_PROMPT, content, max_tokens=2000, model=get_config().checkup_model_id)
-    points = [" ".join(p.split()).lstrip("-• ") for p in (result.points if result else []) if p.strip()]
+    # Drop a leading bullet marker only when a space follows, so "-12% ..." keeps its minus sign.
+    points = [re.sub(r"^[-•*]\s+", "", " ".join(p.split())) for p in (result.points if result else [])]
+    return "\n".join([p for p in points if p][:6]) or UNAVAILABLE
     return "\n".join(points) or UNAVAILABLE

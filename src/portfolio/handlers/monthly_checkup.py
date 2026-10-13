@@ -26,6 +26,14 @@ def _pct(v: float | None, signed: bool = True) -> str:
     return f"{v * 100:+.0f}%" if signed else f"{v * 100:.0f}%"
 
 
+def summary_lines(summary: str) -> list[str]:
+    """One wrapped bullet per point; the "unavailable" fallback stays a plain line."""
+    points = [p.strip() for p in summary.splitlines() if p.strip()]
+    if summary == llm.UNAVAILABLE or len(points) < 2:
+        return [textwrap.fill(" ".join(points), width=72, initial_indent="  ", subsequent_indent="  ")]
+    return [textwrap.fill(p, width=72, initial_indent="  • ", subsequent_indent="    ") for p in points]
+
+
 def facts(built: dict[str, Any], targets: dict[str, Any] | None, alerts: int) -> dict[str, Any]:
     """What Claude sees: household numbers only (no names, no account details)."""
     home = built["views"]["household"]
@@ -39,7 +47,7 @@ def facts(built: dict[str, Any], targets: dict[str, Any] | None, alerts: int) ->
         "volatility": r["volatility"],
         "market_volatility": (r.get("market") or {}).get("volatility"),
         "mix_vs_target": [
-            {"area": d["label"], "share_now": round(d["now"], 2), "target": d["target"], "gap_dollars": round(d["gap"], -2)}
+            {"area": d["label"], "share_now": round(d["now"], 3), "target": d["target"], "gap_dollars": round(d["gap"], -2)}
             for d in home["drift"] or []
         ],
         "single_sector_ceiling": (targets or {}).get("sector_ceiling"),
@@ -56,7 +64,7 @@ def email(built: dict[str, Any], targets: dict[str, Any] | None, summary: str, n
         f"Household: ${home['total_value']:,.0f}  ·  12 months: {_pct(r['return_1y'])} (market {_pct(market.get('return_1y'))})",
         "",
         "SUMMARY",
-        *(textwrap.fill(point, width=72, initial_indent="  • ", subsequent_indent="    ") for point in summary.splitlines()),
+        *summary_lines(summary),
     ]
     if home["drift"]:
         lines += ["", "YOUR MIX VS. TARGET"]

@@ -532,3 +532,11 @@ def test_monthly_checkup_keeps_going_when_one_user_fails(repo, monkeypatch):
     assert len(sent) == 1
     monthly_checkup.handler({}, None, repo=repo, summarizer=Flaky)  # the retry only does the failed user
     assert len(sent) == 2
+
+
+def test_unavailable_summary_is_not_a_bullet():
+    from portfolio import llm
+    from portfolio.handlers.monthly_checkup import summary_lines
+
+    assert summary_lines(llm.UNAVAILABLE) == ["  " + llm.UNAVAILABLE]
+    assert summary_lines("One.\n\n Two. ") == ["  • One.", "  • Two."]
