@@ -4,8 +4,8 @@ import { GROUPS, KINDS, groupChip, groupLabel, hasPartner, personName, portfolio
 import { add, fill, fmt, h, icon, pageHead, tone } from '../ui.js';
 
 const RANGES = { '1M': 22, '3M': 66, '1Y': 252, All: Infinity };
-// Group view of Allocation uses each group's own color (Stock Holdings blue, Automatic Investment sand).
-const KIND_COLORS = { [KINDS.stocks.label]: '#7CC4FA', [KINDS.auto.label]: '#E4D5BA' };
+/** A group's color, from the same CSS tokens as its chip (Stock Holdings blue, Automatic Investment sand). */
+const kindColor = (kind) => getComputedStyle(document.documentElement).getPropertyValue(kind === 'auto' ? '--auto' : '--accent-strong').trim();
 const PALETTE = ['#BFE3FF', '#7CC4FA', '#3E8FD6', '#2A5F96', '#1D4573', '#F5A35C', '#F5C38F', '#C97B3F', '#8392AB', '#5A6B85'];
 let person = 'household'; // household | mine | partner
 let range = '1Y';
@@ -114,6 +114,8 @@ function allocationCard(summary) {
     kind: (p) => KINDS[GROUPS[p.group]?.kind]?.label || p.group,
     person: (p) => personName(GROUPS[p.group]?.person),
   }[by];
+  const kindOfLabel = Object.fromEntries(Object.entries(KINDS).map(([kind, k]) => [k.label, kind]));
+  const colorOf = (name, i) => (by === 'kind' && kindOfLabel[name] ? kindColor(kindOfLabel[name]) : PALETTE[i % PALETTE.length]);
   const sums = new Map();
   for (const p of summary.positions) {
     if (p.value != null) sums.set(keyOf(p), (sums.get(keyOf(p)) || 0) + p.value);
@@ -124,7 +126,7 @@ function allocationCard(summary) {
   const kept = rest.length ? [...sorted.slice(0, TOP_SLICES), [`Other (${rest.length})`, rest.reduce((a, [, v]) => a + v, 0)]] : sorted;
   const items = kept.map(([name, value], i) => ({
     name, value, weight: total ? value / total : 0,
-    color: rest.length && i === kept.length - 1 ? '#5A6B85' : (by === 'kind' && KIND_COLORS[name]) || PALETTE[i % PALETTE.length],
+    color: rest.length && i === kept.length - 1 ? '#5A6B85' : colorOf(name, i),
   }));
   const tickers = summary.positions.map((p) => p.ticker);
   const inSeveral = by === 'holding' ? [...new Set(tickers.filter((tk, i) => tickers.indexOf(tk) !== i))] : [];
