@@ -1,7 +1,7 @@
 // A person's portfolio page: a switch between their Stock Holdings and Automatic Investment.
 import { api } from '../api.js';
 import { KINDS, MAX_TICKERS, groupFor, possessive, portfolioTitle } from '../groups.js';
-import { fmt, h, toast, tone } from '../ui.js';
+import { fill, fmt, h, toast, tone } from '../ui.js';
 
 const TICKER_PATTERN = '[A-Za-z][A-Za-z0-9.\\-]{0,9}';
 const today = () => new Date().toISOString().slice(0, 10);
@@ -158,7 +158,7 @@ export async function renderPerson(main, person, kind) {
       h('td', null, h('div', { class: 'actions' }, buyMore, edit, remove)));
   });
 
-  main.replaceChildren(
+  fill(main,
     h('datalist', { id: 'group-tickers' }, [...new Set(all.map((x) => x.ticker))].map((t) => h('option', { value: t }))),
     h('div', null, h('h1', { text: portfolioTitle(person) }),
       h('div', { class: 'segmented segmented-lg sub-switch', role: 'group', 'aria-label': `${possessive(person)} holdings` },

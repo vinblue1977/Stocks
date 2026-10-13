@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { h, icon, pageHead, toast } from '../ui.js';
+import { fill, h, icon, pageHead, toast } from '../ui.js';
 
 const PARAM_LABELS = { window: 'Days in average', pct: 'Percent', threshold: 'Threshold' };
 
@@ -76,7 +76,7 @@ export async function renderAlerts(main) {
     h('td', { class: 'text', text: new Date(a.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) }),
     h('td', { class: 'text', text: a.message })));
 
-  main.replaceChildren(
+  fill(main,
     pageHead('Alerts', 'Emails go to your alert address when a rule changes from not met to met'),
     h('section', { class: 'card', 'aria-labelledby': 'new-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'new-h', text: 'New rule' })), form, error),

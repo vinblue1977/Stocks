@@ -86,21 +86,22 @@ export async function renderWatchlist(main) {
   if (!items.some((i) => i.ticker === confirming)) confirming = null;
 
   const input = h('input', { id: 'w-ticker', placeholder: 'e.g. MSFT', autocomplete: 'off', maxlength: 10, 'aria-describedby': 'w-err' });
-  const error = h('p', { class: 'form-error', id: 'w-err', role: 'alert' });
+  const error = h('p', { class: 'form-error', id: 'w-err', role: 'alert', hidden: true }); // no empty row until needed
+  const showError = (message) => { error.textContent = message; error.hidden = false; };
   const submit = h('button', { type: 'submit', class: 'btn btn-primary', text: 'Watch' });
   const form = h('form', { class: 'add-form', novalidate: true },
     h('div', { class: 'field' }, h('label', { for: 'w-ticker', text: 'Add a ticker' }), input), submit);
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const ticker = input.value.trim().toUpperCase();
-    if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(ticker)) { error.textContent = 'Enter a ticker like MSFT or BRK.B.'; return; }
-    if (items.some((i) => i.ticker === ticker)) { error.textContent = `${ticker} is already on your watchlist.`; return; }
+    if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(ticker)) { showError('Enter a ticker like MSFT or BRK.B.'); return; }
+    if (items.some((i) => i.ticker === ticker)) { showError(`${ticker} is already on your watchlist.`); return; }
     submit.disabled = true;
     try {
       await api('PUT', `/watchlist/${encodeURIComponent(ticker)}`);
       toast(`${ticker} added. Prices load in about a minute.`);
       renderWatchlist(main);
-    } catch (e) { error.textContent = e.message; submit.disabled = false; }
+    } catch (e) { showError(e.message); submit.disabled = false; }
   });
 
   const rows = items.flatMap((item) => {
@@ -108,7 +109,8 @@ export async function renderWatchlist(main) {
     return [row(item, rules, main), confirming === item.ticker ? confirmRow(item, rules, main) : null];
   });
   fill(main,
-    pageHead('Watchlist', "Tickers you don't own. Same facts as your holdings; the decision is yours.", h('div', null, form, error)),
+    pageHead('Watchlist', "Tickers you don't own. Same facts as your holdings; the decision is yours.", form),
+    error,
     h('section', { class: 'card', 'aria-labelledby': 'wl-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'wl-h', text: 'Watching' }),
         h('span', { class: 'muted small', text: `${items.length} of ${res.max} · prices live during market hours` })),
