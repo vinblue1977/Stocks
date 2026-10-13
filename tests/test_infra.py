@@ -201,6 +201,15 @@ def test_monthly_checkup_schedule_and_model(template, tmp_path_factory):
     assert "inference-profile/us.anthropic.claude-opus-4-6-v1" in json.dumps(opus.find_resources("AWS::IAM::Policy"))
 
 
+def test_checkup_pdf_email_scoped_to_the_alert_address(tmp_path_factory):
+    template = synth(tmp_path_factory, alertEmail="me@example.com")
+    monthly = next(f for f in app_functions(template) if f["Properties"]["Handler"].endswith("monthly_checkup.handler"))
+    assert monthly["Properties"]["Environment"]["Variables"]["REPORT_EMAIL"] == "me@example.com"
+    assert monthly["Properties"]["MemorySize"] == 1024
+    policies = json.dumps(template.find_resources("AWS::IAM::Policy"))
+    assert "identity/me@example.com" in policies and '"ses:*"' not in policies
+
+
 def test_mantle_option_uses_model_condition(tmp_path_factory):
     template = synth(tmp_path_factory, bedrockApi="mantle", bedrockModelId="anthropic.claude-haiku-5-5")
     policies = json.dumps(template.find_resources("AWS::IAM::Policy"))

@@ -442,9 +442,19 @@ class PortfolioTrackerStack(Stack):
 
         # Monthly checkup email, written by a stronger model than the nightly news summaries.
         checkup_model: str = self.node.try_get_context("checkupModelId") or model_id
-        monthly = make_function("MonthlyCheckup", "monthly_checkup", timeout=300, memory=512)
+        monthly = make_function("MonthlyCheckup", "monthly_checkup", timeout=300, memory=1024)  # PDF rendering
         monthly.add_environment("CHECKUP_MODEL_ID", checkup_model)
         monthly.add_environment("SITE_URL", site_url)
+        if alert_email:
+            # The PDF goes out through SES (SNS can't attach files), from and to the alert address, which must be
+            # a verified SES identity. Without it the job falls back to the plain-text SNS email.
+            monthly.add_environment("REPORT_EMAIL", alert_email)
+            monthly.add_to_role_policy(
+                iam.PolicyStatement(
+                    actions=["ses:SendEmail", "ses:SendRawEmail"],
+                    resources=[f"arn:{Aws.PARTITION}:ses:{Aws.REGION}:{Aws.ACCOUNT_ID}:identity/{alert_email}"],
+                )
+            )
         table.grant_read_write_data(monthly)
         topic.grant_publish(monthly)
         for statement in bedrock_statements(bedrock_api, checkup_model):

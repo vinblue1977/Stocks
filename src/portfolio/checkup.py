@@ -134,23 +134,36 @@ def view(
         if p["value"] is not None:
             per_ticker[p["ticker"]] = per_ticker.get(p["ticker"], 0.0) + p["value"]
     area_pct = {k: v["pct"] / 100 for k, v in ((targets or {}).get("areas") or {}).items()}
+    # Tickers with no prices yet (new, still loading) would empty the shared-date history, so leave them out.
+    series = analytics.value_history([h for h in holdings if histories.get(h["ticker"])], histories)
     groups: dict[str, list[str]] = {}
     for ticker in sorted(per_ticker, key=lambda t: -per_ticker[t]):
         groups.setdefault(area_of(ticker, overrides), []).append(ticker)
+    ranked = [
+        {"ticker": t, "value": round(v, 2), "area": area_of(t, overrides), "return_1y": analytics.trailing_return(histories[t])}
+        for t, v in sorted(per_ticker.items(), key=lambda kv: -kv[1])
+    ]
     return {
         "total_value": total,
+        "holdings": ranked,
+        "top": ranked[:5],
         "by_area": {k: round(v, 2) for k, v in by_area.items()},
         "drift": drift(by_area, total, area_pct) if targets else None,
         "effective_holdings": effective_holdings(per_ticker),
         "holdings_count": len(per_ticker),
-        "top": [{"ticker": t, "value": round(v, 2)} for t, v in sorted(per_ticker.items(), key=lambda kv: -kv[1])[:5]],
         "overlap": {k: [{"ticker": t, "value": round(per_ticker[t], 2)} for t in ts] for k, ts in groups.items() if len(ts) > 1},
         "small_positions": sorted(
             ({"ticker": t, "value": round(v, 2)} for t, v in per_ticker.items() if v < SMALL_POSITION), key=lambda x: x["value"]
         ),
-        # Tickers with no prices yet (new, still loading) would empty the shared-date history, so leave them out.
-        "risk": risk(analytics.value_history([h for h in holdings if histories.get(h["ticker"])], histories), market),
+        "history_1y": _with_market(series[-(TRADING_DAYS + 1) :], market),
+        "risk": risk(series, market),
     }
+
+
+def _with_market(series: Sequence[tuple[str, float]], market: Sequence[tuple[str, float]] | None) -> list[dict[str, Any]]:
+    """The last year of value, with the market's close on the same days (for the report's chart)."""
+    closes = dict(market or [])
+    return [{"date": d, "value": v, "market": closes.get(d)} for d, v in series]
 
 
 MARKET_TICKER = "VTI"  # "the market": the total US stock market

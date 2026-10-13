@@ -474,7 +474,8 @@ def get_checkup(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
             "shortlist": buckets.SHORTLIST,
             "assigned": {t: buckets.area_of(t, overrides) for t in built["tickers"]},
             "targets": targets,
-            "views": built["views"],
+            # The 1-year history is for the PDF report; the page doesn't draw it.
+            "views": {k: {f: v for f, v in view.items() if f != "history_1y"} for k, view in built["views"].items()},
             "summary": repo.latest_checkup_summary(user_id),
         },
     )
