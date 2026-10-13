@@ -50,7 +50,7 @@ function summaryCard(summary) {
   return h('section', { class: 'card', 'aria-labelledby': 'ms-h' },
     h('div', { class: 'card-head' }, h('h2', { id: 'ms-h', text: 'Last monthly summary' }),
       h('span', { class: 'muted small', text: `${fmt.date(summary.created_at)} · Claude on Amazon Bedrock` })),
-    h('div', { class: 'summary-box', text: summary.summary }),
+    h('ul', { class: 'summary-box summary-points' }, summary.summary.split('\n').filter(Boolean).map((point) => h('li', { text: point }))),
     h('p', { class: 'xsmall muted', style: { margin: '10px 0 0' }, text: 'Describes your data and your own targets; not investment advice.' }));
 }
 

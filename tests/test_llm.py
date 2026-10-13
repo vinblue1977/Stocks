@@ -97,3 +97,12 @@ def test_sentiment_label():
     assert llm.sentiment_label(0.1) == "Neutral"
     assert llm.sentiment_label(0.3) == "Positive"
     assert llm.sentiment_label(-0.3) == "Negative"
+
+
+def test_checkup_summary_is_one_point_per_line(monkeypatch):
+    from portfolio import llm
+
+    monkeypatch.setattr(llm, "_ask", lambda *a, **k: llm.CheckupBrief(points=["- Value is $51,000.", "• Semis  are 48%.", " "]))
+    assert llm.checkup_summary({}) == "Value is $51,000.\nSemis are 48%."
+    monkeypatch.setattr(llm, "_ask", lambda *a, **k: None)
+    assert llm.checkup_summary({}) == llm.UNAVAILABLE

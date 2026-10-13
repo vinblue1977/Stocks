@@ -5,6 +5,7 @@ The summary is stored too, so the Checkup page can show it. Facts and the user's
 
 from __future__ import annotations
 
+import textwrap
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -31,14 +32,14 @@ def facts(built: dict[str, Any], targets: dict[str, Any] | None, alerts: int) ->
     r = home["risk"]
     return {
         "as_of": built["as_of"],
-        "value": home["total_value"],
+        "value": round(home["total_value"], -2),
         "return_12_months": r["return_1y"],
         "market_return_12_months": (r.get("market") or {}).get("return_1y"),
         "swings_vs_market_beta": r["beta"],
         "volatility": r["volatility"],
         "market_volatility": (r.get("market") or {}).get("volatility"),
         "mix_vs_target": [
-            {"area": d["label"], "share_now": d["now"], "target": d["target"], "gap_dollars": d["gap"]}
+            {"area": d["label"], "share_now": round(d["now"], 2), "target": d["target"], "gap_dollars": round(d["gap"], -2)}
             for d in home["drift"] or []
         ],
         "single_sector_ceiling": (targets or {}).get("sector_ceiling"),
@@ -55,7 +56,7 @@ def email(built: dict[str, Any], targets: dict[str, Any] | None, summary: str, n
         f"Household: ${home['total_value']:,.0f}  ·  12 months: {_pct(r['return_1y'])} (market {_pct(market.get('return_1y'))})",
         "",
         "SUMMARY",
-        summary,
+        *(textwrap.fill(point, width=72, initial_indent="  • ", subsequent_indent="    ") for point in summary.splitlines()),
     ]
     if home["drift"]:
         lines += ["", "YOUR MIX VS. TARGET"]

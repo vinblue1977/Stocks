@@ -481,7 +481,7 @@ def test_monthly_checkup_email_and_stored_summary(repo, monkeypatch):
         @staticmethod
         def checkup_summary(facts):
             Summarizer.seen = facts
-            return "A calm month."
+            return "A calm month.\nInternational is 2% vs. a 20% target, about $9,100 below plan."
 
     start = (datetime.now(UTC).date() - timedelta(days=400)).isoformat()
     for ticker, shares in (("VTI", 6), ("SMH", 4)):
@@ -496,10 +496,10 @@ def test_monthly_checkup_email_and_stored_summary(repo, monkeypatch):
     monthly_checkup.handler({"force": True}, None, repo=repo, summarizer=Summarizer)  # same month: a manual re-run
     subject, body = sent[-1]
     assert subject.startswith("Your monthly portfolio checkup")
-    assert "A calm month." in body and "YOUR MIX VS. TARGET" in body and "Single sector" in body
+    assert "  • A calm month.\n  • International is 2%" in body and "YOUR MIX VS. TARGET" in body and "Single sector" in body
     assert "NEXT $1,000" in body and "(VTI)" in body
     assert Summarizer.seen["single_sector_ceiling"] == 20 and "u1" not in str(Summarizer.seen)
-    assert repo.latest_checkup_summary("u1")["summary"] == "A calm month."
+    assert repo.latest_checkup_summary("u1")["summary"].startswith("A calm month.\n")
     # A retry in the same month doesn't email again; a forced manual run does
     count = len(sent)
     assert monthly_checkup.handler({}, None, repo=repo, summarizer=Summarizer)["skipped"] == 1 and len(sent) == count

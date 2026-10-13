@@ -247,3 +247,4 @@ th[aria-sort] { color: var(--text); }
   .ed-row { grid-template-columns: 1fr 80px; }
   .ed-row input.upper { grid-column: 1 / -1; }
 }
+.summary-points { margin: 0; padding-left: 34px; display: flex; flex-direction: column; gap: 6px; }
