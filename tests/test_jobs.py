@@ -420,6 +420,7 @@ class FakeQuotes:
         ("2026-10-12T13:29:00+00:00", False),  # 9:29 AM EDT
         ("2026-10-12T13:30:00+00:00", True),
         ("2026-10-12T20:00:00+00:00", True),  # 4:00 PM EDT, last run
+        ("2026-10-12T20:00:01+00:00", False),
         ("2026-10-12T20:15:00+00:00", False),
         ("2026-12-14T14:15:00+00:00", False),  # 9:15 AM EST
         ("2026-12-14T21:00:00+00:00", True),  # 4:00 PM EST
@@ -540,3 +541,15 @@ def test_unavailable_summary_is_not_a_bullet():
 
     assert summary_lines(llm.UNAVAILABLE) == ["  " + llm.UNAVAILABLE]
     assert summary_lines("One.\n\n Two. ") == ["  • One.", "  • Two."]
+
+
+def test_intraday_uses_the_scheduled_time_not_the_late_start(repo, monkeypatch):
+    repo.put_holding("u1", {"group": "stocks", "ticker": "VOO", "shares": 1, "avg_cost": 1})
+    provider = FakeQuotes()
+    # The 4:00 PM EDT run, started 42 s late: still the closing run.
+    result = intraday_quotes.handler({"time": "2026-10-12T20:00:00Z"}, None, repo=repo, provider=provider)
+    assert provider.calls == [["VOO"]] and result["quoted"] == 1
+    assert intraday_quotes.handler({"time": "2026-10-12T20:15:00Z"}, None, repo=repo, provider=provider) == {
+        "skipped": "market closed"
+    }
+    assert intraday_quotes._scheduled_time({}) is None and intraday_quotes._scheduled_time({"time": "junk"}) is None

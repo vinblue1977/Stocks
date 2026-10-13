@@ -28,7 +28,9 @@ def handler(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     # On market holidays the quotes are the previous session's, so the dashboard ignores them.
-    now = now or datetime.now(UTC)
+    # Decide by the run's scheduled time (EventBridge "time"): runs start ~40 s late, which would
+    # otherwise push the 4:00 PM run past the close.
+    now = now or _scheduled_time(event) or datetime.now(UTC)
     if not market_open(now):
         return {"skipped": "market closed"}
     repo = repo or Repository()
@@ -45,3 +47,10 @@ def handler(
     missing = sorted(set(tickers) - set(quotes))
     log(logger, "intraday_quotes_complete", quoted=len(quotes), missing=missing)
     return {"tickers": len(tickers), "quoted": len(quotes), "missing": missing}
+
+
+def _scheduled_time(event: dict[str, Any] | None) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str((event or {})["time"]).replace("Z", "+00:00"))
+    except (KeyError, ValueError):
+        return None
