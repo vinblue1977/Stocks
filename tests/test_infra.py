@@ -2,6 +2,7 @@
 
 import base64
 import json
+from pathlib import Path
 
 import aws_cdk as cdk
 import pytest
@@ -391,3 +392,17 @@ def test_every_log_group_expires(any_template):
     assert groups
     for group in groups.values():
         assert group["Properties"].get("RetentionInDays"), "log groups must not keep logs forever"
+
+
+def _setting_paths(node, prefix=""):
+    if not isinstance(node, dict):
+        return {prefix}
+    return set().union(*(_setting_paths(v, f"{prefix}.{k}") for k, v in node.items()))
+
+
+def test_login_branding_uses_only_known_settings():
+    # Cognito rejects unknown keys only at deploy time; the fixture is its exported default style.
+    root = Path(__file__).parent
+    defaults = json.loads((root / "fixtures" / "cognito_branding_defaults.json").read_text())
+    ours = json.loads((root.parent / "infra" / "login" / "branding.json").read_text())
+    assert _setting_paths(ours) <= _setting_paths(defaults)
