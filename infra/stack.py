@@ -754,6 +754,8 @@ class PortfolioTrackerStack(Stack):
             ],
             distribution=distribution,
             distribution_paths=["/*"],
+            # Don't hold the deploy for the cache clear (1-3+ minutes); edges refresh shortly after.
+            wait_for_distribution_invalidation=False,
             memory_limit=256,
             log_group=logs.LogGroup(
                 self,

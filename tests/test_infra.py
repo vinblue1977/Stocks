@@ -371,6 +371,12 @@ def test_site_files_revalidate_on_every_load(any_template):
     assert header == "max-age=0, must-revalidate, s-maxage=31536000"
 
 
+def test_deploy_does_not_wait_for_the_cache_clear(any_template):
+    deployment = next(iter(any_template.find_resources("Custom::CDKBucketDeployment").values()))
+    assert deployment["Properties"]["DistributionPaths"] == ["/*"]
+    assert deployment["Properties"]["WaitForDistributionInvalidation"] is False
+
+
 def test_site_https_only_with_strict_headers(any_template):
     dist = next(iter(any_template.find_resources("AWS::CloudFront::Distribution").values()))
     behavior = dist["Properties"]["DistributionConfig"]["DefaultCacheBehavior"]
