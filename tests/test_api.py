@@ -256,7 +256,7 @@ def test_purchase_validation(repo, payload):
 def test_purchase_retries_on_concurrent_change(repo, monkeypatch):
     from portfolio.db import ConcurrentUpdateError
 
-    buy(repo, "VTI", 10, 100)
+    buy(repo, "VTI", 10, 100, group="auto")  # Automatic Investment keeps totals (Stock Holdings use transactions)
     real = repo.replace_holding_if_unchanged
     calls = {"n": 0}
 
@@ -267,7 +267,7 @@ def test_purchase_retries_on_concurrent_change(repo, monkeypatch):
         return real(user_id, holding, previous)
 
     monkeypatch.setattr(repo, "replace_holding_if_unchanged", flaky)
-    status, body = buy(repo, "VTI", 10, 200)
+    status, body = buy(repo, "VTI", 10, 200, group="auto")
     assert status == 200 and body["holding"]["avg_cost"] == pytest.approx(150.0)
     assert calls["n"] == 2
 
@@ -633,3 +633,78 @@ def test_targets_round_trip_and_checkup(repo):
 def test_targets_validation(repo, change, message):
     status, body = call(repo, "PUT /targets", body=json.dumps({**TARGETS, **change}))
     assert status == 400 and message in body["message"]
+
+
+# ---------------------------------------------------------------- transactions
+TXNS = "/groups/{group}/holdings/{ticker}/transactions"
+
+
+def trade(repo, ticker, kind, shares, price, date="2026-03-02", group="stocks"):
+    return call(
+        repo,
+        f"POST {TXNS}",
+        path={"group": group, "ticker": ticker},
+        body=json.dumps({"type": kind, "shares": shares, "price": price, "date": date}),
+    )
+
+
+def test_first_trade_saves_the_opening_from_totals(repo, no_backfill):
+    repo.put_holding("user-1", {"ticker": "NVDA", "group": "stocks", "shares": 20, "avg_cost": 120, "purchased_on": "2024-06-14"})
+    status, body = call(repo, f"GET {TXNS}", path={"group": "stocks", "ticker": "NVDA"})
+    assert status == 200 and body["implicit_opening"] is True and body["transactions"][0]["type"] == "opening"
+    status, body = trade(repo, "NVDA", "buy", 10, 250, "2025-11-03")
+    assert status == 201 and body["holding"]["shares"] == 30 and body["holding"]["purchased_on"] == "2024-06-14"
+    assert no_backfill == []  # already held
+    status, body = trade(repo, "NVDA", "sell", 25, 226, "2026-10-01")
+    assert body["holding"]["shares"] == 5 and body["holding"]["avg_cost"] == 250
+    txns = call(repo, f"GET {TXNS}", path={"group": "stocks", "ticker": "NVDA"})[1]
+    assert txns["implicit_opening"] is False and [t["type"] for t in txns["transactions"]] == ["sell", "buy", "opening"]
+    years = call(repo, "GET /realized")[1]["years"]
+    assert years["2026"]["long"] == pytest.approx(2120.0) and years["2026"]["short"] == pytest.approx(-120.0)
+
+
+def test_selling_everything_removes_the_holding_but_keeps_gains(repo):
+    trade(repo, "AMD", "buy", 2, 100, "2026-01-05")
+    call(repo, "POST /rules", body=json.dumps({"type": "rsi_below", "ticker": "AMD", "params": {"threshold": 30}}))
+    trade(repo, "AMD", "sell", 2, 150, "2026-02-05")
+    assert call(repo, "GET /holdings")[1]["holdings"] == []
+    assert call(repo, "GET /rules")[1]["rules"] == []  # nothing left to check
+    assert call(repo, "GET /realized")[1]["sales"][0]["gain"] == 100.0
+
+
+def test_trade_validation(repo):
+    assert trade(repo, "AMD", "sell", 1, 10)[1]["message"].startswith("You don't hold")
+    trade(repo, "AMD", "buy", 1, 10, "2026-01-05")
+    assert "more than" in trade(repo, "AMD", "sell", 5, 10)[1]["message"]
+    assert trade(repo, "AMD", "buy", 1, 10, "2999-01-01")[0] == 400  # future date
+    assert trade(repo, "VTI", "buy", 1, 10, group="auto")[1]["message"] == "Transactions are tracked for Stock Holdings only"
+    body = {"type": "hold", "shares": 1, "price": 1}
+    assert call(repo, f"POST {TXNS}", path={"group": "stocks", "ticker": "AMD"}, body=json.dumps(body))[0] == 400
+
+
+def test_delete_and_redate_transactions(repo):
+    trade(repo, "AMD", "buy", 2, 100, "2026-01-05")
+    trade(repo, "AMD", "sell", 2, 150, "2026-02-05")
+    txns = call(repo, f"GET {TXNS}", path={"group": "stocks", "ticker": "AMD"})[1]["transactions"]
+    sell, buy_ = txns
+    path = {"group": "stocks", "ticker": "AMD"}
+    assert call(repo, f"DELETE {TXNS}/{{txnId}}", path={**path, "txnId": buy_["txn_id"]})[0] == 400  # the sale needs it
+    status, body = call(
+        repo, f"PUT {TXNS}/{{txnId}}", path={**path, "txnId": buy_["txn_id"]}, body=json.dumps({"date": "2024-01-02"})
+    )
+    assert status == 200 and call(repo, "GET /realized")[1]["sales"][0]["long_term"] is True
+    assert call(repo, f"DELETE {TXNS}/{{txnId}}", path={**path, "txnId": sell["txn_id"]})[0] == 204
+    assert call(repo, "GET /holdings")[1]["holdings"][0]["shares"] == 2  # back after the sale is undone
+
+
+def test_stock_holdings_with_trades_keep_totals_locked(repo):
+    trade(repo, "AMD", "buy", 2, 100, "2026-01-05")
+    status, _ = call(
+        repo,
+        "PUT /groups/{group}/holdings/{ticker}",
+        path={"group": "stocks", "ticker": "AMD"},
+        body=json.dumps({"shares": 9, "avg_cost": 1}),
+    )
+    assert status == 409
+    trade(repo, "AMD", "sell", 1, 150, "2026-02-05")
+    assert call(repo, "DELETE /groups/{group}/holdings/{ticker}", path={"group": "stocks", "ticker": "AMD"})[0] == 409

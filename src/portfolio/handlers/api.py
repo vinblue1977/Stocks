@@ -16,7 +16,7 @@ from typing import Any
 
 import boto3
 
-from portfolio import analytics, buckets, checkup, rules, signals
+from portfolio import analytics, buckets, checkup, ledger, rules, signals
 from portfolio.config import get_config
 from portfolio.db import GROUPS, KINDS, PEOPLE, ConcurrentUpdateError, Repository, kind_of, person_of
 from portfolio.llm import sentiment_label
@@ -128,6 +128,8 @@ def put_holding(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     user_id = _user_id(event)
     group = _group(event)
     ticker = _ticker(event.get("pathParameters", {}).get("ticker"))
+    if kind_of(group) == "stocks" and repo.list_txns(user_id, group, ticker):
+        raise ApiError(409, "This holding has transactions; record a buy or sale instead of setting totals")
     body = _body(event)
     if body.get("cost_basis") is not None:  # the field's old name, still accepted
         if body.get("avg_cost") is not None:
@@ -184,6 +186,11 @@ def record_purchase(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     shares = _number(body, "shares", 0.000001, 1_000_000_000)
     price = _per_share(body, shares, per_share="price", total="amount")
     purchased_on = _purchase_date(body)
+    if kind_of(group) == "stocks":  # Stock Holdings keep each buy as a transaction
+        previous = repo.get_holding(user_id, group, ticker)
+        txn = {"type": "buy", "date": purchased_on or _today(), "shares": shares, "price": price}
+        saved = _record_txn(repo, user_id, group, ticker, txn)
+        return _response(201 if previous is None else 200, {"holding": saved, "previous": previous})
 
     new_ticker = False
     for _ in range(3):  # retry if another request changed the holding between read and write
@@ -218,9 +225,173 @@ def delete_holding(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     user_id = _user_id(event)
     group = _group(event)
     ticker = _ticker(event.get("pathParameters", {}).get("ticker"))
+    if kind_of(group) == "stocks":
+        txns = repo.list_txns(user_id, group, ticker)
+        if any(t["type"] == "sell" for t in txns):
+            raise ApiError(409, "This holding has recorded sales; delete its transactions instead so realized gains stay correct")
+        for txn in txns:
+            repo.delete_txn(user_id, group, ticker, txn)
     repo.delete_holding(user_id, group, ticker)
     _prune_rules(repo, user_id, ticker)
     return _response(204, {})
+
+
+# ---------------------------------------------------------------- transactions (Stock Holdings)
+# Each buy and sale is kept; the holding item is the replayed summary (shares, FIFO average cost, first date),
+# so everything that reads holdings keeps working. A position with no transactions yet is one implicit
+# "opening" entry built from its totals, saved on the first change.
+OPENING_ID = "opening"
+
+
+def _today() -> str:
+    return datetime.now(UTC).date().isoformat()
+
+
+def _stock_group(event: dict[str, Any]) -> str:
+    group = _group(event)
+    if kind_of(group) != "stocks":
+        raise ApiError(400, "Transactions are tracked for Stock Holdings only")
+    return group
+
+
+def _ledger_txns(repo: Repository, user_id: str, group: str, ticker: str) -> tuple[list[dict[str, Any]], bool]:
+    """(transactions, whether the only one is the implicit opening entry from the holding's totals)."""
+    txns = repo.list_txns(user_id, group, ticker)
+    if txns:
+        return txns, False
+    holding = repo.get_holding(user_id, group, ticker)
+    if not holding:
+        return [], False
+    opening = {
+        "txn_id": OPENING_ID,
+        "type": "opening",
+        "date": holding.get("purchased_on"),
+        "shares": holding["shares"],
+        "price": holding["avg_cost"],
+    }
+    return [opening], True
+
+
+def _replay(txns: list[dict[str, Any]]) -> dict[str, Any]:
+    try:
+        return ledger.replay(txns)
+    except ledger.LedgerError as exc:
+        raise ApiError(400, str(exc)) from exc
+
+
+def _write_summary(repo: Repository, user_id: str, group: str, ticker: str, result: dict[str, Any]) -> dict[str, Any] | None:
+    """Rewrite the holding from the replayed ledger; selling everything removes it (its transactions stay)."""
+    if result["shares"] <= ledger.EPSILON:
+        repo.delete_holding(user_id, group, ticker)
+        _prune_rules(repo, user_id, ticker)
+        return None
+    holding: dict[str, Any] = {"ticker": ticker, "group": group, "shares": result["shares"], "avg_cost": result["avg_cost"]}
+    if result["first_date"]:
+        holding["purchased_on"] = result["first_date"]
+    return repo.put_holding(user_id, holding)
+
+
+def _record_txn(repo: Repository, user_id: str, group: str, ticker: str, txn: dict[str, Any]) -> dict[str, Any] | None:
+    txns, implicit = _ledger_txns(repo, user_id, group, ticker)
+    new_ticker = False
+    if not txns:
+        if txn["type"] == "sell":
+            raise ApiError(400, f"You don't hold {ticker} in this group")
+        new_ticker = _admit_ticker(repo, user_id, ticker)
+    txn = {"txn_id": repo.new_txn_id(), **txn}
+    result = _replay([*txns, txn])  # validates before anything is written
+    if implicit:
+        repo.put_txn(user_id, group, ticker, txns[0])
+    repo.put_txn(user_id, group, ticker, txn)
+    saved = _write_summary(repo, user_id, group, ticker, result)
+    if new_ticker:
+        _request_backfill(ticker)
+    return saved
+
+
+def list_transactions(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    user_id = _user_id(event)
+    group = _stock_group(event)
+    ticker = _ticker((event.get("pathParameters") or {}).get("ticker"))
+    txns, implicit = _ledger_txns(repo, user_id, group, ticker)
+    result = _replay(txns)
+    ordered = sorted(txns, key=lambda t: (t.get("date") or "", t["txn_id"]), reverse=True)
+    return _response(
+        200, {"transactions": ordered, "lots": result["lots"], "realized": result["realized"], "implicit_opening": implicit}
+    )
+
+
+def add_transaction(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """{type: buy|sell, date, shares, price | amount}"""
+    user_id = _user_id(event)
+    group = _stock_group(event)
+    ticker = _ticker((event.get("pathParameters") or {}).get("ticker"))
+    body = _body(event)
+    kind = body.get("type")
+    if kind not in ("buy", "sell"):
+        raise ApiError(400, "type must be buy or sell")
+    shares = _number(body, "shares", 0.000001, 1_000_000_000)
+    price = _per_share(body, shares, per_share="price", total="amount")
+    when = _purchase_date({"purchased_on": body.get("date") or _today()})
+    saved = _record_txn(repo, user_id, group, ticker, {"type": kind, "date": when, "shares": shares, "price": price})
+    return _response(201, {"holding": saved})
+
+
+def _find_txn(repo: Repository, event: dict[str, Any]) -> tuple[str, str, str, list[dict[str, Any]], bool, dict[str, Any]]:
+    user_id = _user_id(event)
+    group = _stock_group(event)
+    params = event.get("pathParameters") or {}
+    ticker = _ticker(params.get("ticker"))
+    txn_id = str(params.get("txnId", ""))
+    txns, implicit = _ledger_txns(repo, user_id, group, ticker)
+    match = next((t for t in txns if t["txn_id"] == txn_id), None)
+    if match is None:
+        raise ApiError(404, "Transaction not found")
+    return user_id, group, ticker, txns, implicit, match
+
+
+def update_transaction(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """Change a transaction's date, e.g. set when an opening position was bought (for long/short term)."""
+    user_id, group, ticker, txns, implicit, match = _find_txn(repo, event)
+    when = _purchase_date({"purchased_on": _body(event).get("date")})
+    if not when:
+        raise ApiError(400, "date is required (YYYY-MM-DD)")
+    changed = {**match, "date": when}
+    result = _replay([changed if t is match else t for t in txns])
+    if not implicit:
+        repo.delete_txn(user_id, group, ticker, match)  # the date is part of the key
+    repo.put_txn(user_id, group, ticker, changed)
+    return _response(200, {"holding": _write_summary(repo, user_id, group, ticker, result)})
+
+
+def delete_transaction(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    user_id, group, ticker, txns, implicit, match = _find_txn(repo, event)
+    if implicit:
+        raise ApiError(400, "This opening position comes from your totals; record a sale or remove the holding instead")
+    result = _replay([t for t in txns if t is not match])  # e.g. a later sale would need these shares
+    repo.delete_txn(user_id, group, ticker, match)
+    _write_summary(repo, user_id, group, ticker, result)
+    return _response(204, {})
+
+
+def get_realized(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """Realized gains from sales in Stock Holdings (both people): each sale piece, plus totals per year."""
+    user_id = _user_id(event)
+    by_position: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for txn in repo.list_txns(user_id):
+        by_position.setdefault((txn["group"], txn["ticker"]), []).append(txn)
+    sales = []
+    for (group, ticker), txns in by_position.items():
+        for piece in ledger.replay(txns)["realized"]:
+            sales.append({**piece, "ticker": ticker, "group": group})
+    sales.sort(key=lambda s: s["sold"], reverse=True)
+    years: dict[str, dict[str, float]] = {}
+    for s in sales:
+        year = years.setdefault(s["sold"][:4], {"total": 0.0, "long": 0.0, "short": 0.0, "unknown": 0.0})
+        term = "unknown" if s["long_term"] is None else "long" if s["long_term"] else "short"
+        year["total"] = round(year["total"] + s["gain"], 2)
+        year[term] = round(year[term] + s["gain"], 2)
+    return _response(200, {"sales": sales, "years": years})
 
 
 def _prune_rules(repo: Repository, user_id: str, ticker: str) -> None:
@@ -540,6 +711,11 @@ ROUTES: dict[str, Route] = {
     "GET /watchlist": list_watchlist,
     "PUT /watchlist/{ticker}": put_watch,
     "DELETE /watchlist/{ticker}": delete_watch,
+    "GET /groups/{group}/holdings/{ticker}/transactions": list_transactions,
+    "POST /groups/{group}/holdings/{ticker}/transactions": add_transaction,
+    "PUT /groups/{group}/holdings/{ticker}/transactions/{txnId}": update_transaction,
+    "DELETE /groups/{group}/holdings/{ticker}/transactions/{txnId}": delete_transaction,
+    "GET /realized": get_realized,
     "GET /checkup": get_checkup,
     "GET /targets": get_targets,
     "PUT /targets": put_targets,

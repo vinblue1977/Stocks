@@ -38,6 +38,7 @@ All routes need `Authorization: Bearer <Cognito token>`.
 | `GET /news?ticker=VTI` | AI briefing and scored headlines (held or watched tickers) |
 | `GET/POST/DELETE /rules[/{ruleId}]`, `GET /rule-types` | Alert rules, e.g. `{"type": "drawdown_below", "ticker": "VTI", "params": {"pct": 10}}` |
 | `GET /alerts` | Alert history |
+| `GET/POST /groups/{group}/holdings/{ticker}/transactions`, `PUT/DELETE …/{txnId}`, `GET /realized` | Stock Holdings: each buy and sale (first-in, first-out); the holding is the replayed total; realized gains by year, long vs. short term |
 | `GET /checkup`, `GET/PUT /targets` | Mix by area vs. your own target mix, risk vs. the market (VTI); the first Saturday of each month a short email with a PDF report goes out through SES (`checkupModelId` writes the summary; the alert address must be a verified SES identity, otherwise it falls back to plain text) |
 | `GET /watchlist`, `PUT/DELETE /watchlist/{ticker}` | Tickers you follow but don't hold (up to 10): signals, live price and news, never in totals. Removing one you don't hold deletes its rules |
 
