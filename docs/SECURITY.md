@@ -17,7 +17,7 @@
 | Data loss | PITR, deletion protection, resources retained on stack delete |
 | Data exposure | Encryption at rest (AWS default or optional customer key); TLS-only SNS/SQS; HTTPS-only outbound |
 | Runaway cost | Throttling, recursive-loop guard, pipeline timeout, budget alert |
-| Vulnerable deps / CI | `pip-audit`; OIDC deploys with no stored keys, from `main` only via the `production` environment |
+| Vulnerable deps / CI | `pip-audit` on every run and weekly; dependency review on PRs (exact versions only, so mainly Actions until Python deps are locked); OIDC deploys with no stored keys, from `main` only via the `production` environment |
 
 Accepted cdk-nag exceptions and their reasons are in [`infra/nag.py`](../infra/nag.py).
 

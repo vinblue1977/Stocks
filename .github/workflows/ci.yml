@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "0 13 * * 1"  # weekly, so new advisories against current dependency versions fail `make audit`
   workflow_dispatch:
     inputs:
       deploy:
@@ -54,6 +56,16 @@ jobs:
         run: make synth
         env:
           CDK_DEFAULT_REGION: us-east-2
+
+  # Fails a PR that adds a dependency with a known high-severity vulnerability.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 5
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v5.0.0
+        with:
+          fail-on-severity: high
 
   # Decides whether a push to main deploys: anything outside docs, Markdown, tests and CI config
   # (except this workflow, which holds the deploy step).
@@ -123,9 +135,27 @@ jobs:
           : "${ALERT_EMAIL:?set the ALERT_EMAIL secret}" "${OWNER_NAME:?set the OWNER_NAME secret}"
           . .venv/bin/activate
           npx --yes aws-cdk@2 deploy --require-approval never \
-            -c alertEmail="${ALERT_EMAIL}" -c ownerName="${OWNER_NAME}" -c partnerName="${PARTNER_NAME}"
+            -c alertEmail="${ALERT_EMAIL}" -c ownerName="${OWNER_NAME}" -c partnerName="${PARTNER_NAME}" \
+            --outputs-file cdk-outputs.json
         env:
           # Environment secrets, so they're masked in this public repo's logs.
           ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
           OWNER_NAME: ${{ secrets.OWNER_NAME }}
           PARTNER_NAME: ${{ secrets.PARTNER_NAME }}
+      - name: Smoke test
+        run: |
+          site="$(jq -er '.PortfolioTracker.DashboardUrl' cdk-outputs.json)"
+          api="$(jq -er '.PortfolioTracker.ApiUrl' cdk-outputs.json)"
+          failed=0
+          check() {
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 --retry 3 --retry-all-errors "$2")"
+            echo "$2 -> $code (want $1)"
+            [ "$code" = "$1" ] || failed=1
+          }
+          check 200 "$site/"
+          check 401 "$api/profile"   # every API route needs a Cognito token
+          # The served config must point at the new API; the sign-in page must accept the site as callback.
+          config="$(curl -sf --max-time 20 --retry 3 "$site/config.json")" || { echo "config.json failed"; exit 1; }
+          [ "$(jq -r .apiUrl <<<"$config")" = "$api" ] || { echo "config.json apiUrl is stale"; failed=1; }
+          check 200 "$(jq -r .authDomain <<<"$config")/login?client_id=$(jq -r .clientId <<<"$config")&response_type=code&scope=openid&redirect_uri=$site/"
+          exit "$failed"
