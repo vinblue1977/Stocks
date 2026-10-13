@@ -30,6 +30,7 @@
     "partnerNews": false,
     "intradayQuotes": true,
     "accessAnalyzer": true,
+    "guardDuty": true,
     "githubDeploy": true,
     "githubRepo": "vinblue1977@13391763/Stocks@1415035954",
     "bedrockModelId": "us.anthropic.claude-haiku-4-5-20251001-v1:0",

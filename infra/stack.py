@@ -39,6 +39,7 @@ from aws_cdk import aws_cognito as cognito
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_events as events
 from aws_cdk import aws_events_targets as targets
+from aws_cdk import aws_guardduty as guardduty
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_kms as kms
 from aws_cdk import aws_lambda as lambda_
@@ -194,8 +195,9 @@ class PortfolioTrackerStack(Stack):
                 [
                     NagPackSuppression(
                         id="AwsSolutions-SNS2",
-                        reason="Only CloudWatch alarm notifications (no user data) use this topic; alarms cannot "
-                        "publish to a topic encrypted with the AWS-managed key. Enable useCustomerManagedKey to encrypt it.",
+                        reason="Only operational and security notifications (CloudWatch alarms, Access Analyzer and GuardDuty "
+                        "findings; no portfolio data) use this topic; alarms cannot publish to a topic encrypted with the "
+                        "AWS-managed key. Enable useCustomerManagedKey to encrypt it.",
                     )
                 ],
             )
@@ -605,6 +607,16 @@ class PortfolioTrackerStack(Stack):
             )
             CfnOutput(self, "GitHubDeployRoleArn", value=deploy_role.role_arn)
             github_deploy = (deploy_role, provider)
+
+        def ops_rule(rule_id: str, pattern: events.EventPattern, text: str) -> None:
+            """Emails matching AWS events to the ops topic."""
+            events.Rule(
+                self,
+                rule_id,
+                event_pattern=pattern,
+                targets=[targets.SnsTopic(ops_topic, message=events.RuleTargetInput.from_text(text))],
+            )
+
         # ------------------------------------------------------------------ external-access findings
         # Free account-level analyzer: flags any resource in this region (buckets, keys, roles, queues,
         # topics, functions) reachable from outside the account, and emails new findings to the ops topic.
@@ -628,25 +640,33 @@ class PortfolioTrackerStack(Stack):
                     )
                 ]
             accessanalyzer.CfnAnalyzer(self, "ExternalAccessAnalyzer", type="ACCOUNT", archive_rules=archive_rules)
-            events.Rule(
-                self,
+            ops_rule(
                 "AccessAnalyzerFindings",
-                event_pattern=events.EventPattern(
-                    source=["aws.access-analyzer"],
-                    detail_type=["Access Analyzer Finding"],
-                    detail={"status": ["ACTIVE"]},
+                events.EventPattern(
+                    source=["aws.access-analyzer"], detail_type=["Access Analyzer Finding"], detail={"status": ["ACTIVE"]}
                 ),
-                targets=[
-                    targets.SnsTopic(
-                        ops_topic,
-                        message=events.RuleTargetInput.from_text(
-                            f"IAM Access Analyzer: {events.EventField.from_path('$.detail.resourceType')} "
-                            f"{events.EventField.from_path('$.detail.resource')} is accessible from outside the account "
-                            f"(public: {events.EventField.from_path('$.detail.isPublic')}). "
-                            "Review it in the IAM console under Access Analyzer; archive it there if it is intended."
-                        ),
-                    )
-                ],
+                f"IAM Access Analyzer: {events.EventField.from_path('$.detail.resourceType')} "
+                f"{events.EventField.from_path('$.detail.resource')} is accessible from outside the account "
+                f"(public: {events.EventField.from_path('$.detail.isPublic')}). "
+                "Review it in the IAM console under Access Analyzer; archive it there if it is intended.",
+            )
+
+        # ------------------------------------------------------------------ threat detection
+        # GuardDuty watches the account's API, DNS and network activity (e.g. stolen keys used from a strange
+        # place) and emails medium and high findings to the ops topic. Opt-in (`guardDuty: true`): one per region.
+        if _flag(self.node.try_get_context("guardDuty")):
+            guardduty.CfnDetector(self, "GuardDuty", enable=True)  # updates to a finding re-publish every 6 hours
+            ops_rule(
+                "GuardDutyFindings",
+                events.EventPattern(
+                    source=["aws.guardduty"],
+                    detail_type=["GuardDuty Finding"],
+                    detail={"severity": events.Match.greater_than_or_equal(4)},
+                ),
+                f"GuardDuty severity {events.EventField.from_path('$.detail.severity')} in "
+                f"{events.EventField.from_path('$.region')}: {events.EventField.from_path('$.detail.title')} "
+                f"(finding {events.EventField.from_path('$.detail.id')}, seen "
+                f"{events.EventField.from_path('$.detail.service.count')} times). Review it in the GuardDuty console.",
             )
 
         # ------------------------------------------------------------------ monitoring
