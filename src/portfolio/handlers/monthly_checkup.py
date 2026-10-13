@@ -97,20 +97,12 @@ def email(built: dict[str, Any], targets: dict[str, Any] | None, summary: str, n
     return "\n".join(lines)
 
 
-def short_email(built: dict[str, Any], targets: dict[str, Any] | None) -> str:
-    """The few lines that go with the PDF."""
-    home = built["views"]["household"]
-    r = home["risk"]
-    market = _pct((r.get("market") or {}).get("return_1y"))
-    lines = [f"Household: ${home['total_value']:,.0f}  ·  12 months: {_pct(r['return_1y'])} (market {market})"]
-    gaps = sorted((d for d in home["drift"] or [] if d["area"] in AREAS), key=lambda d: -abs(d["gap"]))
-    if gaps:
-        d = gaps[0]
-        lines.append(f"Biggest gap: {d['label']} at {_pct(d['now'], False)} vs. your {_pct(d['target'], False)} target")
-    lines += ["", "Your full checkup is attached as a PDF."]
+def short_email(now: datetime) -> str:
+    """A generic note to go with the PDF; the figures are in the attachment."""
+    lines = [f"Your portfolio checkup for {now:%B %Y} is attached as a PDF."]
     site = get_config().site_url
     if site:
-        lines.append(f"Live version: {site}/#/checkup")
+        lines += ["", f"Live version: {site}/#/checkup"]
     return "\n".join(lines)
 
 
@@ -123,7 +115,7 @@ def deliver(built: dict[str, Any], targets: dict[str, Any] | None, summary: str,
         return
     try:
         pdf = report_pdf.build_pdf(built, targets, summary, {"mine": cfg.owner_name, "partner": cfg.partner_name}, f"{now:%B %Y}")
-        notify.send_email_with_pdf(subject, short_email(built, targets), f"Checkup-{now:%Y-%m}.pdf", pdf)
+        notify.send_email_with_pdf(subject, short_email(now), f"Checkup-{now:%Y-%m}.pdf", pdf)
     except ClientError:  # SES refused it (e.g. address not verified), so nothing was sent
         logger.exception("SES refused the PDF checkup; sending plain text")
         notify.send_email(subject, email(built, targets, summary, now))

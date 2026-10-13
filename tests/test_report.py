@@ -65,7 +65,10 @@ def test_deliver_sends_pdf_and_falls_back_to_text(repo, monkeypatch):
     monkeypatch.setattr(monthly_checkup, "get_config", lambda: type(cfg)(**{**cfg.__dict__, "report_email": "me@example.com"}))
     monthly_checkup.deliver(built, TARGETS, "One.\nTwo.", now)
     body, filename, pdf = pdfs[0]
-    assert filename == "Checkup-2026-11.pdf" and pdf.startswith(b"%PDF") and "attached as a PDF" in body and not texts
+    assert filename == "Checkup-2026-11.pdf" and pdf.startswith(b"%PDF") and not texts
+    assert (
+        body.startswith("Your portfolio checkup for November 2026 is attached as a PDF.") and "$" not in body and "%" not in body
+    )
 
     def broken(*args):
         raise ClientError({"Error": {"Code": "MessageRejected", "Message": "Email address is not verified."}}, "SendEmail")
