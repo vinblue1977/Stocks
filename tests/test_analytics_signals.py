@@ -40,9 +40,9 @@ def test_value_history_and_trailing_return():
     holdings = [{"ticker": "VTI", "shares": 1, "avg_cost": 0}, {"ticker": "SCHD", "shares": 1, "avg_cost": 0}]
     series = analytics.value_history(holdings, histories)
     assert series == [("2025-01-02", 120.0), ("2025-01-03", 131.0)]
-    assert analytics.trailing_return(series) == pytest.approx(0.0917, abs=1e-4)
+    assert analytics.trailing_return(series, days=1) == pytest.approx(0.0917, abs=1e-4)
     assert analytics.trailing_return(series + [("2025-01-06", 144.1)], days=1) == pytest.approx(0.1, abs=1e-4)
-    assert analytics.trailing_return(series[:1]) is None
+    assert analytics.trailing_return(series) is None  # less than a year of history: no "1Y" figure
 
 
 def test_compute_signals_shapes():

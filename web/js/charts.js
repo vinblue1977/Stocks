@@ -85,24 +85,37 @@ export function valueChart(host, points, { ariaLabel, sinceLabel, dayLabel }) {
     };
     host.onpointermove = show;
     host.onpointerdown = show;
-    host.onpointerleave = () => { cross.setAttribute('visibility', 'hidden'); tip.hidden = true; place(lastIndex); };
+    hide = () => { cross.setAttribute('visibility', 'hidden'); tip.hidden = true; place(lastIndex); };
+    // On touch, pointerleave fires as soon as the finger lifts; keep the tap's details until a tap elsewhere.
+    host.onpointerleave = (event) => { if (event.pointerType !== 'touch') hide(); };
   }
+  let hide = () => {};
+  const tapElsewhere = (event) => {
+    if (!host.isConnected) { document.removeEventListener('pointerdown', tapElsewhere); return; }
+    if (!host.contains(event.target)) hide();
+  };
+  document.addEventListener('pointerdown', tapElsewhere);
 
-  // Redraw on resize; stop observing once the page replaces this chart.
+  // Redraw on resize, at most once a frame; stop observing once the page replaces this chart.
   let size = '';
   let attached = false;
+  let frame = 0;
   const observer = new ResizeObserver(([entry]) => {
     if (!host.isConnected) { if (attached) observer.disconnect(); return; }
     attached = true;
     const { width, height } = entry.contentRect;
     const next = `${Math.round(width)}x${Math.round(height)}`;
-    if (width && next !== size) { size = next; draw(width, height); }
+    if (!width || next === size) return;
+    size = next;
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => draw(width, height));
   });
   observer.observe(host);
 }
 
 /** Donut of shares (items: [{ name, weight, color }]) with a label and value in the middle. */
-export function donut(items, { label, value, ariaLabel }) {
+export function donut(allItems, { label, value, ariaLabel }) {
+  const items = allItems.filter((item) => item.weight > 0);
   const r = 66;
   const circumference = 2 * Math.PI * r;
   let offset = 0;

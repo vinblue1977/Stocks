@@ -90,8 +90,8 @@ def value_history(
 
 
 def trailing_return(series: Sequence[tuple[str, float]], days: int = 252) -> float | None:
-    """Return of the value series over its last `days` trading days (all of it when shorter); None without two points."""
-    if len(series) <= 1:
+    """Return of the value series over its last `days` trading days; None when the series is shorter than that."""
+    if len(series) <= days:
         return None
     window = series[-(days + 1) :]
     change = indicators.pct_change(window[-1][1], window[0][1])

@@ -122,7 +122,7 @@ def test_portfolio_summary(repo):
     assert body["portfolios"]["mine"]["stocks"]["total_value"] == pytest.approx(10 * 129)
     assert body["portfolios"]["mine"]["auto"]["total_value"] == 0
     assert body["portfolios"]["partner"]["overall"]["total_value"] == 0
-    assert overall["return_1y"] == pytest.approx(129 / 100 - 1, abs=1e-4)  # all 30 days of history
+    assert overall["return_1y"] is None  # only 30 days of history, not a year
     assert len(overall["history"]) == 30 and "benchmark_history" not in body
 
 

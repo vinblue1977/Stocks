@@ -11,6 +11,13 @@ let breakdown = 'holding'; // Allocation: holding | kind | person
 let kindFilter = 'both'; // Holdings: both | stocks | auto
 let sort = { key: 'value', dir: -1 }; // Holdings column sort
 
+/** Replaces a card after one of its buttons was pressed, keeping keyboard focus on the same button. */
+function swapCard(card, next) {
+  const index = [...card.querySelectorAll('button')].indexOf(document.activeElement);
+  card.replaceWith(next);
+  if (index >= 0) next.querySelectorAll('button')[index]?.focus();
+}
+
 /** Name of what's on screen: "Overall" with one person, else "Household" or the person's name. */
 function viewLabel() {
   if (!hasPartner()) return 'Overall';
@@ -65,8 +72,8 @@ function performanceCard(summary) {
     type: 'button', 'aria-pressed': String(key === range), text: key,
     onClick: () => { range = key; redraw(); },
   }));
-  const card = h('section', { class: 'card grow perf-card', 'aria-labelledby': 'perf-h' });
-  const redraw = () => card.replaceWith(performanceCard(summary));
+  const card = h('section', { class: 'card grow perf-card oneline-head', 'aria-labelledby': 'perf-h' });
+  const redraw = () => swapCard(card, performanceCard(summary));
   const head = h('div', { class: 'card-head' }, h('h2', { id: 'perf-h', text: `Performance · ${viewLabel()}` }),
     h('div', { class: 'segmented', role: 'group', 'aria-label': 'Time range' }, buttons));
   if (points.length < 2) {
@@ -98,12 +105,13 @@ const TOP_SLICES = 6; // the rest are grouped as "Other" so the list stays short
 /** Donut of the view by holding, group (Stock Holdings / Automatic Investment) or person (Household only). */
 function allocationCard(summary) {
   const options = [['holding', 'Holdings'], ['kind', 'Group'], ...(person === 'household' && hasPartner() ? [['person', 'Person']] : [])];
-  if (!options.some(([key]) => key === breakdown)) breakdown = 'holding';
+  // "Person" only exists on Household; fall back without forgetting the choice for when you return.
+  const by = options.some(([key]) => key === breakdown) ? breakdown : 'holding';
   const keyOf = {
     holding: (p) => p.ticker,
     kind: (p) => KINDS[GROUPS[p.group]?.kind]?.label || p.group,
     person: (p) => personName(GROUPS[p.group]?.person),
-  }[breakdown];
+  }[by];
   const sums = new Map();
   for (const p of summary.positions) {
     if (p.value != null) sums.set(keyOf(p), (sums.get(keyOf(p)) || 0) + p.value);
@@ -116,11 +124,13 @@ function allocationCard(summary) {
     name, value, weight: total ? value / total : 0,
     color: rest.length && i === kept.length - 1 ? '#5A6B85' : PALETTE[i % PALETTE.length],
   }));
-  const card = h('section', { class: 'card side', 'aria-labelledby': 'alloc-h' });
+  const tickers = summary.positions.map((p) => p.ticker);
+  const inSeveral = by === 'holding' ? [...new Set(tickers.filter((tk, i) => tickers.indexOf(tk) !== i))] : [];
+  const card = h('section', { class: 'card side oneline-head', 'aria-labelledby': 'alloc-h' });
   const switcher = h('div', { class: 'segmented', role: 'group', 'aria-label': 'Break down by' },
     options.map(([key, text]) => h('button', {
-      type: 'button', 'aria-pressed': String(key === breakdown), text,
-      onClick: () => { breakdown = key; card.replaceWith(allocationCard(summary)); },
+      type: 'button', 'aria-pressed': String(key === by), text,
+      onClick: () => { breakdown = key; swapCard(card, allocationCard(summary)); },
     })));
   card.append(h('div', { class: 'card-head' }, h('h2', { id: 'alloc-h', text: `Allocation · ${viewLabel()}` }), switcher));
   if (!items.length) {
@@ -135,7 +145,8 @@ function allocationCard(summary) {
         h('strong', { class: 'alloc-name', text: x.name }),
         h('span', { class: 'muted small', text: compactMoney(x.value) }),
         h('span', { class: 'mono', text: fmt.pct(x.weight) }))))),
-    rest.length ? h('p', { class: 'xsmall muted', style: { margin: '12px 0 0' }, text: `Other: ${rest.map(([name]) => name).join(', ')}` }) : null);
+    rest.length ? h('p', { class: 'xsmall muted', style: { margin: '12px 0 0' }, text: `Other: ${rest.map(([name]) => name).join(', ')}` }) : null,
+    inSeveral.length ? h('p', { class: 'xsmall muted', style: { margin: '8px 0 0' }, text: `${inSeveral.join(', ')} ${inSeveral.length === 1 ? 'is' : 'are'} held in more than one group; each counts once here.` }) : null);
   return card;
 }
 
@@ -215,8 +226,8 @@ function holdingsCard(summary) {
     if (A == null || B == null) return (A == null) - (B == null); // missing values (no price yet) last
     return (typeof A === 'string' ? A.localeCompare(B) : A - B) * sort.dir;
   });
-  const card = h('section', { class: 'card', 'aria-labelledby': 'hold-h' });
-  const redraw = () => card.replaceWith(holdingsCard(summary));
+  const card = h('section', { class: 'card oneline-head', 'aria-labelledby': 'hold-h' });
+  const redraw = () => swapCard(card, holdingsCard(summary));
   const head = h('tr', null, HOLDING_COLUMNS.map(([key, label, text, narrowHidden]) => {
     const active = key === sort.key;
     return h('th', {
@@ -284,7 +295,7 @@ export async function renderOverview(main) {
         tile('Total gain', fmt.signedMoney(s.total_gain), `${fmt.signedPct(s.total_gain_pct)} all time`, tone(s.total_gain)),
         tile(data.live_as_of ? 'Today' : 'Last trading day', fmt.signedMoney(s.day_change), fmt.signedPct(s.day_change_pct), tone(s.day_change)),
         tile(`1Y return · ${viewLabel()}`, fmt.signedPct(s.return_1y, 1),
-          s.return_1y == null ? 'Needs more history' : 'Current holdings over the last year', tone(s.return_1y))),
+          s.return_1y == null ? 'Needs a year of price history' : 'Current holdings over the last year', tone(s.return_1y))),
       moversCard(portfolios, data.live_as_of),
       h('div', { class: 'row' }, performanceCard(s), allocationCard(s)),
       holdingsCard(s),

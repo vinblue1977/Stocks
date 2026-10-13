@@ -196,7 +196,7 @@ tr.confirm-row .actions { justify-content: flex-start; margin-top: 10px; }
 .mover-empty { color: var(--muted); font-size: 14px; padding: 9px 0; }
 
 /* Overview: performance, allocation and holdings cards */
-.card h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneline-head h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .perf-card { display: flex; flex-direction: column; }
 .perf-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
