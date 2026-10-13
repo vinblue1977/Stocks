@@ -39,3 +39,10 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 - Newer Claude model for news summaries once the account has access.
 - Custom domain for the dashboard.
 - Broker sync (for example through an aggregator), parked.
+
+## CI ideas
+- Smoke test after each deploy: dashboard, sign-in page and API (401 without a token).
+- Weekly scheduled `pip-audit`.
+- Workflow security lint (zizmor or actionlint).
+- ESLint for `web/js`.
+- Dependency review on PRs.
