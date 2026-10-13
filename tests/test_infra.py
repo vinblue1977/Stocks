@@ -2,6 +2,7 @@
 
 import base64
 import json
+import re
 from pathlib import Path
 
 import aws_cdk as cdk
@@ -372,6 +373,7 @@ def test_site_https_only_with_strict_headers(any_template):
         "script-src 'self'",
         "frame-ancestors 'none'",
         "object-src 'none'",
+        "manifest-src 'self'",  # installable app
         '"FrameOption": "DENY"',
         "Permissions-Policy",
     ):
@@ -419,3 +421,28 @@ def test_guardduty_is_opt_in_and_alerts_ops(tmp_path_factory, value):
         assert rule["Properties"]["EventPattern"]["detail"] == {"severity": [{"numeric": [">=", 4]}]}
         (target,) = rule["Properties"]["Targets"]
         assert "OpsTopic" in json.dumps(target["Arn"])
+
+
+def _png_size(path):
+    data = path.read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n", path
+    return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+
+
+def test_web_app_manifest_is_installable():
+    web = Path(__file__).parent.parent / "web"
+    manifest = json.loads((web / "manifest.json").read_text())
+    assert manifest["display"] == "standalone" and manifest["id"] == "/"
+    assert manifest["start_url"].startswith(manifest["scope"])
+    for icon in manifest["icons"]:
+        width, height = _png_size(web / icon["src"])
+        assert icon["sizes"] == f"{width}x{height}"
+    purposes = {(i["sizes"], i["purpose"]) for i in manifest["icons"]}
+    assert {("192x192", "any"), ("512x512", "any"), ("512x512", "maskable")} <= purposes
+    html = (web / "index.html").read_text()
+    assert 'rel="manifest" href="manifest.json"' in html
+    assert _png_size(web / "icons" / "apple-touch-icon.png") == (180, 180)
+    # The installed app's colours match the page background.
+    bg = re.search(r"--bg: (#[0-9A-Fa-f]{6})", (web / "styles.css").read_text()).group(1)
+    assert manifest["background_color"] == manifest["theme_color"] == bg
+    assert f'name="theme-color" content="{bg}"' in html
