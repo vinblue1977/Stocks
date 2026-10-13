@@ -49,6 +49,16 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 22 | Notes per holding | S | "Why I bought" notes and a decision journal |
 | 23 | Net worth | M | Manually updated accounts (401k, savings, home) for one household total |
 | 24 | Ticker detail page | M | Price chart with your buys, news and signals |
+| 25 | Risk stats | S | Volatility, max drawdown and Sharpe ratio from stored price history |
+| 26 | Concentration warning | S | Flag one holding above a set share (e.g. 25%), on the page and in the weekly email |
+| 27 | Rebalance helper | M | "Where should my next $X go?" Builds on #4 |
+| 28 | Since your last visit | S | Banner with changes, new alerts and news |
+
+## Look and feel
+| # | Idea | Effort | Notes |
+|---|---|---|---|
+| 29 | Faster phone open | M | Cache the last view so the app opens instantly, then refresh after sign-in |
+| 30 | Light/dark switch | S | Manual override of the system theme |
 
 ## Also planned
 - Overview: drop the SPY comparison (column, tile, dashed chart line), keep your own 1Y return, and stop syncing SPY prices.
@@ -58,6 +68,12 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 - Newer Claude model for news summaries once the account has access.
 - Custom domain for the dashboard.
 - Broker sync (for example through an aggregator), parked.
+
+## Security and ops
+- CloudTrail trail to S3 for a long-term audit log (free history is 90 days).
+- Passwordless sign-in: drop the password factor, or require TOTP with it.
+- Lockfile with hashes for the Lambda layer.
+- Restore drill: point-in-time restore of the table to a test copy.
 
 ## CI ideas
 - Smoke test after each deploy: dashboard, sign-in page and API (401 without a token).
