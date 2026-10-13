@@ -12,7 +12,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 ## Plan and stay on track
 | # | Idea | Effort | Notes |
 |---|---|---|---|
-| 4 | Target allocation and drift | M | Target percentages per holding or asset class, a drift view, and an email when off by more than a set amount |
+| 4 | Target allocation and drift | Done | Checkup page and monthly email; next: what's inside each fund (SEC holdings) and a single-company ceiling |
 | 5 | Goals | M | "$X by year Y" per person or household, with progress and a simple projection |
 | 6 | Tax view | M | Short- vs long-term gains and positions below cost. Needs per-lot dates from #1: holdings keep only the earliest purchase date. Describes data only, not tax advice |
 

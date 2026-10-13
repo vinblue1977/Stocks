@@ -172,7 +172,7 @@ def test_topics_and_queue_require_tls(any_template):
 
 def test_functions_traced_on_arm(any_template):
     functions = app_functions(any_template)
-    assert len(functions) == 6
+    assert len(functions) == 7
     for fn in functions:
         assert fn["Properties"]["TracingConfig"] == {"Mode": "Active"}
         assert fn["Properties"]["Architectures"] == ["arm64"]
@@ -185,6 +185,20 @@ def test_bedrock_access_limited_to_one_model(any_template):
     assert "foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0" in policies
     assert "bedrock:InferenceProfileArn" in policies  # model reachable only through the profile
     assert '"bedrock:*"' not in policies and '"Action": "*"' not in policies
+
+
+def test_monthly_checkup_schedule_and_model(template, tmp_path_factory):
+    rules = template.find_resources("AWS::Events::Rule")
+    assert any(r["Properties"].get("ScheduleExpression") == "cron(0 14 ? * SAT#1 *)" for r in rules.values())
+
+    def monthly_env(t):
+        fn = next(f for f in app_functions(t) if f["Properties"]["Handler"].endswith("monthly_checkup.handler"))
+        return fn["Properties"]["Environment"]["Variables"]
+
+    assert monthly_env(template)["CHECKUP_MODEL_ID"] == "us.anthropic.claude-haiku-4-5-20251001-v1:0"  # default: same model
+    opus = synth(tmp_path_factory, checkupModelId="us.anthropic.claude-opus-4-6-v1")
+    assert monthly_env(opus)["CHECKUP_MODEL_ID"] == "us.anthropic.claude-opus-4-6-v1" and "SITE_URL" in monthly_env(opus)
+    assert "inference-profile/us.anthropic.claude-opus-4-6-v1" in json.dumps(opus.find_resources("AWS::IAM::Policy"))
 
 
 def test_mantle_option_uses_model_condition(tmp_path_factory):
@@ -207,7 +221,7 @@ def test_secrets_scoped_to_named_parameters(any_template):
 
 def test_budget_and_alarms(any_template):
     any_template.resource_count_is("AWS::Budgets::Budget", 1)
-    assert len(any_template.find_resources("AWS::CloudWatch::Alarm")) == 7
+    assert len(any_template.find_resources("AWS::CloudWatch::Alarm")) == 8
 
 
 def test_person_names_reach_the_functions(tmp_path_factory):

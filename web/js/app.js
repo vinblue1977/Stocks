@@ -3,6 +3,7 @@ import { addPasskeyUrl, currentEmail, hasSession, initAuth, logout } from './aut
 import { KINDS, hasPartner, portfolioTitle, setProfile } from './groups.js';
 import { errorCard, h } from './ui.js';
 import { renderAlerts } from './views/alerts.js';
+import { renderCheckup } from './views/checkup.js';
 import { renderPerson } from './views/holdings.js';
 import { renderNews } from './views/news.js';
 import { renderOverview } from './views/overview.js';
@@ -12,6 +13,7 @@ const ROUTES = {
   overview: renderOverview,
   news: renderNews,
   watchlist: renderWatchlist,
+  checkup: renderCheckup,
   alerts: renderAlerts,
 };
 const main = document.getElementById('main');

@@ -7,6 +7,8 @@ Key design (pk / sk):
     USER#<uid>      RULESTATE#<rule_id>          whether the rule is currently triggered
     USER#<uid>      ALERT#<iso_ts>#<rule_id>     alert history (expires after 180 days)
     USER#<uid>      WATCH#<ticker>               a watched ticker, not held (gsi1: WATCHLIST / <ticker>#<uid>)
+    USER#<uid>      TARGETS                      the user's target mix by area (Checkup)
+    USER#<uid>      CHECKUP#<yyyy-mm>            the monthly checkup summary
     PRICE#<ticker>  <yyyy-mm-dd>                 daily adjusted close
     PRICEMETA#<ticker> BACKFILL                  set once the full history has loaded
     NEWS#<ticker>   <iso_ts>#<article_id>        scored headline (expires after 30 days)
@@ -333,6 +335,28 @@ class Repository:
             Limit=limit,
         )
         return [_clean(i) for i in response.get("Items", [])]
+
+    # ---------- checkup ----------
+    def get_targets(self, user_id: str) -> dict[str, Any] | None:
+        item = self.table.get_item(Key={"pk": f"USER#{user_id}", "sk": "TARGETS"}).get("Item")
+        return _clean(item) if item else None
+
+    def put_targets(self, user_id: str, targets: Mapping[str, Any]) -> dict[str, Any]:
+        item = {"pk": f"USER#{user_id}", "sk": "TARGETS", **targets, "updated_at": _now_iso()}
+        self.table.put_item(Item=to_dynamo(item))
+        return _clean(item)
+
+    def put_checkup_summary(self, user_id: str, month: str, record: Mapping[str, Any]) -> None:
+        self.table.put_item(Item=to_dynamo({"pk": f"USER#{user_id}", "sk": f"CHECKUP#{month}", **record}))
+
+    def latest_checkup_summary(self, user_id: str) -> dict[str, Any] | None:
+        response = self.table.query(
+            KeyConditionExpression=Key("pk").eq(f"USER#{user_id}") & Key("sk").begins_with("CHECKUP#"),
+            ScanIndexForward=False,
+            Limit=1,
+        )
+        items = response.get("Items", [])
+        return _clean(items[0]) if items else None
 
     # ---------- prices ----------
     def latest_price_date(self, ticker: str) -> str | None:

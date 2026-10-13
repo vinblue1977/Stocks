@@ -16,7 +16,7 @@ from typing import Any
 
 import boto3
 
-from portfolio import analytics, rules, signals
+from portfolio import analytics, buckets, checkup, rules, signals
 from portfolio.config import get_config
 from portfolio.db import GROUPS, KINDS, PEOPLE, ConcurrentUpdateError, Repository, kind_of, person_of
 from portfolio.llm import sentiment_label
@@ -459,6 +459,67 @@ def delete_watch(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     return _response(204, {})
 
 
+# ---------------------------------------------------------------- checkup
+def get_checkup(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """Mix by area vs. the user's targets, and risk vs. the market, for the household and each person."""
+    user_id = _user_id(event)
+    targets = repo.get_targets(user_id)
+    built = checkup.build(repo, repo.list_holdings(user_id), targets)
+    overrides = (targets or {}).get("overrides")
+    return _response(
+        200,
+        {
+            "as_of": built["as_of"],
+            "areas": buckets.AREAS,
+            "shortlist": buckets.SHORTLIST,
+            "assigned": {t: buckets.area_of(t, overrides) for t in built["tickers"]},
+            "targets": targets,
+            "views": built["views"],
+            "summary": repo.latest_checkup_summary(user_id),
+        },
+    )
+
+
+def get_targets(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    return _response(200, {"targets": repo.get_targets(_user_id(event)), "areas": buckets.AREAS, "shortlist": buckets.SHORTLIST})
+
+
+def put_targets(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """{areas: {us: {pct, fund}, ...}, sector_ceiling, overrides: {ticker: area}}; percentages add up to 100."""
+    body = _body(event)
+    raw_areas = body.get("areas")
+    if not isinstance(raw_areas, dict) or set(raw_areas) - set(buckets.AREAS):
+        raise ApiError(400, f"areas must use: {', '.join(buckets.AREAS)}")
+    areas: dict[str, dict[str, Any]] = {}
+    for key in buckets.AREAS:
+        entry = raw_areas.get(key) or {}
+        if not isinstance(entry, dict):
+            raise ApiError(400, f"areas.{key} must be an object")
+        pct = _number({"pct": entry.get("pct", 0)}, "pct", 0, 100)
+        if pct != int(pct):
+            raise ApiError(400, "Target percentages must be whole numbers")
+        fund = str(entry.get("fund") or "").upper().strip()
+        if fund and not rules.TICKER_PATTERN.match(fund):
+            raise ApiError(400, f"areas.{key}.fund must look like VTI or BRK.B")
+        areas[key] = {"pct": int(pct), "fund": fund}
+    if sum(a["pct"] for a in areas.values()) != 100:
+        raise ApiError(400, "Target percentages must add up to 100")
+    ceiling = _number({"sector_ceiling": body.get("sector_ceiling", 100)}, "sector_ceiling", 0, 100)
+    if ceiling != int(ceiling):
+        raise ApiError(400, "sector_ceiling must be a whole number")
+    ceiling = int(ceiling)
+    raw_overrides = body.get("overrides") or {}
+    if not isinstance(raw_overrides, dict) or len(raw_overrides) > MAX_HOLDINGS + MAX_WATCHLIST:
+        raise ApiError(400, "overrides must be an object of ticker: area")
+    overrides = {}
+    for ticker, area in raw_overrides.items():
+        if area not in buckets.AREAS:
+            raise ApiError(400, f"overrides.{ticker} must be one of: {', '.join(buckets.AREAS)}")
+        overrides[_ticker(ticker)] = area
+    saved = repo.put_targets(_user_id(event), {"areas": areas, "sector_ceiling": ceiling, "overrides": overrides})
+    return _response(200, {"targets": saved})
+
+
 Route = Callable[[dict[str, Any], Repository], dict[str, Any]]
 
 ROUTES: dict[str, Route] = {
@@ -478,6 +539,9 @@ ROUTES: dict[str, Route] = {
     "GET /watchlist": list_watchlist,
     "PUT /watchlist/{ticker}": put_watch,
     "DELETE /watchlist/{ticker}": delete_watch,
+    "GET /checkup": get_checkup,
+    "GET /targets": get_targets,
+    "PUT /targets": put_targets,
 }
 
 

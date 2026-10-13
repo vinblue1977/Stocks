@@ -38,6 +38,7 @@ All routes need `Authorization: Bearer <Cognito token>`.
 | `GET /news?ticker=VTI` | AI briefing and scored headlines (held or watched tickers) |
 | `GET/POST/DELETE /rules[/{ruleId}]`, `GET /rule-types` | Alert rules, e.g. `{"type": "drawdown_below", "ticker": "VTI", "params": {"pct": 10}}` |
 | `GET /alerts` | Alert history |
+| `GET /checkup`, `GET/PUT /targets` | Mix by area vs. your own target mix, risk vs. the market (VTI); a Claude summary is emailed the first Saturday of each month (`checkupModelId`) |
 | `GET /watchlist`, `PUT/DELETE /watchlist/{ticker}` | Tickers you follow but don't hold (up to 10): signals, live price and news, never in totals. Removing one you don't hold deletes its rules |
 
 ## Setup
