@@ -10,7 +10,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from portfolio import checkup, llm, notify
+from portfolio import checkup, llm, notify, report_pdf
 from portfolio.buckets import AREAS
 from portfolio.config import get_config
 from portfolio.db import Repository
@@ -95,6 +95,35 @@ def email(built: dict[str, Any], targets: dict[str, Any] | None, summary: str, n
     return "\n".join(lines)
 
 
+def short_email(built: dict[str, Any], targets: dict[str, Any] | None) -> str:
+    """The few lines that go with the PDF."""
+    home = built["views"]["household"]
+    r = home["risk"]
+    market = _pct((r.get("market") or {}).get("return_1y"))
+    lines = [f"Household: ${home['total_value']:,.0f}  ·  12 months: {_pct(r['return_1y'])} (market {market})"]
+    gaps = sorted((d for d in home["drift"] or [] if d["area"] in AREAS), key=lambda d: -abs(d["gap"]))
+    if gaps:
+        d = gaps[0]
+        lines.append(f"Biggest gap: {d['label']} at {_pct(d['now'], False)} vs. your {_pct(d['target'], False)} target")
+    lines += ["", "Your full checkup is attached as a PDF."]
+    site = get_config().site_url
+    if site:
+        lines.append(f"Live version: {site}/#/checkup")
+    return "\n".join(lines)
+
+
+def deliver(built: dict[str, Any], targets: dict[str, Any] | None, summary: str, now: datetime) -> None:
+    """PDF by SES; if that fails (PDF, SES, unverified address), the plain-text email by SNS so the month isn't missed."""
+    subject = f"Your monthly portfolio checkup, {now:%b %d}"
+    try:
+        cfg = get_config()
+        pdf = report_pdf.build_pdf(built, targets, summary, {"mine": cfg.owner_name, "partner": cfg.partner_name}, f"{now:%B %Y}")
+        notify.send_email_with_pdf(subject, short_email(built, targets), f"Checkup-{now:%Y-%m}.pdf", pdf)
+    except Exception:
+        logger.exception("PDF checkup email failed; sending plain text")
+        notify.send_email(subject, email(built, targets, summary, now))
+
+
 def handler(event: dict[str, Any] | None, context: Any, repo: Repository | None = None, summarizer: Any = llm) -> dict[str, Any]:
     repo = repo or Repository()
     now = datetime.now(UTC)
@@ -118,7 +147,7 @@ def handler(event: dict[str, Any] | None, context: Any, repo: Repository | None 
             cutoff = (now - timedelta(days=31)).isoformat(timespec="seconds")
             alerts = sum(1 for a in repo.list_alerts(user_id, limit=500) if a["created_at"] >= cutoff)
             summary = summarizer.checkup_summary(facts(built, targets, alerts))
-            notify.send_email(f"Your monthly portfolio checkup, {now:%b %d}", email(built, targets, summary, now))
+            deliver(built, targets, summary, now)
             record = {
                 "summary": summary,
                 "month": month,

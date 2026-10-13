@@ -24,6 +24,7 @@ class Config:
     partner_news: bool
     partner_name: str
     site_url: str
+    report_email: str
 
 
 @lru_cache(maxsize=1)
@@ -45,4 +46,5 @@ def get_config() -> Config:
         partner_news=os.environ.get("PARTNER_NEWS", "true").lower() != "false",
         partner_name=os.environ.get("PARTNER_NAME") or "Partner",
         site_url=os.environ.get("SITE_URL", ""),
+        report_email=os.environ.get("REPORT_EMAIL", ""),
     )
