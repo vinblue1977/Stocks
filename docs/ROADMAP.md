@@ -37,7 +37,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | # | Idea | Effort | Notes |
 |---|---|---|---|
 | 16 | Fund overlap | M | Look through ETFs to real holdings, e.g. VTI and VOO overlap |
-| 17 | Sector and region mix | M | From fund holdings; fits the planned pie chart |
+| 17 | Sector and region mix | M | From fund holdings; fits the Allocation donut |
 | 18 | Fees in dollars | S | Expense ratios as dollars per year |
 
 ## Track progress
@@ -61,8 +61,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 30 | Light/dark switch | S | Manual override of the system theme |
 
 ## Also planned
-- Overview: drop the SPY comparison (column, tile, dashed chart line), keep your own 1Y return, and stop syncing SPY prices.
-- Overview: pie chart of holdings value and profit (design to agree first).
 - Rule backtesting: how an alert rule would have fired historically.
 - Finish the `cost_basis` → `avg_cost` rename: stop writing and accepting the old name, then remove it from stored holdings.
 - Newer Claude model for news summaries once the account has access.

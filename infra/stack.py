@@ -368,7 +368,6 @@ class PortfolioTrackerStack(Stack):
         common_env = {
             "TABLE_NAME": table.table_name,
             "ALERTS_TOPIC_ARN": topic.topic_arn,
-            "BENCHMARK_TICKER": self.node.try_get_context("benchmarkTicker") or "SPY",
             "PRICE_API_KEY_PARAM": f"{PARAM_PREFIX}/tiingo-api-key",
             "NEWS_API_KEY_PARAM": f"{PARAM_PREFIX}/finnhub-api-key",
             "BEDROCK_MODEL_ID": model_id,

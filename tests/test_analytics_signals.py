@@ -32,7 +32,7 @@ def test_position_without_an_earlier_close_is_unchanged():
     assert result["positions"][0]["day_change"] == 0 and result["positions"][0]["day_change_pct"] == 0
 
 
-def test_value_history_and_benchmark():
+def test_value_history_and_trailing_return():
     histories = {
         "VTI": [("2025-01-01", 100.0), ("2025-01-02", 110.0), ("2025-01-03", 121.0)],
         "SCHD": [("2025-01-02", 10.0), ("2025-01-03", 10.0)],
@@ -40,10 +40,9 @@ def test_value_history_and_benchmark():
     holdings = [{"ticker": "VTI", "shares": 1, "avg_cost": 0}, {"ticker": "SCHD", "shares": 1, "avg_cost": 0}]
     series = analytics.value_history(holdings, histories)
     assert series == [("2025-01-02", 120.0), ("2025-01-03", 131.0)]
-    comparison = analytics.compare_to_benchmark(series, [("2025-01-02", 50.0), ("2025-01-03", 50.0)])
-    assert comparison["portfolio_return"] == pytest.approx(0.0917, abs=1e-4)
-    assert comparison["benchmark_return"] == 0.0
-    assert analytics.compare_to_benchmark([], [])["difference"] is None
+    assert analytics.trailing_return(series, days=1) == pytest.approx(0.0917, abs=1e-4)
+    assert analytics.trailing_return(series + [("2025-01-06", 144.1)], days=1) == pytest.approx(0.1, abs=1e-4)
+    assert analytics.trailing_return(series) is None  # less than a year of history: no "1Y" figure
 
 
 def test_compute_signals_shapes():

@@ -30,7 +30,7 @@ MAX_BODY_BYTES = 10_000
 MAX_HOLDINGS = 40  # unique tickers across all groups; keeps the price sync under Tiingo's free 50 requests/hour
 MAX_RULES = 50
 MAX_WATCHLIST = 10
-MAX_TRACKED = 48  # unique tickers across holdings and the watchlist; the benchmark makes 49 of Tiingo's 50/hour
+MAX_TRACKED = 48  # unique tickers across holdings and the watchlist; stays under Tiingo's free 50 requests/hour
 HISTORY_DAYS = 400  # calendar days of history for the performance chart (about 1 trading year + margin)
 
 JSON_HEADERS = {
@@ -316,8 +316,6 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
                 previous[ticker] = latest[ticker]
                 if ticker in live:
                     latest[ticker] = live[ticker]["last"]
-    benchmark_ticker = get_config().benchmark_ticker
-    benchmark = repo.price_history(benchmark_ticker, since)
 
     built: dict[tuple[str, ...], dict[str, Any]] = {}
 
@@ -331,7 +329,7 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     def _summary(subset: list[dict[str, Any]]) -> dict[str, Any]:
         summary = analytics.summarize(subset, latest, previous)
         series = analytics.value_history(subset, histories)
-        summary["benchmark"] = {"ticker": benchmark_ticker, **analytics.compare_to_benchmark(series, benchmark)}
+        summary["return_1y"] = analytics.trailing_return(series)
         summary["history"] = [{"date": d, "value": v} for d, v in series]
         return summary
 
@@ -346,8 +344,6 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         {
             "as_of": max((h[-1][0] for h in histories.values() if h), default=None),
             "live_as_of": max((q["timestamp"] for q in live.values()), default=None),
-            "benchmark_ticker": benchmark_ticker,
-            "benchmark_history": [{"date": d, "close": c} for d, c in benchmark],
             "portfolios": portfolios,
         },
     )

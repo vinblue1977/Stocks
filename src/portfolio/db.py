@@ -231,11 +231,8 @@ class Repository:
         return result
 
     def tracked_tickers(self) -> list[str]:
-        """Tickers the jobs keep prices and signals for: held, watched and the benchmark."""
-        cfg = get_config()
-        tickers = {h["ticker"] for h in self.all_holdings()} | {w["ticker"] for w in self.all_watched()}
-        tickers.add(cfg.benchmark_ticker)
-        return sorted(tickers)
+        """Tickers the jobs keep prices and signals for: held and watched."""
+        return sorted({h["ticker"] for h in self.all_holdings()} | {w["ticker"] for w in self.all_watched()})
 
     # ---------- watchlist ----------
     # Tickers followed without holding them: prices, signals, news and rules, but never in totals.

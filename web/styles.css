@@ -138,9 +138,6 @@ tr.highlight { background: var(--chip-bg); }
 .chart { width: 100%; height: auto; display: block; margin-top: 12px; }
 .legend { display: flex; flex-wrap: wrap; gap: 20px; font-size: 13px; color: var(--muted); }
 .legend span { display: flex; align-items: center; gap: 8px; }
-.swatch { width: 18px; height: 3px; border-radius: 2px; background: var(--accent); }
-.swatch-dashed { width: 18px; height: 0; border-top: 2px dashed #6F7F99; }
-.alloc-bar { display: flex; height: 16px; border-radius: 8px; overflow: hidden; gap: 2px; margin-top: 20px; }
 .alloc-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--divider); font-size: 14px; }
 .dot { width: 12px; height: 12px; border-radius: 3px; flex: none; }
 
@@ -197,3 +194,26 @@ tr.confirm-row .actions { justify-content: flex-start; margin-top: 10px; }
 .mover-row .pct { min-width: 64px; text-align: right; }
 .mover-row .amt { min-width: 76px; text-align: right; font-size: 13px; }
 .mover-empty { color: var(--muted); font-size: 14px; padding: 9px 0; }
+
+/* Overview: performance, allocation and holdings cards */
+.oneline-head h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.perf-card { display: flex; flex-direction: column; }
+.perf-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.perf-return { font-family: var(--mono); font-size: 26px; font-weight: 500; }
+.chart-host { position: relative; flex: 1; min-height: 240px; margin-top: 12px; touch-action: pan-y; } /* fills the card's height */
+.chart-host .chart-fill { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; }
+.chart-tip { position: absolute; top: 8px; z-index: 1; pointer-events: none; background: #22324E; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.5; white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+.chart-tip-value { font-family: var(--mono); font-size: 14px; }
+.alloc-top { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; }
+.donut { width: 168px; height: 168px; flex: none; }
+.alloc-list { flex: 1 1 180px; min-width: 0; }
+.alloc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sort-btn { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.sort-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.sort-arrow { color: var(--accent); font-size: 10px; min-width: 8px; }
+th[aria-sort] { color: var(--text); }
+.weight { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.weight-track { display: inline-block; width: 56px; height: 6px; border-radius: 3px; background: var(--inset); overflow: hidden; }
+.weight-fill { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+@media (max-width: 640px) { .hide-narrow { display: none; } }

@@ -115,7 +115,6 @@ def test_portfolio_summary(repo):
 
     start = (datetime.now(UTC).date() - timedelta(days=30)).isoformat()
     repo.put_prices("VTI", price_series(100, 1, 30, start))
-    repo.put_prices("SPY", price_series(500, 1, 30, start))
     status, body = call(repo, "GET /portfolio")
     assert status == 200
     overall = body["portfolios"]["household"]["overall"]
@@ -123,9 +122,8 @@ def test_portfolio_summary(repo):
     assert body["portfolios"]["mine"]["stocks"]["total_value"] == pytest.approx(10 * 129)
     assert body["portfolios"]["mine"]["auto"]["total_value"] == 0
     assert body["portfolios"]["partner"]["overall"]["total_value"] == 0
-    assert overall["benchmark"]["ticker"] == "SPY" == body["benchmark_ticker"]
-    assert overall["benchmark"]["portfolio_return"] > overall["benchmark"]["benchmark_return"]
-    assert len(overall["history"]) == 30 and len(body["benchmark_history"]) == 30
+    assert overall["return_1y"] is None  # only 30 days of history, not a year
+    assert len(overall["history"]) == 30 and "benchmark_history" not in body
 
 
 def test_portfolio_uses_intraday_quote_until_the_close_is_stored(repo):
@@ -504,7 +502,7 @@ def test_watchlist_add_list_remove(repo, no_backfill):
     items = {w["ticker"]: w for w in body["watchlist"]}
     assert items["NVDA"]["held"] is False and items["VTI"]["held"] is True
     assert items["NVDA"]["signal"]["price"] == pytest.approx(129)  # computed before the evening run stores one
-    assert repo.tracked_tickers() == ["NVDA", "SPY", "VTI"]
+    assert repo.tracked_tickers() == ["NVDA", "VTI"]
     # Watched tickers never count in holdings or totals
     assert [h["ticker"] for h in call(repo, "GET /holdings")[1]["holdings"]] == ["VTI"]
     assert call(repo, "DELETE /watchlist/{ticker}", path={"ticker": "NVDA"})[0] == 204

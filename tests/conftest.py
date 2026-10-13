@@ -18,7 +18,6 @@ os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
 os.environ["TABLE_NAME"] = "PortfolioTable"
-os.environ["BENCHMARK_TICKER"] = "SPY"
 
 
 @pytest.fixture

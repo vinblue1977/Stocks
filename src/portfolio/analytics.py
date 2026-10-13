@@ -1,4 +1,4 @@
-"""Portfolio math: position values, gains, weights and performance against a benchmark."""
+"""Portfolio math: position values, gains, weights and trailing returns."""
 
 from __future__ import annotations
 
@@ -89,27 +89,13 @@ def value_history(
     return [(d, round(sum(shares[t] * by_ticker[t][d] for t in tickers), 2)) for d in common_dates]
 
 
-def compare_to_benchmark(
-    portfolio_series: Sequence[tuple[str, float]],
-    benchmark_series: Sequence[tuple[str, float]],
-    days: int = 252,
-) -> dict[str, float | None]:
-    """Trailing return of the portfolio vs. the benchmark over the same window."""
-    bench = dict(benchmark_series)
-    aligned = [(d, v, bench[d]) for d, v in portfolio_series if d in bench]
-    if len(aligned) <= 1:
-        return {"portfolio_return": None, "benchmark_return": None, "difference": None}
-    window = aligned[-(days + 1) :]
-    portfolio_return = indicators.pct_change(window[-1][1], window[0][1])
-    benchmark_return = indicators.pct_change(window[-1][2], window[0][2])
-    difference = None
-    if portfolio_return is not None and benchmark_return is not None:
-        difference = round(portfolio_return - benchmark_return, 4)
-    return {
-        "portfolio_return": None if portfolio_return is None else round(portfolio_return, 4),
-        "benchmark_return": None if benchmark_return is None else round(benchmark_return, 4),
-        "difference": difference,
-    }
+def trailing_return(series: Sequence[tuple[str, float]], days: int = 252) -> float | None:
+    """Return of the value series over its last `days` trading days; None when the series is shorter than that."""
+    if len(series) <= days:
+        return None
+    window = series[-(days + 1) :]
+    change = indicators.pct_change(window[-1][1], window[0][1])
+    return None if change is None else round(change, 4)
 
 
 def combined_weights(holdings: Sequence[Mapping[str, Any]], latest: Mapping[str, float]) -> dict[str, float]:

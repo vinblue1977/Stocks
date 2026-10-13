@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { sentimentBars } from '../charts.js';
-import { GROUPS, KINDS, hasPartner, possessive } from '../groups.js';
+import { GROUPS, KINDS, hasPartner, personName } from '../groups.js';
 import { fill, fmt, h, icon, pageHead, sentimentTag, tone } from '../ui.js';
 
 let selected = 'All';
@@ -103,7 +103,7 @@ export async function renderNews(main, { keepWatched = false } = {}) {
   }
   const [holdingsRes, signalsRes, rulesRes] = await Promise.all([api('GET', '/holdings'), api('GET', '/signals'), api('GET', '/rules')]);
   const filters = hasPartner()
-    ? [['all', 'Everyone'], ['mine', possessive('mine')], ['partner', possessive('partner')]]
+    ? [['all', 'Everyone'], ['mine', personName('mine')], ['partner', personName('partner')]]
     : [['all', 'All groups'], ['stocks', KINDS.stocks.label], ['auto', KINDS.auto.label]];
   if (!filters.some(([key]) => key === groupFilter)) groupFilter = 'all';
   const matches = (x) => groupFilter === 'all' || GROUPS[x.group]?.person === groupFilter || GROUPS[x.group]?.kind === groupFilter;

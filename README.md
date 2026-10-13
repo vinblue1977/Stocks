@@ -33,7 +33,7 @@ All routes need `Authorization: Bearer <Cognito token>`.
 | `PUT/DELETE /groups/{group}/holdings/{ticker}` | Set or remove a holding in a group: `{"shares": 40, "avg_cost": 230}` (average per share; the old name `cost_basis` is still accepted) or `{"shares": 40, "total_cost": 9200}` (total invested) |
 | `POST /groups/{group}/holdings/{ticker}/purchases` | Record a buy: `{"shares": 5, "price": 280}` or `{"shares": 0.28, "amount": 200}`. Updates that group's total shares and weighted average cost |
 | `GET /profile` | Display names (`owner_name`, `partner_name`) and whether to show the partner page |
-| `GET /portfolio` | Value, gains, allocation and history vs. SPY, under `portfolios.<household\|mine\|partner>.<overall\|stocks\|auto>`. During market hours values use intraday prices (`live_as_of` is the quote time, otherwise null); history stays on closing prices. The Overview re-fetches every 15 minutes while open and visible |
+| `GET /portfolio` | Value, gains, allocation, history and 1Y return, under `portfolios.<household\|mine\|partner>.<overall\|stocks\|auto>`. During market hours values use intraday prices (`live_as_of` is the quote time, otherwise null); history stays on closing prices. The Overview re-fetches every 15 minutes while open and visible |
 | `GET /signals` | RSI, moving averages, drawdown, sentiment |
 | `GET /news?ticker=VTI` | AI briefing and scored headlines (held or watched tickers) |
 | `GET/POST/DELETE /rules[/{ruleId}]`, `GET /rule-types` | Alert rules, e.g. `{"type": "drawdown_below", "ticker": "VTI", "params": {"pct": 10}}` |
@@ -78,7 +78,6 @@ Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <Pi
 |---|---|---|
 | `alertEmail` | none | Alerts, reports, alarms, budget warnings |
 | `allowedOrigins` | `localhost:5173` | CORS origins |
-| `benchmarkTicker` | `SPY` | Performance benchmark |
 | `ownerName` / `partnerName` | none | Names on the portfolio pages and weekly email, e.g. `-c ownerName=Alex -c partnerName=Sam` (or `make deploy OWNER_NAME=Alex PARTNER_NAME=Sam`); the partner page appears only when `partnerName` is set. Pass them at deploy time rather than committing them; they're served only to signed-in users |
 | `newsExcludedTickers` | `["ITOT", "MGV", "DGRO", "DVY", "IWB", "ONEQ", "SPYD"]` | Tickers to skip when fetching news (e.g. broad index funds with no headlines); price signals still apply |
 | `intradayQuotes` | `true` | Fetch intraday prices every 15 minutes while the US market is open (one Tiingo request for all tickers, about 27 a day). `false` shows closing prices only |
