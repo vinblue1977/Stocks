@@ -372,7 +372,8 @@ def test_site_files_revalidate_on_every_load(any_template):
 
 
 def test_deploy_does_not_wait_for_the_cache_clear(any_template):
-    deployment = next(iter(any_template.find_resources("Custom::CDKBucketDeployment").values()))
+    deployments = any_template.find_resources("Custom::CDKBucketDeployment")
+    deployment = next(v for k, v in deployments.items() if k.startswith("DeploySite"))
     assert deployment["Properties"]["DistributionPaths"] == ["/*"]
     assert deployment["Properties"]["WaitForDistributionInvalidation"] is False
 

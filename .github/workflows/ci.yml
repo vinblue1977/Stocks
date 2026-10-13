@@ -52,7 +52,7 @@ jobs:
       - name: Lint (includes Bandit security rules)
         run: make lint
       - name: Unit and infrastructure tests
-        run: make test PYTEST_ARGS="-n auto"  # parallel across the runner's CPUs
+        run: make test
       - name: Dependency vulnerability audit
         run: make audit
       - name: Synthesize and run cdk-nag security checks
@@ -165,7 +165,12 @@ jobs:
           check 200 "$site/"
           check 401 "$api/profile"   # every API route needs a Cognito token
           # The served config must point at the new API; the sign-in page must accept the site as callback.
-          config="$(curl -sf --max-time 20 --retry 3 "$site/config.json")" || { echo "config.json failed"; exit 1; }
-          [ "$(jq -r .apiUrl <<<"$config")" = "$api" ] || { echo "config.json apiUrl is stale"; failed=1; }
+          # The deploy doesn't wait for the CloudFront cache clear, so allow edges up to 5 minutes to catch up.
+          for attempt in $(seq 1 30); do
+            config="$(curl -sf --max-time 20 --retry 3 "$site/config.json")" || { echo "config.json failed"; exit 1; }
+            [ "$(jq -r .apiUrl <<<"$config")" = "$api" ] && break
+            [ "$attempt" = 30 ] && { echo "config.json apiUrl is stale"; failed=1; break; }
+            sleep 10
+          done
           check 200 "$(jq -r .authDomain <<<"$config")/login?client_id=$(jq -r .clientId <<<"$config")&response_type=code&scope=openid&redirect_uri=$site/"
           exit "$failed"

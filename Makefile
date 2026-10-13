@@ -15,8 +15,8 @@ lint:
 	$(PYTHON) -m ruff check .
 	$(PYTHON) -m ruff format --check .
 
-test:               ## Run the tests (CI adds PYTEST_ARGS="-n auto" to run them in parallel)
-	$(PYTHON) -m pytest $(PYTEST_ARGS)
+test:
+	$(PYTHON) -m pytest
 
 audit:              ## Check dependencies for known vulnerabilities
 	$(PYTHON) -m pip_audit -r requirements.txt -r layer/requirements.txt
