@@ -449,3 +449,19 @@ def test_intraday_quotes_keep_todays_quote_when_a_run_skips_a_ticker(repo):
     repo.put_quotes({"VTI": earlier, "OLD": stale})
     intraday_quotes.handler({}, None, repo=repo, provider=FakeQuotes(), now=datetime(2026, 10, 12, 15, 0, tzinfo=UTC))
     assert set(repo.latest_quotes()) == {"SPY", "VTI"} and repo.latest_quotes()["VTI"]["last"] == 9
+
+
+def test_watching_turns_news_on_for_a_partner_only_ticker(repo, monkeypatch):
+    import dataclasses
+
+    from portfolio import config
+    from portfolio.news_policy import news_off
+
+    holdings = [{"ticker": "VTI", "group": "stocks"}, {"ticker": "PQR", "group": "partner_stocks"}]
+    assert news_off(holdings, {"ITOT"}, partner_news=False) == {"ITOT", "PQR"}
+    assert news_off(holdings, {"ITOT"}, partner_news=False, watched={"PQR", "ITOT"}) == {"ITOT"}
+    cfg = dataclasses.replace(config.get_config(), partner_news=False)
+    monkeypatch.setattr(news_ingest, "get_config", lambda: cfg)
+    repo.put_holding("u1", {"ticker": "PQR", "group": "partner_stocks", "shares": 1, "avg_cost": 1})
+    repo.put_watch("u1", "PQR")
+    assert news_ingest.handler({}, None, repo=repo, provider=FakeNews(), summarizer=FakeSummarizer)["tickers"] == ["PQR"]

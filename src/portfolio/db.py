@@ -243,6 +243,12 @@ class Repository:
         items = self._query_all(KeyConditionExpression=Key("pk").eq(f"USER#{user_id}") & Key("sk").begins_with("WATCH#"))
         return [_clean(i) for i in items]
 
+    def held_tickers(self, user_id: str) -> set[str]:
+        return {h["ticker"] for h in self.list_holdings(user_id)}
+
+    def watched_tickers(self, user_id: str) -> set[str]:
+        return {w["ticker"] for w in self.list_watchlist(user_id)}
+
     def put_watch(self, user_id: str, ticker: str) -> dict[str, Any]:
         item = {
             "pk": f"USER#{user_id}",

@@ -559,3 +559,35 @@ def test_news_for_a_watched_ticker(repo):
     assert call(repo, "GET /news", query={"ticker": "NVDA"})[0] == 404
     call(repo, "PUT /watchlist/{ticker}", path={"ticker": "NVDA"})
     assert call(repo, "GET /news", query={"ticker": "NVDA"})[0] == 200
+
+
+def test_deleting_a_holding_prunes_rules_that_cannot_run(repo):
+    for ticker in ("MSFT", "AAPL"):
+        call(
+            repo,
+            "PUT /groups/{group}/holdings/{ticker}",
+            path={"group": "stocks", "ticker": ticker},
+            body=json.dumps({"shares": 1, "avg_cost": 1}),
+        )
+        for rule_type, params in (("rsi_below", {"threshold": 30}), ("weight_above", {"pct": 50})):
+            call(repo, "POST /rules", body=json.dumps({"type": rule_type, "ticker": ticker, "params": params}))
+    call(repo, "PUT /watchlist/{ticker}", path={"ticker": "AAPL"})
+    for ticker in ("MSFT", "AAPL"):
+        call(repo, "DELETE /groups/{group}/holdings/{ticker}", path={"group": "stocks", "ticker": ticker})
+    # MSFT is gone entirely; AAPL is still watched, so only its portfolio-share rule goes
+    assert [(r["ticker"], r["type"]) for r in call(repo, "GET /rules")[1]["rules"]] == [("AAPL", "rsi_below")]
+
+
+def test_watchlist_recomputes_a_stale_signal(repo):
+    start = (date.today() - timedelta(days=40)).isoformat()
+    repo.put_prices("NVDA", price_series(100, 1, 30, start))
+    repo.put_signal("NVDA", {"ticker": "NVDA", "as_of": start, "price": 1.0})  # left from an earlier watch
+    call(repo, "PUT /watchlist/{ticker}", path={"ticker": "NVDA"})
+    signal = call(repo, "GET /watchlist")[1]["watchlist"][0]["signal"]
+    assert signal["price"] == pytest.approx(129)
+
+
+def test_signals_include_watched_tickers(repo):
+    repo.put_signal("NVDA", {"ticker": "NVDA", "as_of": "2026-01-02", "price": 1.0})
+    call(repo, "PUT /watchlist/{ticker}", path={"ticker": "NVDA"})
+    assert [s["ticker"] for s in call(repo, "GET /signals")[1]["signals"]] == ["NVDA"]

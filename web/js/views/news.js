@@ -92,12 +92,14 @@ function signalsCard(signals, rules) {
     h('p', { class: 'muted small', style: { marginBottom: 0 }, text: 'RSI above 70 is commonly read as overbought, below 30 as oversold. News score runs from −1 (negative) to +1 (positive).' })));
 }
 
-export async function renderNews(main) {
+export async function renderNews(main, { keepWatched = false } = {}) {
   const wanted = new URLSearchParams(location.hash.split('?')[1] || '').get('ticker');
   if (wanted) {
     selected = wanted.toUpperCase();
     groupFilter = 'all';
     history.replaceState(null, '', '#/news'); // later chip clicks re-render without re-applying it
+  } else if (!keepWatched) {
+    watched = null; // a fresh visit shows only your holdings
   }
   const [holdingsRes, signalsRes, rulesRes] = await Promise.all([api('GET', '/holdings'), api('GET', '/signals'), api('GET', '/rules')]);
   const filters = hasPartner()
@@ -121,13 +123,13 @@ export async function renderNews(main) {
   const groupChips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Filter by group' },
     filters.map(([key, label]) => h('button', {
       type: 'button', class: 'chip-btn', 'aria-pressed': String(key === groupFilter), text: label,
-      onClick: () => { groupFilter = key; selected = 'All'; watched = null; renderNews(main); },
+      onClick: () => { groupFilter = key; selected = 'All'; watched = null; renderNews(main, { keepWatched: true }); },
     })));
 
   const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Filter by ticker' },
     ['All', ...tickers].map((t) => h('button', {
       type: 'button', class: 'chip-btn', 'aria-pressed': String(t === selected), text: t,
-      onClick: () => { selected = t; if (t !== watched) watched = null; renderNews(main); },
+      onClick: () => { selected = t; if (t !== watched) watched = null; renderNews(main, { keepWatched: true }); },
     })));
   main.replaceChildren(
     pageHead('News & signals', 'Headlines from Finnhub, scored and summarized each weekday evening', groupChips),

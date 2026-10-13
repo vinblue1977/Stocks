@@ -103,9 +103,9 @@ def handler(
     cfg = get_config()
     holdings = repo.all_holdings()
     # Skips e.g. broad index funds that rarely get headlines, and partner-only tickers if partner news is off.
-    held = {h["ticker"] for h in holdings} - news_off(holdings, cfg.news_excluded, cfg.partner_news)
-    watched = {w["ticker"] for w in repo.all_watched()} - cfg.news_excluded
-    tickers = sorted(held | watched)
+    watched = {w["ticker"] for w in repo.all_watched()}
+    held = {h["ticker"] for h in holdings}
+    tickers = sorted((held | watched) - news_off(holdings, cfg.news_excluded, cfg.partner_news, watched))
 
     briefs: dict[str, str] = {}
     scores: list[float] = []

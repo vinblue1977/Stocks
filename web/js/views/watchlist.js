@@ -18,8 +18,12 @@ function row(item, rules, main) {
     item.held ? h('span', { class: 'tag tag-neutral held-tag', text: 'Held' }) : null);
   const sg = item.signal;
   if (!sg) {
+    // The backfill takes about a minute; after a while with no prices, the ticker is probably mistyped.
+    const stuck = Date.now() - new Date(item.added_at).getTime() > 15 * 60 * 1000;
     return h('tr', { class: 'pending' }, name,
-      h('td', { colspan: 8, class: 'text', text: 'Loading price history, usually under a minute. News arrives after the evening run.' }),
+      h('td', { colspan: 8, class: 'text', text: stuck
+        ? `No prices found for ${item.ticker}. Check the ticker, then remove it.`
+        : 'Loading price history, usually under a minute. News arrives after the evening run.' }),
       h('td', null, remove));
   }
   // During market hours the live price replaces the last close, and the day change is measured against that close.
