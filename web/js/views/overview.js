@@ -162,7 +162,7 @@ function moverRows(positions, sign) {
   // By the dollar sign, so a tiny move on a big position (rounds to 0.00%) still counts.
   const rows = positions
     .filter((p) => p.day_change != null && Math.sign(p.day_change) === sign)
-    .sort((a, b) => sign * (b.day_change_pct - a.day_change_pct))
+    .sort((a, b) => sign * ((b.day_change_pct ?? 0) - (a.day_change_pct ?? 0)))
     .slice(0, MOVERS);
   if (!rows.length) return h('div', { class: 'mover-empty', text: sign > 0 ? 'No gainers' : 'No losers' });
   return rows.map((p) => h('div', { class: 'mover-row' },

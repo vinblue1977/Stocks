@@ -36,9 +36,7 @@ export function add(el, ...children) {
 
 /** Replaces a container's content, skipping null/false like h() does (replaceChildren would print "null"). */
 export function fill(el, ...children) {
-  const nodes = document.createDocumentFragment();
-  append(nodes, children);
-  el.replaceChildren(nodes);
+  el.replaceChildren(add(document.createDocumentFragment(), ...children));
 }
 
 export function s(tag, attrs, ...children) {
