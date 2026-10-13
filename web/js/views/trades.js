@@ -12,7 +12,8 @@ let pendingTrade = null; // a row's Buy/Sell pressed while the form was in the o
 /** Same rule as the server (portfolio/ledger.py): oldest lots sold first; long term = held more than a year. */
 function replay(txns) {
   const order = { opening: 0, buy: 1, sell: 2 };
-  const sorted = [...txns].sort((a, b) => (a.date || '0000-00-00').localeCompare(b.date || '0000-00-00') || order[a.type] - order[b.type]);
+  const sorted = [...txns].sort((a, b) => (a.date || '0000-00-00').localeCompare(b.date || '0000-00-00') || order[a.type] - order[b.type]
+    || String(a.txn_id || '').localeCompare(String(b.txn_id || '')));
   const lots = [];
   const realized = [];
   for (const t of sorted) {
@@ -34,9 +35,9 @@ function replay(txns) {
 
 function longTerm(bought, sold) {
   if (!bought) return null;
-  const anniversary = new Date(`${bought}T12:00:00`);
-  anniversary.setFullYear(anniversary.getFullYear() + 1);
-  return new Date(`${sold}T12:00:00`) > anniversary;
+  const [y, m, d] = bought.split('-').map(Number);
+  const anniversary = `${y + 1}-${String(m).padStart(2, '0')}-${String(m === 2 && d === 29 ? 28 : d).padStart(2, '0')}`; // as the server: Feb 29 -> Feb 28
+  return sold > anniversary;
 }
 
 const termTag = (term) => h('span', {
@@ -44,7 +45,7 @@ const termTag = (term) => h('span', {
   text: term === true ? 'Long term' : term === false ? 'Short term' : 'Term unknown',
 });
 
-export async function renderStockHoldings(main, { person, group, head, rerender, uniqueNote }) {
+export async function renderStockHoldings(main, { person, group, head, rerender, maxTickers }) {
   const [holdingsRes, portfolio, realizedRes] = await Promise.all([api('GET', '/holdings'), api('GET', '/portfolio'), api('GET', '/realized')]);
   const mine = holdingsRes.holdings.filter((x) => x.group === group).sort((a, b) => a.ticker.localeCompare(b.ticker));
   const summary = portfolio.portfolios[person].stocks;
@@ -53,12 +54,15 @@ export async function renderStockHoldings(main, { person, group, head, rerender,
   const year = String(new Date().getFullYear());
   const realizedYear = sales.filter((s) => s.sold.startsWith(year)).reduce((a, s) => a + s.gain, 0);
   const base = (ticker) => `/groups/${group}/holdings/${encodeURIComponent(ticker)}/transactions`;
-  const history = new Map(); // ticker -> transactions, loaded on demand
+  const history = new Map(); // ticker -> { transactions, implicit_opening }, loaded on demand
 
-  async function txnsFor(ticker) {
-    if (!history.has(ticker)) history.set(ticker, mine.some((x) => x.ticker === ticker) ? (await api('GET', base(ticker))).transactions : []);
+  async function ledgerFor(ticker) {
+    if (!history.has(ticker)) {
+      history.set(ticker, mine.some((x) => x.ticker === ticker) ? await api('GET', base(ticker)) : { transactions: [], implicit_opening: false });
+    }
     return history.get(ticker);
   }
+  const txnsFor = async (ticker) => (await ledgerFor(ticker)).transactions;
 
   // ---------- record a trade
   const tTicker = h('input', { id: 't-ticker', required: true, maxlength: 10, autocomplete: 'off', placeholder: 'NVDA', list: 'group-tickers', class: 'upper' });
@@ -144,8 +148,7 @@ export async function renderStockHoldings(main, { person, group, head, rerender,
   // ---------- holdings and their history
   function historyRow(x) {
     const cell = h('td', { colspan: 7 }, h('p', { class: 'muted small', text: 'Loading…' }));
-    txnsFor(x.ticker).then((txns) => {
-      const implicit = txns.length === 1 && txns[0].txn_id === 'opening';
+    ledgerFor(x.ticker).then(({ transactions: txns, implicit_opening: implicit }) => {
       const hasSales = txns.some((t) => t.type === 'sell');
       const rows = txns.map((t) => {
         const setDate = t.type === 'opening' && !t.date
@@ -220,12 +223,13 @@ export async function renderStockHoldings(main, { person, group, head, rerender,
           h('td', { text: fmt.money(s.proceeds) }), h('td', { text: fmt.money(s.cost) }),
           h('td', { class: tone(s.gain), text: fmt.signedMoney(s.gain) }), h('td', { class: 'text' }, termTag(s.long_term)))))))
       : h('p', { class: 'muted', text: 'No sales yet.' }),
+    realizedRes.unreadable.length ? h('p', { class: 'small neg', style: { margin: '10px 0 0' }, text: `Couldn't read the trades for ${realizedRes.unreadable.join(', ')}: a sale is larger than the shares held then. Check its History.` }) : null,
     h('p', { class: 'xsmall muted', style: { margin: '10px 0 0' }, text: "For your own tracking; your broker's tax forms are the official numbers." }));
 
   fill(main,
     h('datalist', { id: 'group-tickers' }, [...new Set(holdingsRes.holdings.map((x) => x.ticker))].map((t) => h('option', { value: t }))),
     ...head({
-      note: `${mine.length} position${mine.length === 1 ? '' : 's'} · ${uniqueNote} · buys and sales tracked`,
+      note: `${mine.length} position${mine.length === 1 ? '' : 's'} · ${new Set(holdingsRes.holdings.map((x) => x.ticker)).size} of ${maxTickers} tickers across all groups · buys and sales tracked`,
       stats: [['Value', fmt.money(summary.total_value)], ['Cost basis', fmt.money(summary.total_cost)],
         ['Unrealized', fmt.signedMoney(summary.total_gain), tone(summary.total_gain)],
         [`Realized in ${year}`, fmt.signedMoney(realizedYear), tone(realizedYear)]],

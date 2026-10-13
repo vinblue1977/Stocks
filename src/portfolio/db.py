@@ -344,7 +344,9 @@ class Repository:
 
     def list_txns(self, user_id: str, group: str | None = None, ticker: str | None = None) -> list[dict[str, Any]]:
         prefix = "TXN#" + (f"{group}#" if group else "") + (f"{ticker}#" if group and ticker else "")
-        items = self._query_all(KeyConditionExpression=Key("pk").eq(f"USER#{user_id}") & Key("sk").begins_with(prefix))
+        items = self._query_all(
+            KeyConditionExpression=Key("pk").eq(f"USER#{user_id}") & Key("sk").begins_with(prefix), ConsistentRead=True
+        )
         return [_clean(i) for i in items]
 
     def put_txn(self, user_id: str, group: str, ticker: str, txn: Mapping[str, Any]) -> dict[str, Any]:

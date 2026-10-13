@@ -129,7 +129,7 @@ def put_holding(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     group = _group(event)
     ticker = _ticker(event.get("pathParameters", {}).get("ticker"))
     if kind_of(group) == "stocks" and repo.list_txns(user_id, group, ticker):
-        raise ApiError(409, "This holding has transactions; record a buy or sale instead of setting totals")
+        raise ApiError(409, f"{ticker} has recorded transactions here; record a buy or sale instead of setting totals")
     body = _body(event)
     if body.get("cost_basis") is not None:  # the field's old name, still accepted
         if body.get("avg_cost") is not None:
@@ -291,19 +291,29 @@ def _write_summary(repo: Repository, user_id: str, group: str, ticker: str, resu
     return repo.put_holding(user_id, holding)
 
 
+def _admit_if_returning(repo: Repository, user_id: str, group: str, ticker: str, result: dict[str, Any]) -> bool:
+    """A position coming back (first buy, re-buy after selling out, or an undone sale) counts against the caps."""
+    if result["shares"] <= ledger.EPSILON or repo.get_holding(user_id, group, ticker):
+        return False
+    return _admit_ticker(repo, user_id, ticker)
+
+
+def _resync(repo: Repository, user_id: str, group: str, ticker: str) -> dict[str, Any] | None:
+    """Re-read the saved transactions and rewrite the summary, so trades saved at the same moment both count."""
+    return _write_summary(repo, user_id, group, ticker, _replay(repo.list_txns(user_id, group, ticker)))
+
+
 def _record_txn(repo: Repository, user_id: str, group: str, ticker: str, txn: dict[str, Any]) -> dict[str, Any] | None:
     txns, implicit = _ledger_txns(repo, user_id, group, ticker)
-    new_ticker = False
-    if not txns:
-        if txn["type"] == "sell":
-            raise ApiError(400, f"You don't hold {ticker} in this group")
-        new_ticker = _admit_ticker(repo, user_id, ticker)
     txn = {"txn_id": repo.new_txn_id(), **txn}
+    if txn["type"] == "sell" and not txns:
+        raise ApiError(400, f"You don't hold {ticker} in this group")
     result = _replay([*txns, txn])  # validates before anything is written
+    new_ticker = _admit_if_returning(repo, user_id, group, ticker, result)
     if implicit:
         repo.put_txn(user_id, group, ticker, txns[0])
     repo.put_txn(user_id, group, ticker, txn)
-    saved = _write_summary(repo, user_id, group, ticker, result)
+    saved = _resync(repo, user_id, group, ticker)
     if new_ticker:
         _request_backfill(ticker)
     return saved
@@ -357,11 +367,11 @@ def update_transaction(event: dict[str, Any], repo: Repository) -> dict[str, Any
     if not when:
         raise ApiError(400, "date is required (YYYY-MM-DD)")
     changed = {**match, "date": when}
-    result = _replay([changed if t is match else t for t in txns])
-    if not implicit:
+    _replay([changed if t is match else t for t in txns])  # validates, e.g. a sale can't come before its shares
+    repo.put_txn(user_id, group, ticker, changed)  # write the new one first: a failure leaves a duplicate, not a gap
+    if not implicit and changed["date"] != match.get("date"):
         repo.delete_txn(user_id, group, ticker, match)  # the date is part of the key
-    repo.put_txn(user_id, group, ticker, changed)
-    return _response(200, {"holding": _write_summary(repo, user_id, group, ticker, result)})
+    return _response(200, {"holding": _resync(repo, user_id, group, ticker)})
 
 
 def delete_transaction(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
@@ -369,8 +379,11 @@ def delete_transaction(event: dict[str, Any], repo: Repository) -> dict[str, Any
     if implicit:
         raise ApiError(400, "This opening position comes from your totals; record a sale or remove the holding instead")
     result = _replay([t for t in txns if t is not match])  # e.g. a later sale would need these shares
+    returning = _admit_if_returning(repo, user_id, group, ticker, result)  # undoing a full sale brings it back
     repo.delete_txn(user_id, group, ticker, match)
-    _write_summary(repo, user_id, group, ticker, result)
+    _resync(repo, user_id, group, ticker)
+    if returning:
+        _request_backfill(ticker)
     return _response(204, {})
 
 
@@ -380,10 +393,14 @@ def get_realized(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     by_position: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for txn in repo.list_txns(user_id):
         by_position.setdefault((txn["group"], txn["ticker"]), []).append(txn)
-    sales = []
+    sales, unreadable = [], []
     for (group, ticker), txns in by_position.items():
-        for piece in ledger.replay(txns)["realized"]:
-            sales.append({**piece, "ticker": ticker, "group": group})
+        try:
+            pieces = ledger.replay(txns)["realized"]
+        except ledger.LedgerError:
+            unreadable.append(ticker)  # e.g. a sale larger than the shares then; shown, not a page failure
+            continue
+        sales += [{**piece, "ticker": ticker, "group": group} for piece in pieces]
     sales.sort(key=lambda s: s["sold"], reverse=True)
     years: dict[str, dict[str, float]] = {}
     for s in sales:
@@ -391,7 +408,7 @@ def get_realized(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         term = "unknown" if s["long_term"] is None else "long" if s["long_term"] else "short"
         year["total"] = round(year["total"] + s["gain"], 2)
         year[term] = round(year[term] + s["gain"], 2)
-    return _response(200, {"sales": sales, "years": years})
+    return _response(200, {"sales": sales, "years": years, "unreadable": sorted(unreadable)})
 
 
 def _prune_rules(repo: Repository, user_id: str, ticker: str) -> None:

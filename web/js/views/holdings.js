@@ -43,9 +43,7 @@ export async function renderPerson(main, person, kind) {
         h('div', null, h('h2', { class: 'section-title', text: KINDS[kind].label }), h('p', { class: 'muted small', text: note })),
         h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '24px' } }, stats.map(([label, value, cls]) => stat(label, value, cls)))),
     ];
-    const all = (await api('GET', '/holdings')).holdings;
-    const unique = new Set(all.map((x) => x.ticker)).size;
-    return renderStockHoldings(main, { person, group, head, rerender, uniqueNote: `${unique} of ${MAX_TICKERS} tickers across all groups` });
+    return renderStockHoldings(main, { person, group, head, rerender, maxTickers: MAX_TICKERS });
   }
   const [holdingsRes, portfolio] = await Promise.all([api('GET', '/holdings'), api('GET', '/portfolio')]);
   const all = holdingsRes.holdings;

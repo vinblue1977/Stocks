@@ -708,3 +708,21 @@ def test_stock_holdings_with_trades_keep_totals_locked(repo):
     assert status == 409
     trade(repo, "AMD", "sell", 1, 150, "2026-02-05")
     assert call(repo, "DELETE /groups/{group}/holdings/{ticker}", path={"group": "stocks", "ticker": "AMD"})[0] == 409
+
+
+def test_buying_back_a_sold_out_ticker_counts_against_caps(repo, no_backfill, monkeypatch):
+    trade(repo, "AMD", "buy", 2, 100, "2026-01-05")
+    trade(repo, "AMD", "sell", 2, 150, "2026-02-05")
+    assert no_backfill == ["AMD"]
+    trade(repo, "AMD", "buy", 1, 120, "2026-03-05")
+    assert no_backfill == ["AMD", "AMD"]  # back in the portfolio: prices load again
+    trade(repo, "AMD", "sell", 1, 130, "2026-04-05")
+    monkeypatch.setattr(api, "MAX_HOLDINGS", 0)
+    assert trade(repo, "AMD", "buy", 1, 120, "2026-05-05")[0] == 409
+
+
+def test_unreadable_position_does_not_break_realized(repo):
+    trade(repo, "AMD", "buy", 2, 100, "2026-01-05")
+    repo.put_txn("user-1", "stocks", "AMD", {"txn_id": "zz", "type": "sell", "date": "2026-01-06", "shares": 9, "price": 1})
+    status, body = call(repo, "GET /realized")
+    assert status == 200 and body["unreadable"] == ["AMD"]
