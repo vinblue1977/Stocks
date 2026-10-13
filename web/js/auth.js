@@ -18,6 +18,12 @@ function redirectUri() {
   return `${location.origin}/`;
 }
 
+function authUrl(path, params) {
+  const url = new URL(`${cfg.authDomain}${path}`);
+  url.search = new URLSearchParams({ client_id: cfg.clientId, ...params }).toString();
+  return url.toString();
+}
+
 function save(tokens) {
   const expiresAt = Date.now() + (tokens.expires_in || 3600) * 1000;
   const prev = load() || {};
@@ -48,31 +54,24 @@ export async function login() {
   const state = randomString(16);
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
   sessionStorage.setItem(PKCE, JSON.stringify({ verifier, state }));
-  const url = new URL(`${cfg.authDomain}/oauth2/authorize`);
-  url.search = new URLSearchParams({
+  location.assign(authUrl('/oauth2/authorize', {
     response_type: 'code',
-    client_id: cfg.clientId,
     redirect_uri: redirectUri(),
     scope: 'openid email',
     code_challenge_method: 'S256',
     code_challenge: challenge,
     state,
-  }).toString();
-  location.assign(url.toString());
+  }));
 }
 
-// Cognito's page for registering a passkey on this device; it needs the sign-in session from login().
+// Cognito's page for registering a passkey on this device; Cognito asks to sign in again if its session expired.
 export function addPasskeyUrl() {
-  const url = new URL(`${cfg.authDomain}/passkeys/add`);
-  url.search = new URLSearchParams({ client_id: cfg.clientId, redirect_uri: redirectUri() }).toString();
-  return url.toString();
+  return authUrl('/passkeys/add', { redirect_uri: redirectUri() });
 }
 
 export function logout() {
   sessionStorage.removeItem(STORE);
-  const url = new URL(`${cfg.authDomain}/logout`);
-  url.search = new URLSearchParams({ client_id: cfg.clientId, logout_uri: redirectUri() }).toString();
-  location.assign(url.toString());
+  location.assign(authUrl('/logout', { logout_uri: redirectUri() }));
 }
 
 // Returns true when signed in; otherwise starts the redirect to the login page.
@@ -96,6 +95,7 @@ export async function initAuth(config) {
   }
   if (params.has('error')) {
     history.replaceState(null, '', location.pathname);
+    if (load()) return true; // e.g. a cancelled passkey registration: still signed in
     throw new Error(params.get('error_description') || 'Sign-in was cancelled.');
   }
   if (load()) return true;

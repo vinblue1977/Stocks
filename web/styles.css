@@ -154,6 +154,7 @@ tr.highlight { background: var(--chip-bg); }
 .segmented-lg button { height: 40px; padding: 0 16px; font-size: 14px; }
 .segmented-lg button[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
 tr.total-row td { font-weight: 600; }
+[hidden] { display: none !important; }
 .btn-link { display: inline-flex; align-items: center; text-decoration: none; }
 .sub-switch { margin-top: 14px; width: fit-content; }
 .section-title { font-size: 22px; }

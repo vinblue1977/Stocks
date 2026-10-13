@@ -135,6 +135,7 @@ def test_passkeys_with_password_backup(any_template):
                     {"SignInPolicy": {"AllowedFirstAuthFactors": Match.array_with(["PASSWORD", "WEB_AUTHN"])}}
                 ),
                 "WebAuthnUserVerification": "required",
+                "WebAuthnFactorConfiguration": "MULTI_FACTOR_WITH_USER_VERIFICATION",
             }
         ),
     )

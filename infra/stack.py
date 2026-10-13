@@ -303,6 +303,9 @@ class PortfolioTrackerStack(Stack):
             deletion_protection=True,
             removal_policy=RemovalPolicy.RETAIN,
         )
+        # A passkey with Touch ID / Face ID counts as MFA, so it still works for anyone who turns on TOTP.
+        cfn_pool: cognito.CfnUserPool = user_pool.node.default_child  # type: ignore[assignment]
+        cfn_pool.web_authn_factor_configuration = "MULTI_FACTOR_WITH_USER_VERIFICATION"
         user_pool_client = user_pool.add_client(
             "WebClient",
             auth_flows=cognito.AuthFlow(user=True, user_srp=True, user_password=True),
@@ -322,18 +325,19 @@ class PortfolioTrackerStack(Stack):
             supported_identity_providers=[cognito.UserPoolClientIdentityProvider.COGNITO],
         )
         # Managed login (v2) is needed for passkeys; the passkey relying party is this Cognito domain.
-        user_pool.add_domain(
+        login_domain = user_pool.add_domain(
             "LoginDomain",
             cognito_domain=cognito.CognitoDomainOptions(domain_prefix=auth_prefix),
             managed_login_version=cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
         )
-        cognito.CfnManagedLoginBranding(
+        branding = cognito.CfnManagedLoginBranding(
             self,
             "LoginBranding",
             user_pool_id=user_pool.user_pool_id,
             client_id=user_pool_client.user_pool_client_id,
             use_cognito_provided_values=True,
         )
+        login_domain.node.add_dependency(branding)  # branding exists before the page switches to v2
 
         # ------------------------------------------------------------------ Lambda shared pieces
         layer = lambda_.LayerVersion(
