@@ -8,7 +8,7 @@
 | Dashboard attacks (XSS, clickjacking, tampering) | Strict CSP (scripts only from the site, no inline code), DOM built with `textContent` only, `X-Frame-Options: DENY`, HSTS, private S3 bucket reachable only through CloudFront |
 | Token theft in the browser | OAuth code + PKCE via Cognito's hosted page (the app never sees the password); tokens in sessionStorage, cleared on tab close; 1-hour expiry |
 | Reading another user's data | User ID taken only from the verified token; tested |
-| Password attacks | 12+ character policy, optional TOTP MFA, throttling, no user-existence leaks |
+| Password attacks | Passkey sign-in (phishing-resistant, user verification required), 12+ character policy, optional TOTP MFA, throttling, no user-existence leaks |
 | Stolen tokens | 1-hour tokens, 7-day refresh, revocation enabled |
 | Bad input | Ticker/number validation, 10 KB body limit, per-user caps |
 | Prompt injection in headlines | Passed as tagged data; schema-validated output; no advice; output triggers no actions |
@@ -24,7 +24,7 @@ Accepted cdk-nag exceptions and their reasons are in [`infra/nag.py`](../infra/n
 ## Optional hardening
 
 1. **Customer-managed key:** set `useCustomerManagedKey=true` (about $1/month) for revocation and CloudTrail auditing.
-2. **Require MFA:** set `Mfa.REQUIRED` once the web app supports MFA setup.
+2. **Passwordless only:** once everyone has a passkey, drop the password factor or require TOTP for it.
 3. **Cognito Plus plan:** adds threat protection (paid).
 4. **WAF and custom domain:** add AWS WAF (about $6+/month) and a custom domain with an ACM certificate to enforce TLS 1.2+ on the dashboard.
 5. **CI:** done: Actions are pinned to commit SHAs, the runner is pinned, and Dependabot proposes weekly updates.

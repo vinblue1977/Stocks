@@ -293,14 +293,22 @@ class PortfolioTrackerStack(Stack):
             ),
             mfa=cognito.Mfa.OPTIONAL,
             mfa_second_factor=cognito.MfaSecondFactor(otp=True, sms=False),
+            # Passkeys (Touch ID / Face ID) as a first factor; the password stays as a backup.
+            sign_in_policy=cognito.SignInPolicy(
+                allowed_first_auth_factors=cognito.AllowedFirstAuthFactors(password=True, passkey=True)
+            ),
+            passkey_user_verification=cognito.PasskeyUserVerification.REQUIRED,
             account_recovery=cognito.AccountRecovery.EMAIL_ONLY,
             feature_plan=cognito.FeaturePlan.ESSENTIALS,
             deletion_protection=True,
             removal_policy=RemovalPolicy.RETAIN,
         )
+        # A passkey with Touch ID / Face ID counts as MFA, so it still works for anyone who turns on TOTP.
+        cfn_pool: cognito.CfnUserPool = user_pool.node.default_child  # type: ignore[assignment]
+        cfn_pool.web_authn_factor_configuration = "MULTI_FACTOR_WITH_USER_VERIFICATION"
         user_pool_client = user_pool.add_client(
             "WebClient",
-            auth_flows=cognito.AuthFlow(user_srp=True, user_password=True),
+            auth_flows=cognito.AuthFlow(user=True, user_srp=True, user_password=True),
             prevent_user_existence_errors=True,
             generate_secret=False,  # public browser client
             access_token_validity=Duration.hours(1),
@@ -316,11 +324,20 @@ class PortfolioTrackerStack(Stack):
             ),
             supported_identity_providers=[cognito.UserPoolClientIdentityProvider.COGNITO],
         )
-        user_pool.add_domain(
+        # Managed login (v2) is needed for passkeys; the passkey relying party is this Cognito domain.
+        login_domain = user_pool.add_domain(
             "LoginDomain",
             cognito_domain=cognito.CognitoDomainOptions(domain_prefix=auth_prefix),
-            managed_login_version=cognito.ManagedLoginVersion.CLASSIC_HOSTED_UI,
+            managed_login_version=cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
         )
+        branding = cognito.CfnManagedLoginBranding(
+            self,
+            "LoginBranding",
+            user_pool_id=user_pool.user_pool_id,
+            client_id=user_pool_client.user_pool_client_id,
+            use_cognito_provided_values=True,
+        )
+        login_domain.node.add_dependency(branding)  # branding exists before the page switches to v2
 
         # ------------------------------------------------------------------ Lambda shared pieces
         layer = lambda_.LayerVersion(

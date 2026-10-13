@@ -126,6 +126,28 @@ def test_cognito_hardened(any_template):
     )
 
 
+def test_passkeys_with_password_backup(any_template):
+    any_template.has_resource_properties(
+        "AWS::Cognito::UserPool",
+        Match.object_like(
+            {
+                "Policies": Match.object_like(
+                    {"SignInPolicy": {"AllowedFirstAuthFactors": Match.array_with(["PASSWORD", "WEB_AUTHN"])}}
+                ),
+                "WebAuthnUserVerification": "required",
+                "WebAuthnFactorConfiguration": "MULTI_FACTOR_WITH_USER_VERIFICATION",
+            }
+        ),
+    )
+    any_template.has_resource_properties(
+        "AWS::Cognito::UserPoolClient", Match.object_like({"ExplicitAuthFlows": Match.array_with(["ALLOW_USER_AUTH"])})
+    )
+    any_template.has_resource_properties("AWS::Cognito::UserPoolDomain", Match.object_like({"ManagedLoginVersion": 2}))
+    any_template.has_resource_properties(
+        "AWS::Cognito::ManagedLoginBranding", Match.object_like({"UseCognitoProvidedValues": True})
+    )
+
+
 def test_topics_and_queue_require_tls(any_template):
     topic_policies = any_template.find_resources("AWS::SNS::TopicPolicy")
     assert len(topic_policies) == len(any_template.find_resources("AWS::SNS::Topic"))

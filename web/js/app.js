@@ -1,5 +1,5 @@
 import { api, setApiBase } from './api.js';
-import { currentEmail, initAuth, logout } from './auth.js';
+import { addPasskeyUrl, currentEmail, initAuth, logout } from './auth.js';
 import { KINDS, hasPartner, portfolioTitle, setProfile } from './groups.js';
 import { errorCard, h } from './ui.js';
 import { renderAlerts } from './views/alerts.js';
@@ -100,6 +100,9 @@ async function start() {
   const signOut = document.getElementById('sign-out');
   signOut.hidden = false;
   signOut.addEventListener('click', logout);
+  const addPasskey = document.getElementById('add-passkey');
+  addPasskey.href = addPasskeyUrl();
+  addPasskey.hidden = false;
   window.addEventListener('hashchange', () => route());
   setInterval(maybeRefresh, 60 * 1000);
   document.addEventListener('visibilitychange', maybeRefresh); // catch up when the tab comes back
