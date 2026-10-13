@@ -36,7 +36,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 - Overview: pie chart of holdings value and profit (design to agree first).
 - Rule backtesting: how an alert rule would have fired historically.
 - Factual-only news summaries.
-- Rename the API field `cost_basis` to `avg_cost` (accept both names for a while and migrate stored holdings).
+- Finish the `cost_basis` → `avg_cost` rename: stop writing and accepting the old name, then remove it from stored holdings.
 - Newer Claude model for news summaries once the account has access.
 - Custom domain for the dashboard.
 - Broker sync (for example through an aggregator), parked.

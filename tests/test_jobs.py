@@ -20,7 +20,7 @@ class FakePrices:
 
 
 def test_price_sync_backfills_then_increments(repo):
-    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "cost_basis": 1})
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
     provider = FakePrices()
     result = price_sync.handler({}, None, repo=repo, provider=provider)
     assert result["tickers"] == ["SPY", "VTI"]  # benchmark always included
@@ -86,7 +86,7 @@ class FakeSummarizer:
 
 
 def test_news_ingest_scores_and_briefs(repo):
-    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "cost_basis": 1})
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
     result = news_ingest.handler({}, None, repo=repo, provider=FakeNews(), summarizer=FakeSummarizer)
     assert result["summarized"] == ["VTI"]
     brief = repo.latest_brief("VTI")
@@ -99,8 +99,8 @@ def test_evaluate_signals_alerts_once(repo, monkeypatch):
     sent = []
     monkeypatch.setattr(evaluate_signals.notify, "send_email", lambda s, b: sent.append(s))
     start = (datetime.now(UTC).date() - timedelta(days=300)).isoformat()
-    repo.put_holding("u1", {"ticker": "VTI", "shares": 10, "cost_basis": 100})
-    repo.put_holding("u1", {"ticker": "BND", "shares": 1, "cost_basis": 70})
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 10, "avg_cost": 100})
+    repo.put_holding("u1", {"ticker": "BND", "shares": 1, "avg_cost": 70})
     repo.put_prices("VTI", price_series(100, 1, 300, start))
     repo.put_prices("BND", price_series(70, 0, 300, start))
     repo.put_prices("SPY", price_series(400, 1, 300, start))
@@ -119,7 +119,7 @@ def test_weekly_report(repo, monkeypatch):
     sent = []
     monkeypatch.setattr(weekly_report.notify, "send_email", lambda s, b: sent.append(b))
     start = (datetime.now(UTC).date() - timedelta(days=10)).isoformat()
-    repo.put_holding("u1", {"ticker": "VTI", "shares": 10, "cost_basis": 100})
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 10, "avg_cost": 100})
     repo.put_prices("VTI", price_series(100, 1, 10, start))
     assert weekly_report.handler({}, None, repo=repo) == {"reports_sent": 1}
     assert "Total value: $1,090.00" in sent[0]
@@ -135,8 +135,8 @@ def test_weekly_report_by_person(repo, monkeypatch):
     weekly_report.get_config.cache_clear()
     start = (datetime.now(UTC).date() - timedelta(days=10)).isoformat()
     repo.put_prices("VTI", price_series(100, 0, 10, start))
-    repo.put_holding("u1", {"ticker": "VTI", "group": "stocks", "shares": 1, "cost_basis": 100})
-    repo.put_holding("u1", {"ticker": "VTI", "group": "partner_auto", "shares": 3, "cost_basis": 100})
+    repo.put_holding("u1", {"ticker": "VTI", "group": "stocks", "shares": 1, "avg_cost": 100})
+    repo.put_holding("u1", {"ticker": "VTI", "group": "partner_auto", "shares": 3, "avg_cost": 100})
     weekly_report.handler({}, None, repo=repo)
     weekly_report.get_config.cache_clear()
     assert "Total value: $400.00" in sent[0]
@@ -190,15 +190,15 @@ def test_migration_moves_legacy_holdings_once(repo, table):
             "gsi1sk": "VTI#u1",
             "ticker": "VTI",
             "shares": 3,
-            "cost_basis": 200,
+            "avg_cost": 200,
         }
     )
-    repo.put_holding("u1", {"ticker": "BND", "group": "auto", "shares": 1, "cost_basis": 70})
+    repo.put_holding("u1", {"ticker": "BND", "group": "auto", "shares": 1, "avg_cost": 70})
     assert repo.migrate_legacy_holdings() == ["u1:VTI"]
     assert repo.migrate_legacy_holdings() == []  # idempotent
     holdings = {(h["group"], h["ticker"]): h for h in repo.list_holdings("u1")}
     assert set(holdings) == {("stocks", "VTI"), ("auto", "BND")}
-    assert holdings[("stocks", "VTI")]["shares"] == 3 and holdings[("stocks", "VTI")]["cost_basis"] == 200
+    assert holdings[("stocks", "VTI")]["shares"] == 3 and holdings[("stocks", "VTI")]["avg_cost"] == 200
     assert table.get_item(Key={"pk": "USER#u1", "sk": "HOLDING#VTI"}).get("Item") is None
 
 
@@ -209,9 +209,9 @@ def test_weight_rule_uses_combined_portfolio(repo, monkeypatch):
     for t, p in (("VOO", 100), ("BND", 100), ("SPY", 400)):
         repo.put_prices(t, price_series(p, 0, 60, start))
     # Combined across groups: 6 VOO ($600) vs 4 BND ($400) => VOO is 60% of the whole portfolio
-    repo.put_holding("u1", {"ticker": "VOO", "group": "stocks", "shares": 2, "cost_basis": 100})
-    repo.put_holding("u1", {"ticker": "VOO", "group": "auto", "shares": 4, "cost_basis": 100})
-    repo.put_holding("u1", {"ticker": "BND", "group": "auto", "shares": 4, "cost_basis": 100})
+    repo.put_holding("u1", {"ticker": "VOO", "group": "stocks", "shares": 2, "avg_cost": 100})
+    repo.put_holding("u1", {"ticker": "VOO", "group": "auto", "shares": 4, "avg_cost": 100})
+    repo.put_holding("u1", {"ticker": "BND", "group": "auto", "shares": 4, "avg_cost": 100})
     repo.create_rule("u1", {"type": "weight_above", "ticker": "VOO", "params": {"pct": 55}, "enabled": True})
     assert evaluate_signals.handler({}, None, repo=repo)["alerts_sent"] == 1
 
@@ -232,8 +232,8 @@ def test_news_skips_excluded_tickers(repo, monkeypatch):
             self.asked.append(ticker)
             return super().company_news(ticker, from_date, to_date)
 
-    repo.put_holding("u1", {"ticker": "ITOT", "group": "auto", "shares": 1, "cost_basis": 1})
-    repo.put_holding("u1", {"ticker": "VTI", "group": "auto", "shares": 1, "cost_basis": 1})
+    repo.put_holding("u1", {"ticker": "ITOT", "group": "auto", "shares": 1, "avg_cost": 1})
+    repo.put_holding("u1", {"ticker": "VTI", "group": "auto", "shares": 1, "avg_cost": 1})
     spy = Spy()
     result = news_ingest.handler({}, None, repo=repo, provider=spy, summarizer=FakeSummarizer)
     assert spy.asked == ["VTI"] and result["tickers"] == ["VTI"]
@@ -247,7 +247,7 @@ def test_excluded_ticker_has_no_stale_sentiment(repo, monkeypatch):
     start = (datetime.now(UTC).date() - timedelta(days=60)).isoformat()
     for t in ("DVY", "SPY"):
         repo.put_prices(t, price_series(100, 0, 60, start))
-    repo.put_holding("u1", {"ticker": "DVY", "group": "auto", "shares": 1, "cost_basis": 1})
+    repo.put_holding("u1", {"ticker": "DVY", "group": "auto", "shares": 1, "avg_cost": 1})
     repo.put_brief("DVY", "2026-10-09", {"summary": "old", "sentiment_7d": 0.6})
     evaluate_signals.handler({}, None, repo=repo)
     assert repo.get_signal("DVY")["sentiment_7d"] == 0.6  # news on: uses the brief
@@ -310,7 +310,7 @@ class GrowingNews:
 
 def test_news_reuses_summaries_when_nothing_is_new(repo):
     CountingSummarizer.ticker_calls = CountingSummarizer.portfolio_calls = 0
-    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "cost_basis": 1})
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
     news = GrowingNews()
 
     first = news_ingest.handler({}, None, repo=repo, provider=news, summarizer=CountingSummarizer)
@@ -330,7 +330,7 @@ def test_news_reuses_summaries_when_nothing_is_new(repo):
 
 def test_portfolio_brief_regenerates_when_alerts_change(repo):
     CountingSummarizer.ticker_calls = CountingSummarizer.portfolio_calls = 0
-    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "cost_basis": 1})
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
     news = GrowingNews()
     news_ingest.handler({}, None, repo=repo, provider=news, summarizer=CountingSummarizer)
     rule = repo.create_rule("u1", {"type": "rsi_below", "ticker": "VTI", "params": {"threshold": 30}, "enabled": True})
@@ -352,9 +352,9 @@ def test_partner_only_tickers_skip_news_when_partner_news_off(repo, monkeypatch)
             self.asked.append(ticker)
             return super().company_news(ticker, from_date, to_date)
 
-    repo.put_holding("u1", {"ticker": "VTI", "group": "stocks", "shares": 1, "cost_basis": 1})
-    repo.put_holding("u1", {"ticker": "VTI", "group": "partner_auto", "shares": 1, "cost_basis": 1})  # shared
-    repo.put_holding("u1", {"ticker": "SCHD", "group": "partner_stocks", "shares": 1, "cost_basis": 1})  # partner only
+    repo.put_holding("u1", {"ticker": "VTI", "group": "stocks", "shares": 1, "avg_cost": 1})
+    repo.put_holding("u1", {"ticker": "VTI", "group": "partner_auto", "shares": 1, "avg_cost": 1})  # shared
+    repo.put_holding("u1", {"ticker": "SCHD", "group": "partner_stocks", "shares": 1, "avg_cost": 1})  # partner only
     spy = Spy()
     news_ingest.handler({}, None, repo=repo, provider=spy, summarizer=FakeSummarizer)
     assert sorted(spy.asked) == ["SCHD", "VTI"]  # default: partner news on
@@ -401,7 +401,7 @@ def test_market_hours_follow_new_york_time(moment, is_open):
 
 
 def test_intraday_quotes_one_request_only_when_open(repo):
-    repo.put_holding("u1", {"group": "stocks", "ticker": "VTI", "shares": 1, "cost_basis": 1})
+    repo.put_holding("u1", {"group": "stocks", "ticker": "VTI", "shares": 1, "avg_cost": 1})
     provider = FakeQuotes()
     closed = intraday_quotes.handler({}, None, repo=repo, provider=provider, now=datetime(2026, 10, 12, 12, 0, tzinfo=UTC))
     assert closed == {"skipped": "market closed"} and provider.calls == []
@@ -413,7 +413,7 @@ def test_intraday_quotes_one_request_only_when_open(repo):
 
 
 def test_intraday_quotes_keep_todays_quote_when_a_run_skips_a_ticker(repo):
-    repo.put_holding("u1", {"group": "stocks", "ticker": "VTI", "shares": 1, "cost_basis": 1})
+    repo.put_holding("u1", {"group": "stocks", "ticker": "VTI", "shares": 1, "avg_cost": 1})
     earlier = {"last": 9.0, "timestamp": "2026-10-12T14:00:00+00:00", "date": "2026-10-12"}
     stale = {"last": 8.0, "timestamp": "2026-10-09T19:00:00+00:00", "date": "2026-10-09"}
     repo.put_quotes({"VTI": earlier, "OLD": stale})

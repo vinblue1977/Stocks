@@ -1,7 +1,7 @@
 """DynamoDB single-table repository.
 
 Key design (pk / sk):
-    USER#<uid>      HOLDING#<group>#<ticker>     a position: shares + average cost per share; group is
+    USER#<uid>      HOLDING#<group>#<ticker>     a position: shares + avg_cost (per share); group is
                                                  one of GROUPS (gsi1: HOLDINGS / <ticker>#<uid>#<group>)
     USER#<uid>      RULE#<rule_id>               an alert rule (gsi1: RULES / <uid>#<rule_id>)
     USER#<uid>      RULESTATE#<rule_id>          whether the rule is currently triggered
@@ -116,10 +116,23 @@ class Repository:
             "gsi1sk": f"{ticker}#{user_id}#{group}",
         }
 
+    def _holding_item(self, user_id: str, holding: Mapping[str, Any]) -> dict[str, Any]:
+        group = holding.get("group", DEFAULT_GROUP)
+        item = {**self._holding_keys(user_id, group, holding["ticker"]), "updated_at": _now_iso(), **holding, "group": group}
+        # Also stored under the old name for one release, so a rollback still reads it (ROADMAP: drop later).
+        item["cost_basis"] = item["avg_cost"]
+        return item
+
+    def _all_holding_items(self) -> list[dict[str, Any]]:
+        return self._query_all(IndexName="gsi1", KeyConditionExpression=Key("gsi1pk").eq("HOLDINGS"))
+
     @staticmethod
     def _holding_out(item: Mapping[str, Any]) -> dict[str, Any]:
         clean = _clean(item)
         clean.setdefault("group", DEFAULT_GROUP)  # items written before groups existed
+        if "cost_basis" in clean:  # old name; items written before the rename have only this one
+            clean.setdefault("avg_cost", clean["cost_basis"])
+            del clean["cost_basis"]
         return clean
 
     def list_holdings(self, user_id: str, group: str | None = None) -> list[dict[str, Any]]:
@@ -128,8 +141,7 @@ class Repository:
         return [h for h in holdings if group is None or h["group"] == group]
 
     def put_holding(self, user_id: str, holding: Mapping[str, Any]) -> dict[str, Any]:
-        group = holding.get("group", DEFAULT_GROUP)
-        item = {**self._holding_keys(user_id, group, holding["ticker"]), "updated_at": _now_iso(), **holding, "group": group}
+        item = self._holding_item(user_id, holding)
         self.table.put_item(Item=to_dynamo(item))
         return self._holding_out(item)
 
@@ -146,13 +158,14 @@ class Repository:
         Prevents two purchases recorded at the same moment from overwriting each other's math.
         Raises ConcurrentUpdateError when someone else changed the holding first.
         """
-        group = holding.get("group", DEFAULT_GROUP)
-        item = {**self._holding_keys(user_id, group, holding["ticker"]), "updated_at": _now_iso(), **holding, "group": group}
+        item = self._holding_item(user_id, holding)
         if previous is None:
             condition: Any = Attr("pk").not_exists()
         else:
-            condition = Attr("shares").eq(to_dynamo(float(previous["shares"]))) & Attr("cost_basis").eq(
-                to_dynamo(float(previous["cost_basis"]))
+            avg_cost = to_dynamo(float(previous["avg_cost"]))
+            # Items written before the rename have only the old attribute name.
+            condition = Attr("shares").eq(to_dynamo(float(previous["shares"]))) & (
+                Attr("avg_cost").eq(avg_cost) | (Attr("avg_cost").not_exists() & Attr("cost_basis").eq(avg_cost))
             )
         try:
             self.table.put_item(Item=to_dynamo(item), ConditionExpression=condition)
@@ -169,7 +182,7 @@ class Repository:
         Idempotent: new-format items are left alone. Returns "<user>:<ticker>" for each item moved.
         """
         moved = []
-        for item in self._query_all(IndexName="gsi1", KeyConditionExpression=Key("gsi1pk").eq("HOLDINGS")):
+        for item in self._all_holding_items():
             if item["sk"].count("#") != 1:
                 continue
             user_id = item["pk"].removeprefix("USER#")
@@ -185,12 +198,33 @@ class Repository:
             moved.append(f"{user_id}:{ticker}")
         return moved
 
+    def migrate_avg_cost(self, dry_run: bool = False) -> list[str]:
+        """Copy cost_basis into avg_cost on holdings written before the rename. The old attribute is kept.
+
+        Idempotent: items that already have avg_cost are skipped. Returns the sort key of each item needing it.
+        """
+        changed = []
+        for item in self._all_holding_items():
+            if "avg_cost" in item or "cost_basis" not in item:
+                continue
+            if not dry_run:
+                try:
+                    self.table.update_item(
+                        Key={"pk": item["pk"], "sk": item["sk"]},
+                        UpdateExpression="SET avg_cost = cost_basis",
+                        ConditionExpression=Attr("avg_cost").not_exists() & Attr("cost_basis").exists(),
+                    )
+                except self.table.meta.client.exceptions.ConditionalCheckFailedException:
+                    continue  # rewritten by the app in the meantime
+            changed.append(f"{item['pk']}:{item['sk']}")
+        return changed
+
     def all_holdings(self) -> list[dict[str, Any]]:
         """Every holding across all users (used by scheduled jobs). Adds `user_id`."""
-        items = self._query_all(IndexName="gsi1", KeyConditionExpression=Key("gsi1pk").eq("HOLDINGS"))
+        items = self._all_holding_items()
         result = []
         for item in items:
-            clean = _clean(item)
+            clean = self._holding_out(item)
             clean["user_id"] = item["pk"].removeprefix("USER#")
             result.append(clean)
         return result

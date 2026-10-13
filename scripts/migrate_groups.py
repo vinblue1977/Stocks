@@ -28,7 +28,8 @@ def main() -> None:
     legacy = [i for i in items if i["sk"].count("#") == 1]
     print(f"Holdings: {len(items)} total, {len(legacy)} in the old format")
     for item in legacy:
-        print(f"  {item['sk'].removeprefix('HOLDING#'):<6} shares={item['shares']} avg={item['cost_basis']}")
+        avg = item.get("avg_cost", item.get("cost_basis"))
+        print(f"  {item['sk'].removeprefix('HOLDING#'):<6} shares={item['shares']} avg={avg}")
     if args.dry_run or not legacy:
         return
     moved = Repository(table).migrate_legacy_holdings()
