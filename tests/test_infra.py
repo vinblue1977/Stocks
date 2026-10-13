@@ -408,20 +408,14 @@ def test_login_branding_uses_only_known_settings():
     assert _setting_paths(ours) <= _setting_paths(defaults)
 
 
-@pytest.mark.parametrize("value", [None, False, True])
-def test_guardduty_is_opt_in_and_alerts(tmp_path_factory, value):
+@pytest.mark.parametrize("value", [None, False, True, "true"])
+def test_guardduty_is_opt_in_and_alerts_ops(tmp_path_factory, value):
     template = synth(tmp_path_factory, **({} if value is None else {"guardDuty": value}))
-    template.resource_count_is("AWS::GuardDuty::Detector", 1 if value else 0)
-    if value:
-        template.has_resource_properties(
-            "AWS::Events::Rule",
-            Match.object_like(
-                {
-                    "EventPattern": {
-                        "source": ["aws.guardduty"],
-                        "detail-type": ["GuardDuty Finding"],
-                        "detail": {"severity": [{"numeric": [">=", 4]}]},
-                    }
-                }
-            ),
-        )
+    enabled = value in (True, "true")
+    template.resource_count_is("AWS::GuardDuty::Detector", 1 if enabled else 0)
+    rules = template.find_resources("AWS::Events::Rule", {"Properties": {"EventPattern": {"source": ["aws.guardduty"]}}})
+    assert len(rules) == (1 if enabled else 0)
+    for rule in rules.values():
+        assert rule["Properties"]["EventPattern"]["detail"] == {"severity": [{"numeric": [">=", 4]}]}
+        (target,) = rule["Properties"]["Targets"]
+        assert "OpsTopic" in json.dumps(target["Arn"])
