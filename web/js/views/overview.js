@@ -141,7 +141,7 @@ function holdingsCard(summary) {
     h('td', { class: 'text' }, h('strong', { text: p.ticker })),
     h('td', { class: 'text' }, h('span', { class: `group-chip ${groupChip(p.group)}`, text: groupLabel(p.group, { short: true, withPerson: hasPartner() && person === 'household' }) })),
     h('td', { text: fmt.num(p.shares, 5) }),
-    h('td', { text: fmt.money(p.cost_basis) }),
+    h('td', { text: fmt.money(p.avg_cost) }),
     h('td', { text: p.price == null ? 'Loading…' : fmt.money(p.price) }),
     h('td', { text: fmt.money(p.value) }),
     h('td', { class: tone(p.gain) }, `${fmt.signedMoney(p.gain)} `, h('span', { class: 'xsmall', text: fmt.signedPct(p.gain_pct, 1) }))));

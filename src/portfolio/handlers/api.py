@@ -122,12 +122,16 @@ def put_holding(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     group = _group(event)
     ticker = _ticker(event.get("pathParameters", {}).get("ticker"))
     body = _body(event)
+    if "cost_basis" in body:  # the field's old name, still accepted
+        if "avg_cost" in body:
+            raise ApiError(400, "Send avg_cost only (cost_basis is its old name)")
+        body["avg_cost"] = body.pop("cost_basis")
     shares = _number(body, "shares", 0.000001, 1_000_000_000)
     holding: dict[str, Any] = {
         "ticker": ticker,
         "group": group,
         "shares": shares,
-        "cost_basis": _per_share(body, shares, per_share="cost_basis", total="total_cost"),
+        "avg_cost": _per_share(body, shares, per_share="avg_cost", total="total_cost"),
     }
     purchased_on = _purchase_date(body)
     if purchased_on:
@@ -179,14 +183,14 @@ def record_purchase(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         current = repo.get_holding(user_id, group, ticker)
         if current is None:
             new_ticker = _admit_ticker(repo, user_id, ticker)
-            updated: dict[str, Any] = {"ticker": ticker, "group": group, "shares": shares, "cost_basis": price}
+            updated: dict[str, Any] = {"ticker": ticker, "group": group, "shares": shares, "avg_cost": price}
             if purchased_on:
                 updated["purchased_on"] = purchased_on
         else:
             old_shares = float(current["shares"])
             total = old_shares + shares
-            average = (old_shares * float(current["cost_basis"]) + shares * price) / total
-            updated = {"ticker": ticker, "group": group, "shares": round(total, 6), "cost_basis": round(average, 8)}
+            average = (old_shares * float(current["avg_cost"]) + shares * price) / total
+            updated = {"ticker": ticker, "group": group, "shares": round(total, 6), "avg_cost": round(average, 8)}
             dates = [d for d in (current.get("purchased_on"), purchased_on) if d]
             if dates:
                 updated["purchased_on"] = min(dates)  # keep the first purchase date

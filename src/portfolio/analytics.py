@@ -25,13 +25,13 @@ def summarize(
     for holding in holdings:
         ticker = holding["ticker"]
         shares = float(holding["shares"])
-        cost_basis = float(holding["cost_basis"])
+        avg_cost = float(holding["avg_cost"])
         price = latest.get(ticker)
-        cost = shares * cost_basis
+        cost = shares * avg_cost
         group = holding.get("group")
         if price is None:
             positions.append(
-                {"ticker": ticker, "group": group, "shares": shares, "cost_basis": cost_basis, "price": None, "value": None}
+                {"ticker": ticker, "group": group, "shares": shares, "avg_cost": avg_cost, "price": None, "value": None}
             )
             continue
         value = shares * price
@@ -43,7 +43,7 @@ def summarize(
                 "ticker": ticker,
                 "group": group,
                 "shares": shares,
-                "cost_basis": cost_basis,
+                "avg_cost": avg_cost,
                 "price": price,
                 "value": round(value, 2),
                 "gain": round(value - cost, 2),

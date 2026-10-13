@@ -35,7 +35,7 @@ def test_holding_crud_and_backfill(repo, no_backfill):
         repo,
         "PUT /groups/{group}/holdings/{ticker}",
         path={"group": "stocks", "ticker": "vti"},
-        body=json.dumps({"shares": 40, "cost_basis": 230, "purchased_on": "2024-03-01"}),
+        body=json.dumps({"shares": 40, "avg_cost": 230, "purchased_on": "2024-03-01"}),
     )
     assert status == 200 and body["ticker"] == "VTI"
     assert no_backfill == ["VTI"]
@@ -44,7 +44,7 @@ def test_holding_crud_and_backfill(repo, no_backfill):
         repo,
         "PUT /groups/{group}/holdings/{ticker}",
         path={"group": "stocks", "ticker": "VTI"},
-        body=json.dumps({"shares": 41, "cost_basis": 230}),
+        body=json.dumps({"shares": 41, "avg_cost": 230}),
     )
     assert no_backfill == ["VTI"]
     status, body = call(repo, "GET /holdings")
@@ -59,7 +59,7 @@ def test_users_are_isolated(repo):
         "PUT /groups/{group}/holdings/{ticker}",
         user="alice",
         path={"group": "stocks", "ticker": "VTI"},
-        body=json.dumps({"shares": 1, "cost_basis": 1}),
+        body=json.dumps({"shares": 1, "avg_cost": 1}),
     )
     assert call(repo, "GET /holdings", user="bob")[1]["holdings"] == []
     # Bob deleting "VTI" only touches his own (empty) data
@@ -70,12 +70,12 @@ def test_users_are_isolated(repo):
 @pytest.mark.parametrize(
     "path, body, status",
     [
-        ({"group": "stocks", "ticker": "VTI;DROP"}, {"shares": 1, "cost_basis": 1}, 400),
-        ({"group": "stocks", "ticker": "VTI"}, {"shares": -1, "cost_basis": 1}, 400),
-        ({"group": "stocks", "ticker": "VTI"}, {"shares": "NaN", "cost_basis": 1}, 400),
+        ({"group": "stocks", "ticker": "VTI;DROP"}, {"shares": 1, "avg_cost": 1}, 400),
+        ({"group": "stocks", "ticker": "VTI"}, {"shares": -1, "avg_cost": 1}, 400),
+        ({"group": "stocks", "ticker": "VTI"}, {"shares": "NaN", "avg_cost": 1}, 400),
         ({"group": "stocks", "ticker": "VTI"}, {"shares": 1}, 400),
-        ({"group": "stocks", "ticker": "VTI"}, {"shares": 1, "cost_basis": 1, "purchased_on": "2999-01-01"}, 400),
-        ({"group": "stocks", "ticker": "VTI"}, {"shares": 1, "cost_basis": 1, "purchased_on": "yesterday"}, 400),
+        ({"group": "stocks", "ticker": "VTI"}, {"shares": 1, "avg_cost": 1, "purchased_on": "2999-01-01"}, 400),
+        ({"group": "stocks", "ticker": "VTI"}, {"shares": 1, "avg_cost": 1, "purchased_on": "yesterday"}, 400),
     ],
 )
 def test_holding_validation(repo, path, body, status):
@@ -107,7 +107,7 @@ def test_portfolio_summary(repo):
         repo,
         "PUT /groups/{group}/holdings/{ticker}",
         path={"group": "stocks", "ticker": "VTI"},
-        body=json.dumps({"shares": 10, "cost_basis": 100}),
+        body=json.dumps({"shares": 10, "avg_cost": 100}),
     )
     from datetime import UTC, datetime, timedelta
 
@@ -136,7 +136,7 @@ def test_portfolio_uses_intraday_quote_until_the_close_is_stored(repo):
             repo,
             "PUT /groups/{group}/holdings/{ticker}",
             path={"group": "stocks", "ticker": ticker},
-            body=json.dumps({"shares": 10, "cost_basis": 100}),
+            body=json.dumps({"shares": 10, "avg_cost": 100}),
         )
     today = trading_day(datetime.now(UTC))
     start = (today - timedelta(days=30)).isoformat()
@@ -180,13 +180,13 @@ def test_holdings_cap(repo, monkeypatch):
             repo,
             "PUT /groups/{group}/holdings/{ticker}",
             path={"group": "stocks", "ticker": ticker},
-            body=json.dumps({"shares": 1, "cost_basis": 1}),
+            body=json.dumps({"shares": 1, "avg_cost": 1}),
         )
     status, body = call(
         repo,
         "PUT /groups/{group}/holdings/{ticker}",
         path={"group": "stocks", "ticker": "QQQ"},
-        body=json.dumps({"shares": 1, "cost_basis": 1}),
+        body=json.dumps({"shares": 1, "avg_cost": 1}),
     )
     assert status == 409 and "up to 2 different tickers" in body["message"]
     # Updating an existing holding is still allowed at the cap
@@ -195,7 +195,7 @@ def test_holdings_cap(repo, monkeypatch):
             repo,
             "PUT /groups/{group}/holdings/{ticker}",
             path={"group": "stocks", "ticker": "VTI"},
-            body=json.dumps({"shares": 2, "cost_basis": 1}),
+            body=json.dumps({"shares": 2, "avg_cost": 1}),
         )[0]
         == 200
     )
@@ -213,13 +213,13 @@ def buy(repo, ticker, shares, price, group="stocks", **extra):
 def test_purchase_creates_then_averages(repo, no_backfill):
     status, body = buy(repo, "VTI", 10, 250, purchased_on="2026-03-02")
     assert status == 201 and body["previous"] is None
-    assert body["holding"]["shares"] == 10 and body["holding"]["cost_basis"] == 250
+    assert body["holding"]["shares"] == 10 and body["holding"]["avg_cost"] == 250
     assert no_backfill == ["VTI"]
 
     status, body = buy(repo, "vti", 5, 280, purchased_on="2026-08-03")
     assert status == 200
     assert body["holding"]["shares"] == 15
-    assert body["holding"]["cost_basis"] == pytest.approx(260.0)  # (10*250 + 5*280) / 15
+    assert body["holding"]["avg_cost"] == pytest.approx(260.0)  # (10*250 + 5*280) / 15
     assert body["holding"]["purchased_on"] == "2026-03-02"  # earliest purchase kept
     assert body["previous"]["shares"] == 10
     assert no_backfill == ["VTI"]  # no second backfill for an existing ticker
@@ -229,7 +229,7 @@ def test_purchase_fractional_shares(repo):
     buy(repo, "QQQ", 0.5, 400)
     _, body = buy(repo, "QQQ", 0.25, 520)
     assert body["holding"]["shares"] == 0.75
-    assert body["holding"]["cost_basis"] == pytest.approx(440.0)
+    assert body["holding"]["avg_cost"] == pytest.approx(440.0)
 
 
 @pytest.mark.parametrize(
@@ -266,7 +266,7 @@ def test_purchase_retries_on_concurrent_change(repo, monkeypatch):
 
     monkeypatch.setattr(repo, "replace_holding_if_unchanged", flaky)
     status, body = buy(repo, "VTI", 10, 200)
-    assert status == 200 and body["holding"]["cost_basis"] == pytest.approx(150.0)
+    assert status == 200 and body["holding"]["avg_cost"] == pytest.approx(150.0)
     assert calls["n"] == 2
 
 
@@ -277,7 +277,7 @@ def test_conditional_write_detects_stale_read(repo):
     stale = repo.get_holding("user-1", "stocks", "VTI")
     buy(repo, "VTI", 1, 100)  # someone else changes it
     with pytest.raises(ConcurrentUpdateError):
-        repo.replace_holding_if_unchanged("user-1", {"ticker": "VTI", "shares": 99, "cost_basis": 1}, stale)
+        repo.replace_holding_if_unchanged("user-1", {"ticker": "VTI", "shares": 99, "avg_cost": 1}, stale)
 
 
 def test_purchase_respects_holdings_cap(repo, monkeypatch):
@@ -294,7 +294,7 @@ def put(repo, group, ticker, shares, cost, user="user-1"):
         "PUT /groups/{group}/holdings/{ticker}",
         user=user,
         path={"group": group, "ticker": ticker},
-        body=json.dumps({"shares": shares, "cost_basis": cost}),
+        body=json.dumps({"shares": shares, "avg_cost": cost}),
     )
 
 
@@ -310,8 +310,8 @@ def test_same_ticker_tracked_separately_per_group(repo, no_backfill):
     buy(repo, "VOO", 2, 800, group="auto")
     stocks = call(repo, "GET /holdings", query={"group": "stocks"})[1]["holdings"]
     auto = call(repo, "GET /holdings", query={"group": "auto"})[1]["holdings"]
-    assert [(h["shares"], h["cost_basis"]) for h in stocks] == [(2, 600)]  # untouched
-    assert auto[0]["shares"] == 8 and auto[0]["cost_basis"] == pytest.approx(725.0)  # (6*700 + 2*800) / 8
+    assert [(h["shares"], h["avg_cost"]) for h in stocks] == [(2, 600)]  # untouched
+    assert auto[0]["shares"] == 8 and auto[0]["avg_cost"] == pytest.approx(725.0)  # (6*700 + 2*800) / 8
     assert len(call(repo, "GET /holdings")[1]["holdings"]) == 2
     # Deleting from one group leaves the other
     call(repo, "DELETE /groups/{group}/holdings/{ticker}", path={"group": "auto", "ticker": "VOO"})
@@ -370,7 +370,7 @@ def test_partner_groups_are_separate_and_add_up_to_household(repo, no_backfill):
 
 def test_partner_auto_uses_dollar_totals(repo):
     status, body = buy(repo, "VOO", 0.5, None, group="partner_auto", amount=300)
-    assert status == 201 and body["holding"]["cost_basis"] == 600
+    assert status == 201 and body["holding"]["avg_cost"] == 600
 
 
 def test_cap_counts_partner_tickers_too(repo, monkeypatch):
@@ -388,12 +388,12 @@ def test_dollar_totals_for_automatic_investment(repo):
         path={"group": "auto", "ticker": "VOO"},
         body=json.dumps({"shares": 4, "total_cost": 2400}),
     )
-    assert status == 200 and body["cost_basis"] == 600
+    assert status == 200 and body["avg_cost"] == 600
     # Record a purchase by amount invested instead of price per share
     status, body = buy(repo, "VOO", 0.5, None, group="auto", amount=350)
     assert status == 200
     assert body["holding"]["shares"] == 4.5
-    assert body["holding"]["shares"] * body["holding"]["cost_basis"] == pytest.approx(2750, abs=0.01)  # total invested
+    assert body["holding"]["shares"] * body["holding"]["avg_cost"] == pytest.approx(2750, abs=0.01)  # total invested
 
 
 @pytest.mark.parametrize(
@@ -449,3 +449,37 @@ def test_news_lists_partner_only_tickers_as_off(repo, monkeypatch):
     repo.put_brief("SCHD", "2026-10-09", {"summary": "old", "sentiment_7d": 0.6})
     body = call(repo, "GET /news", query={"ticker": "SCHD"})[1]
     assert body["brief"] is None and body["articles"] == []
+
+
+def _put_legacy_holding(repo, ticker, shares, cost):
+    """A holding as stored before the cost_basis -> avg_cost rename."""
+    keys = repo._holding_keys("user-1", "stocks", ticker)
+    repo.table.put_item(Item={**keys, "ticker": ticker, "group": "stocks", "shares": shares, "cost_basis": cost})
+
+
+def test_legacy_cost_basis_is_read_and_replaced(repo, no_backfill):
+    _put_legacy_holding(repo, "VTI", 10, 250)
+    assert call(repo, "GET /holdings")[1]["holdings"][0]["avg_cost"] == 250
+    assert repo.all_holdings()[0]["avg_cost"] == 250 and "cost_basis" not in repo.all_holdings()[0]
+
+    status, body = buy(repo, "VTI", 5, 280)  # conditional write matches the old attribute name
+    assert status == 200 and body["holding"]["avg_cost"] == pytest.approx(260.0)
+    stored = repo.table.get_item(Key={"pk": "USER#user-1", "sk": "HOLDING#stocks#VTI"})["Item"]
+    assert "cost_basis" not in stored and float(stored["avg_cost"]) == pytest.approx(260.0)
+
+
+def test_old_cost_basis_input_still_accepted(repo, no_backfill):
+    route, path = "PUT /groups/{group}/holdings/{ticker}", {"group": "stocks", "ticker": "VTI"}
+    status, body = call(repo, route, path=path, body=json.dumps({"shares": 4, "cost_basis": 25}))
+    assert status == 200 and body["avg_cost"] == 25 and "cost_basis" not in body
+    status, _ = call(repo, route, path=path, body=json.dumps({"shares": 4, "cost_basis": 25, "avg_cost": 25}))
+    assert status == 400
+
+
+def test_migrate_avg_cost(repo):
+    _put_legacy_holding(repo, "VTI", 10, 250)
+    buy(repo, "VOO", 1, 500)  # already new-format
+    assert repo.migrate_avg_cost() == ["USER#user-1:HOLDING#stocks#VTI"]
+    assert repo.migrate_avg_cost() == []  # idempotent
+    items = {i["ticker"]: i for i in repo.table.scan()["Items"] if i["sk"].startswith("HOLDING#")}
+    assert "cost_basis" not in items["VTI"] and float(items["VTI"]["avg_cost"]) == 250

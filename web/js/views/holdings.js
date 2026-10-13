@@ -40,7 +40,7 @@ export async function renderPerson(main, person, kind) {
   const base = (ticker) => `/groups/${group}/holdings/${encodeURIComponent(ticker)}`;
   // Automatic Investment works in dollar totals (amount invested, cost basis); Stock Holdings per share.
   const totals = kind === 'auto';
-  const costOf = (x) => x.shares * x.cost_basis;
+  const costOf = (x) => x.shares * x.avg_cost;
 
   // ---------- record a purchase
   const pTicker = tickerInput('p-ticker');
@@ -66,7 +66,7 @@ export async function renderPerson(main, person, kind) {
       const basis = costOf(current) + spent;
       pPreview.textContent = totals
         ? `${symbol}: ${fmt.num(current.shares, 6)} → ${fmt.num(shares, 6)} shares, cost basis ${fmt.money(costOf(current))} → ${fmt.money(basis)} (${fmt.money(spent / s)} per share this time).`
-        : `${symbol}: ${fmt.num(current.shares, 6)} → ${fmt.num(shares, 6)} shares, average ${fmt.money(current.cost_basis)} → ${fmt.money(basis / shares)}.`;
+        : `${symbol}: ${fmt.num(current.shares, 6)} → ${fmt.num(shares, 6)} shares, average ${fmt.money(current.avg_cost)} → ${fmt.money(basis / shares)}.`;
     } else {
       const note = otherTickers.has(symbol) ? ` (${symbol} is also in ${KINDS[otherKind].label}; that holding is not changed.)` : '';
       pPreview.textContent = totals
@@ -91,7 +91,7 @@ export async function renderPerson(main, person, kind) {
       if (pDate.value) body.purchased_on = pDate.value;
       const res = await api('POST', `${base(symbol)}/purchases`, body);
       toast(res.previous
-        ? `${symbol}: now ${fmt.num(res.holding.shares, 6)} shares at ${fmt.money(res.holding.cost_basis)} average.`
+        ? `${symbol}: now ${fmt.num(res.holding.shares, 6)} shares at ${fmt.money(res.holding.avg_cost)} average.`
         : `${symbol} added to ${info.label}.${heldAnywhere.has(symbol) ? '' : ' Price history loads within a minute.'}`);
       rerender();
     } catch (e) {
@@ -117,7 +117,7 @@ export async function renderPerson(main, person, kind) {
     sSubmit.disabled = true;
     const symbol = sTicker.value.trim().toUpperCase();
     try {
-      const body = { shares: Number(sShares.value), [totals ? 'total_cost' : 'cost_basis']: Number(sCost.value) };
+      const body = { shares: Number(sShares.value), [totals ? 'total_cost' : 'avg_cost']: Number(sCost.value) };
       if (sDate.value) body.purchased_on = sDate.value;
       const isNew = !mine.some((x) => x.ticker === symbol);
       await api('PUT', base(symbol), body);
@@ -145,13 +145,13 @@ export async function renderPerson(main, person, kind) {
     });
     const edit = h('button', {
       type: 'button', class: 'btn btn-ghost', text: 'Edit totals', 'aria-label': `Edit totals for ${x.ticker}`,
-      onClick: () => { sTicker.value = x.ticker; sShares.value = x.shares; sCost.value = totals ? costOf(x).toFixed(2) : x.cost_basis; sDate.value = x.purchased_on || ''; sShares.focus(); setForm.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
+      onClick: () => { sTicker.value = x.ticker; sShares.value = x.shares; sCost.value = totals ? costOf(x).toFixed(2) : x.avg_cost; sDate.value = x.purchased_on || ''; sShares.focus(); setForm.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
     });
     return h('tr', null,
       h('td', { class: 'text' }, h('div', null, h('strong', { text: x.ticker })),
         otherTickers.has(x.ticker) ? h('div', { class: 'sub muted', text: `Also in ${KINDS[otherKind].label} (tracked separately)` }) : null),
       h('td', { text: fmt.num(x.shares, 6) }),
-      h('td', { text: fmt.money(totals ? costOf(x) : x.cost_basis) }),
+      h('td', { text: fmt.money(totals ? costOf(x) : x.avg_cost) }),
       h('td', { text: p.price == null ? 'Loading…' : fmt.money(p.price) }),
       h('td', { text: fmt.money(p.value) }),
       h('td', { class: tone(p.gain) }, h('div', { text: fmt.signedMoney(p.gain) }), h('div', { class: 'sub', text: fmt.signedPct(p.gain_pct, 1) })),

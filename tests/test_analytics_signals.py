@@ -3,9 +3,9 @@ import pytest
 from portfolio import analytics, signals
 
 HOLDINGS = [
-    {"ticker": "VTI", "shares": 40, "cost_basis": 230},
-    {"ticker": "SCHD", "shares": 120, "cost_basis": 29.5},
-    {"ticker": "NEW", "shares": 1, "cost_basis": 10},
+    {"ticker": "VTI", "shares": 40, "avg_cost": 230},
+    {"ticker": "SCHD", "shares": 120, "avg_cost": 29.5},
+    {"ticker": "NEW", "shares": 1, "avg_cost": 10},
 ]
 
 
@@ -28,7 +28,7 @@ def test_value_history_and_benchmark():
         "VTI": [("2025-01-01", 100.0), ("2025-01-02", 110.0), ("2025-01-03", 121.0)],
         "SCHD": [("2025-01-02", 10.0), ("2025-01-03", 10.0)],
     }
-    holdings = [{"ticker": "VTI", "shares": 1, "cost_basis": 0}, {"ticker": "SCHD", "shares": 1, "cost_basis": 0}]
+    holdings = [{"ticker": "VTI", "shares": 1, "avg_cost": 0}, {"ticker": "SCHD", "shares": 1, "avg_cost": 0}]
     series = analytics.value_history(holdings, histories)
     assert series == [("2025-01-02", 120.0), ("2025-01-03", 131.0)]
     comparison = analytics.compare_to_benchmark(series, [("2025-01-02", 50.0), ("2025-01-03", 50.0)])

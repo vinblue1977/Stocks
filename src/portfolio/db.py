@@ -1,7 +1,7 @@
 """DynamoDB single-table repository.
 
 Key design (pk / sk):
-    USER#<uid>      HOLDING#<group>#<ticker>     a position: shares + average cost per share; group is
+    USER#<uid>      HOLDING#<group>#<ticker>     a position: shares + avg_cost (per share); group is
                                                  one of GROUPS (gsi1: HOLDINGS / <ticker>#<uid>#<group>)
     USER#<uid>      RULE#<rule_id>               an alert rule (gsi1: RULES / <uid>#<rule_id>)
     USER#<uid>      RULESTATE#<rule_id>          whether the rule is currently triggered
@@ -120,6 +120,9 @@ class Repository:
     def _holding_out(item: Mapping[str, Any]) -> dict[str, Any]:
         clean = _clean(item)
         clean.setdefault("group", DEFAULT_GROUP)  # items written before groups existed
+        if "cost_basis" in clean:  # items written before the rename (see migrate_avg_cost)
+            clean.setdefault("avg_cost", clean["cost_basis"])
+            del clean["cost_basis"]
         return clean
 
     def list_holdings(self, user_id: str, group: str | None = None) -> list[dict[str, Any]]:
@@ -151,8 +154,10 @@ class Repository:
         if previous is None:
             condition: Any = Attr("pk").not_exists()
         else:
-            condition = Attr("shares").eq(to_dynamo(float(previous["shares"]))) & Attr("cost_basis").eq(
-                to_dynamo(float(previous["cost_basis"]))
+            avg_cost = to_dynamo(float(previous["avg_cost"]))
+            # The stored item may still use the old attribute name; this write replaces it with avg_cost.
+            condition = Attr("shares").eq(to_dynamo(float(previous["shares"]))) & (
+                Attr("avg_cost").eq(avg_cost) | Attr("cost_basis").eq(avg_cost)
             )
         try:
             self.table.put_item(Item=to_dynamo(item), ConditionExpression=condition)
@@ -185,12 +190,32 @@ class Repository:
             moved.append(f"{user_id}:{ticker}")
         return moved
 
+    def migrate_avg_cost(self) -> list[str]:
+        """Rename the stored attribute cost_basis to avg_cost on every holding.
+
+        Idempotent: items already using avg_cost are skipped. Returns the sort key of each item changed.
+        """
+        changed = []
+        for item in self._query_all(IndexName="gsi1", KeyConditionExpression=Key("gsi1pk").eq("HOLDINGS")):
+            if "cost_basis" not in item:
+                continue
+            try:
+                self.table.update_item(
+                    Key={"pk": item["pk"], "sk": item["sk"]},
+                    UpdateExpression="SET avg_cost = if_not_exists(avg_cost, cost_basis) REMOVE cost_basis",
+                    ConditionExpression=Attr("cost_basis").exists(),
+                )
+            except self.table.meta.client.exceptions.ConditionalCheckFailedException:
+                continue  # rewritten by the app in the meantime
+            changed.append(f"{item['pk']}:{item['sk']}")
+        return changed
+
     def all_holdings(self) -> list[dict[str, Any]]:
         """Every holding across all users (used by scheduled jobs). Adds `user_id`."""
         items = self._query_all(IndexName="gsi1", KeyConditionExpression=Key("gsi1pk").eq("HOLDINGS"))
         result = []
         for item in items:
-            clean = _clean(item)
+            clean = self._holding_out(item)
             clean["user_id"] = item["pk"].removeprefix("USER#")
             result.append(clean)
         return result

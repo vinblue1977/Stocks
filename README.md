@@ -30,7 +30,7 @@ All routes need `Authorization: Bearer <Cognito token>`.
 | Route | Purpose |
 |---|---|
 | `GET /holdings[?group=…]` | List holdings (each has a `group`: `stocks`, `auto`, `partner_stocks` or `partner_auto`) |
-| `PUT/DELETE /groups/{group}/holdings/{ticker}` | Set or remove a holding in a group: `{"shares": 40, "cost_basis": 230}` (average per share) or `{"shares": 40, "total_cost": 9200}` (total invested) |
+| `PUT/DELETE /groups/{group}/holdings/{ticker}` | Set or remove a holding in a group: `{"shares": 40, "avg_cost": 230}` (average per share; the old name `cost_basis` is still accepted) or `{"shares": 40, "total_cost": 9200}` (total invested) |
 | `POST /groups/{group}/holdings/{ticker}/purchases` | Record a buy: `{"shares": 5, "price": 280}` or `{"shares": 0.28, "amount": 200}`. Updates that group's total shares and weighted average cost |
 | `GET /profile` | Display names (`owner_name`, `partner_name`) and whether to show the partner page |
 | `GET /portfolio` | Value, gains, allocation and history vs. SPY, under `portfolios.<household\|mine\|partner>.<overall\|stocks\|auto>`. During market hours values use intraday prices (`live_as_of` is the quote time, otherwise null); history stays on closing prices. The Overview re-fetches every 15 minutes while open and visible |
@@ -64,7 +64,7 @@ aws cognito-idp admin-create-user --user-pool-id $POOL --username you@example.co
 read -rs PW && aws cognito-idp admin-set-user-password --user-pool-id $POOL --username you@example.com --password "$PW" --permanent
 TOKEN=$(aws cognito-idp initiate-auth --client-id $CLIENT --auth-flow USER_PASSWORD_AUTH \
   --auth-parameters USERNAME=you@example.com,PASSWORD="$PW" --query AuthenticationResult.IdToken --output text)
-curl -X PUT "$API/holdings/VTI" -H "Authorization: Bearer $TOKEN" -d '{"shares": 40, "cost_basis": 230}'
+curl -X PUT "$API/holdings/VTI" -H "Authorization: Bearer $TOKEN" -d '{"shares": 40, "avg_cost": 230}'
 ```
 
 Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <PipelineArn>`.
