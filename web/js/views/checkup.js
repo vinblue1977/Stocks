@@ -45,12 +45,19 @@ function tiles(view, data) {
       `${view.holdings_count} tickers, counted by size`));
 }
 
+/** Points one per line (as the email shows them); a single line (or an older paragraph) stays a paragraph. */
+function summaryBody(text) {
+  const points = String(text || '').split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
+  if (points.length < 2) return h('div', { class: 'summary-box', text: points[0] || 'No summary this month.' });
+  return h('ul', { class: 'summary-box summary-points' }, points.map((point) => h('li', { text: point })));
+}
+
 function summaryCard(summary) {
   if (!summary) return null;
   return h('section', { class: 'card', 'aria-labelledby': 'ms-h' },
     h('div', { class: 'card-head' }, h('h2', { id: 'ms-h', text: 'Last monthly summary' }),
       h('span', { class: 'muted small', text: `${fmt.date(summary.created_at)} · Claude on Amazon Bedrock` })),
-    h('div', { class: 'summary-box', text: summary.summary }),
+    summaryBody(summary.summary),
     h('p', { class: 'xsmall muted', style: { margin: '10px 0 0' }, text: 'Describes your data and your own targets; not investment advice.' }));
 }
 
