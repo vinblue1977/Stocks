@@ -15,7 +15,8 @@ def summarize(
 ) -> dict[str, Any]:
     """Current value, gain/loss and allocation for each holding plus portfolio totals.
 
-    `latest` and `previous` map ticker -> close for the last and prior trading day.
+    `latest` and `previous` map ticker -> close for the last and prior trading day. Each position's
+    `day_change` / `day_change_pct` is measured against `previous` (the weekly report passes week-ago prices).
     Holdings without a price yet are reported with value None and excluded from totals.
     """
     positions = []

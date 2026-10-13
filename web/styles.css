@@ -187,7 +187,7 @@ tr.confirm-row .actions { justify-content: flex-start; margin-top: 10px; }
 @media (max-width: 640px) { .news-item { grid-template-columns: 1fr; } }
 
 /* Overview: today's movers */
-.movers { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px 32px; }
+.movers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 16px 32px; }
 .mover-person h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
 .mover-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 14px 0 4px; }
 .movers > div:not(.mover-person) .mover-label { margin-top: 0; }

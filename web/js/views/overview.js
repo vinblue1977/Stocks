@@ -124,8 +124,9 @@ function allocationCard(summary) {
 const MOVERS = 3;
 
 function moverRows(positions, sign) {
+  // By the dollar sign, so a tiny move on a big position (rounds to 0.00%) still counts.
   const rows = positions
-    .filter((p) => p.day_change_pct != null && Math.sign(p.day_change_pct) === sign)
+    .filter((p) => p.day_change != null && Math.sign(p.day_change) === sign)
     .sort((a, b) => sign * (b.day_change_pct - a.day_change_pct))
     .slice(0, MOVERS);
   if (!rows.length) return h('div', { class: 'mover-empty', text: sign > 0 ? 'No gainers' : 'No losers' });
@@ -136,6 +137,7 @@ function moverRows(positions, sign) {
 }
 
 function moverLists(positions) {
+  if (!positions.some((p) => p.price != null)) return h('div', { class: 'mover-empty', text: `No ${KINDS.stocks.label} yet.` });
   return [
     h('div', null, h('div', { class: 'mover-label', text: 'Gainers' }), moverRows(positions, 1)),
     h('div', null, h('div', { class: 'mover-label', text: 'Losers' }), moverRows(positions, -1)),
@@ -150,7 +152,7 @@ function moversCard(portfolios, live) {
   const body = people
     ? people.map((who) => h('div', { class: 'mover-person' }, h('h3', { text: title(who) }), moverLists(stocks(who))))
     : moverLists(stocks(person === 'household' ? 'mine' : person));
-  const scope = people || !hasPartner() ? KINDS.stocks.label : title(person);
+  const scope = people ? KINDS.stocks.label : title(person);
   return h('section', { class: 'card', 'aria-labelledby': 'movers-h' },
     h('div', { class: 'card-head' },
       h('h2', { id: 'movers-h', text: `${live ? "Today's" : "Last trading day's"} movers · ${scope}` }),
