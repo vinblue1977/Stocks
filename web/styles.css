@@ -52,6 +52,7 @@ h2 { margin: 0; font-size: 17px; font-weight: 600; }
 .account-btn { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 50%; border: 1px solid #2A3A57; background: transparent; cursor: pointer; }
 .account-btn:hover, .account-btn[aria-expanded="true"] { border-color: var(--accent); }
 .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-bg); color: var(--accent); display: grid; place-items: center; font-size: 14px; font-weight: 600; }
+.account-menu:focus { outline: none; }
 .account-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 240px; max-width: calc(100vw - 32px); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.45); padding: 6px; z-index: 5; }
 .account-who { padding: 10px 12px; margin-bottom: 6px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--divider); overflow-wrap: anywhere; }
 .account-who strong { color: var(--text); font-weight: 500; }

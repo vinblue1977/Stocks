@@ -97,22 +97,30 @@ window.addEventListener('pageshow', (event) => {
   }
 });
 
-/** The round account button in the top bar: email, Add passkey and Sign out in a small menu. */
+/** The round account button in the top bar: a show/hide panel with the email, Add passkey and Sign out. */
 function setupAccountMenu() {
   const email = currentEmail();
+  const account = document.getElementById('account');
   const button = document.getElementById('account-btn');
   const menu = document.getElementById('account-menu');
   document.getElementById('account-email').textContent = email;
-  document.getElementById('account-initial').textContent = (email[0] || '?').toUpperCase();
+  document.getElementById('account-who').hidden = !email;
+  document.getElementById('account-initial').textContent = (email[0] || '').toUpperCase();
+  if (email) { button.title = `Signed in as ${email}`; button.setAttribute('aria-label', `Account, signed in as ${email}`); }
   document.getElementById('add-passkey').href = addPasskeyUrl();
   document.getElementById('sign-out').addEventListener('click', logout);
   const setOpen = (open) => { menu.hidden = !open; button.setAttribute('aria-expanded', String(open)); };
-  button.addEventListener('click', (event) => { event.stopPropagation(); setOpen(menu.hidden); });
-  document.addEventListener('click', (event) => { if (!menu.contains(event.target)) setOpen(false); });
-  document.addEventListener('keydown', (event) => {
+  button.addEventListener('click', () => setOpen(menu.hidden));
+  // Closes on a click or focus anywhere else, Escape, a menu choice, navigation, or a return from another page.
+  document.addEventListener('click', (event) => { if (!account.contains(event.target)) setOpen(false); });
+  account.addEventListener('focusout', (event) => { if (!account.contains(event.relatedTarget)) setOpen(false); });
+  account.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !menu.hidden) { setOpen(false); button.focus(); }
   });
-  document.getElementById('account').hidden = false;
+  menu.addEventListener('click', (event) => { if (event.target.closest('a, button')) setOpen(false); });
+  window.addEventListener('hashchange', () => setOpen(false));
+  window.addEventListener('pageshow', () => setOpen(false));
+  account.hidden = false;
 }
 
 async function start() {

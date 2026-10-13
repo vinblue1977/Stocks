@@ -36,11 +36,11 @@
         <a href="#/alerts" data-route="alerts">Alerts</a>
       </nav>
       <div class="account" id="account" hidden>
-        <button type="button" class="account-btn" id="account-btn" aria-label="Account" aria-haspopup="true" aria-expanded="false" aria-controls="account-menu">
+        <button type="button" class="account-btn" id="account-btn" aria-label="Account" aria-expanded="false" aria-controls="account-menu">
           <span class="avatar" id="account-initial" aria-hidden="true"></span>
         </button>
-        <div class="account-menu" id="account-menu" hidden>
-          <div class="account-who">Signed in as<br><strong id="account-email"></strong></div>
+        <div class="account-menu" id="account-menu" tabindex="-1" hidden>
+          <div class="account-who" id="account-who">Signed in as<br><strong id="account-email"></strong></div>
           <a id="add-passkey">Add passkey</a>
           <button type="button" class="danger" id="sign-out">Sign out</button>
         </div>
