@@ -11,6 +11,8 @@ Security posture (see docs/SECURITY.md for the full list):
 
 from __future__ import annotations
 
+import base64
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -330,12 +332,23 @@ class PortfolioTrackerStack(Stack):
             cognito_domain=cognito.CognitoDomainOptions(domain_prefix=auth_prefix),
             managed_login_version=cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
         )
+        # Sign-in page style: dark, in the dashboard's colours, over the background in infra/login/.
+        login_dir = Path(__file__).parent / "login"
         branding = cognito.CfnManagedLoginBranding(
             self,
             "LoginBranding",
             user_pool_id=user_pool.user_pool_id,
             client_id=user_pool_client.user_pool_client_id,
-            use_cognito_provided_values=True,
+            use_cognito_provided_values=False,
+            settings=json.loads((login_dir / "branding.json").read_text()),
+            assets=[
+                cognito.CfnManagedLoginBranding.AssetTypeProperty(
+                    category="PAGE_BACKGROUND",
+                    color_mode="DARK",
+                    extension="JPEG",
+                    bytes=base64.b64encode((login_dir / "background.jpg").read_bytes()).decode(),
+                )
+            ],
         )
         login_domain.node.add_dependency(branding)  # branding exists before the page switches to v2
 

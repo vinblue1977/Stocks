@@ -143,9 +143,12 @@ def test_passkeys_with_password_backup(any_template):
         "AWS::Cognito::UserPoolClient", Match.object_like({"ExplicitAuthFlows": Match.array_with(["ALLOW_USER_AUTH"])})
     )
     any_template.has_resource_properties("AWS::Cognito::UserPoolDomain", Match.object_like({"ManagedLoginVersion": 2}))
-    any_template.has_resource_properties(
-        "AWS::Cognito::ManagedLoginBranding", Match.object_like({"UseCognitoProvidedValues": True})
-    )
+    branding = next(iter(any_template.find_resources("AWS::Cognito::ManagedLoginBranding").values()))["Properties"]
+    assert branding["UseCognitoProvidedValues"] is False
+    assert branding["Settings"]["categories"]["global"]["colorSchemeMode"] == "DARK"
+    (background,) = branding["Assets"]
+    assert background["Category"] == "PAGE_BACKGROUND" and background["Extension"] == "JPEG"
+    assert len(background["Bytes"]) < 1_000_000  # Cognito's limit per asset
 
 
 def test_topics_and_queue_require_tls(any_template):
