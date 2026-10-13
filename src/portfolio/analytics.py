@@ -35,9 +35,10 @@ def summarize(
             )
             continue
         value = shares * price
+        prev_price = previous.get(ticker, price)  # no earlier close yet: counts as unchanged
         total_value += value
         total_cost += cost
-        total_prev_value += shares * previous.get(ticker, price)
+        total_prev_value += shares * prev_price
         positions.append(
             {
                 "ticker": ticker,
@@ -48,6 +49,8 @@ def summarize(
                 "value": round(value, 2),
                 "gain": round(value - cost, 2),
                 "gain_pct": round(value / cost - 1.0, 4) if cost else None,
+                "day_change": round(shares * (price - prev_price), 2),
+                "day_change_pct": round(price / prev_price - 1.0, 4) if prev_price else None,
             }
         )
     for position in positions:

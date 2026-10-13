@@ -43,7 +43,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 ## Track progress
 | # | Idea | Effort | Notes |
 |---|---|---|---|
-| 19 | Biggest movers | S | Top gainers and losers over a chosen period |
+| 19 | Biggest movers | Done | Today's top 3 gainers and losers in Stock Holdings, per person (Overview) |
 | 20 | Daily gains calendar | S | Heatmap of up and down days |
 | 21 | Year-end summary | M | Growth, contributions, best and worst, dividends; optional PDF |
 | 22 | Notes per holding | S | "Why I bought" notes and a decision journal |

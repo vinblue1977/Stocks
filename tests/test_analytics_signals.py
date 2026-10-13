@@ -21,6 +21,15 @@ def test_summarize_values_gains_weights():
     assert vti["weight"] + schd["weight"] == pytest.approx(1.0, abs=1e-3)
     assert result["total_value"] == 15844.0
     assert result["day_change"] == pytest.approx(40 * 2.4 - 120 * 0.1)
+    # Per position too, for the Overview's movers
+    assert vti["day_change"] == pytest.approx(96.0) and vti["day_change_pct"] == pytest.approx(0.0077, abs=1e-4)
+    assert schd["day_change"] == pytest.approx(-12.0) and schd["day_change_pct"] == pytest.approx(-0.0036, abs=1e-4)
+    assert "day_change" not in unpriced
+
+
+def test_position_without_an_earlier_close_is_unchanged():
+    result = analytics.summarize(HOLDINGS[:1], {"VTI": 312.4}, {})
+    assert result["positions"][0]["day_change"] == 0 and result["positions"][0]["day_change_pct"] == 0
 
 
 def test_value_history_and_benchmark():

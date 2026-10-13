@@ -152,6 +152,8 @@ def test_portfolio_uses_intraday_quote_until_the_close_is_stored(repo):
     assert overall["total_value"] == pytest.approx(1310 + 1290)
     # Today: VTI +2 vs. its close; FUND has no quote, so it counts as unchanged (not yesterday's +1).
     assert overall["day_change"] == pytest.approx(20)
+    moves = {p["ticker"]: (p["day_change"], p["day_change_pct"]) for p in body["portfolios"]["mine"]["stocks"]["positions"]}
+    assert moves == {"VTI": (20.0, pytest.approx(0.0155, abs=1e-4)), "FUND": (0.0, 0.0)}
     assert body["live_as_of"] == quote["timestamp"]
     assert len(overall["history"]) == 30  # the chart stays on closing prices
 

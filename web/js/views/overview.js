@@ -121,6 +121,43 @@ function allocationCard(summary) {
     ] : h('p', { class: 'muted', text: 'Nothing in this group yet.' }));
 }
 
+const MOVERS = 3;
+
+function moverRows(positions, sign) {
+  const rows = positions
+    .filter((p) => p.day_change_pct != null && Math.sign(p.day_change_pct) === sign)
+    .sort((a, b) => sign * (b.day_change_pct - a.day_change_pct))
+    .slice(0, MOVERS);
+  if (!rows.length) return h('div', { class: 'mover-empty', text: sign > 0 ? 'No gainers' : 'No losers' });
+  return rows.map((p) => h('div', { class: 'mover-row' },
+    h('strong', { text: p.ticker }),
+    h('span', { class: `pct ${tone(p.day_change_pct)}`, text: fmt.signedPct(p.day_change_pct) }),
+    h('span', { class: `amt ${tone(p.day_change)}`, text: fmt.signedMoney(p.day_change) })));
+}
+
+function moverLists(positions) {
+  return [
+    h('div', null, h('div', { class: 'mover-label', text: 'Gainers' }), moverRows(positions, 1)),
+    h('div', null, h('div', { class: 'mover-label', text: 'Losers' }), moverRows(positions, -1)),
+  ];
+}
+
+/** Top gainers and losers in Stock Holdings: a column per person on Household, else that person's two lists. */
+function moversCard(portfolios, live) {
+  const stocks = (who) => portfolios[who].stocks.positions;
+  const title = (who) => `${hasPartner() ? `${possessive(who)} ` : ''}${KINDS.stocks.label}`;
+  const people = person === 'household' && hasPartner() ? ['mine', 'partner'] : null;
+  const body = people
+    ? people.map((who) => h('div', { class: 'mover-person' }, h('h3', { text: title(who) }), moverLists(stocks(who))))
+    : moverLists(stocks(person === 'household' ? 'mine' : person));
+  const scope = people || !hasPartner() ? KINDS.stocks.label : title(person);
+  return h('section', { class: 'card', 'aria-labelledby': 'movers-h' },
+    h('div', { class: 'card-head' },
+      h('h2', { id: 'movers-h', text: `${live ? "Today's" : "Last trading day's"} movers · ${scope}` }),
+      h('span', { class: 'muted small', text: `Top ${MOVERS} each way by % change · ${KINDS.auto.label} not included` })),
+    h('div', { class: 'movers' }, body));
+}
+
 function alertsCard(rules) {
   const triggered = rules.filter((r) => r.triggered);
   const quiet = rules.length - triggered.length;
@@ -188,6 +225,7 @@ export async function renderOverview(main) {
         tile(data.live_as_of ? 'Today' : 'Last trading day', fmt.signedMoney(s.day_change), fmt.signedPct(s.day_change_pct), tone(s.day_change)),
         tile(`vs. ${b.ticker} (1Y)`, vsText(b),
           b.difference == null ? 'Needs more history' : `This view ${fmt.signedPct(b.portfolio_return, 1)} · ${b.ticker} ${fmt.signedPct(b.benchmark_return, 1)}`, tone(b.difference))),
+      moversCard(portfolios, data.live_as_of),
       h('div', { class: 'row' }, performanceCard(s, data.benchmark_history, data.benchmark_ticker), allocationCard(s)),
       h('div', { class: 'row' }, h('div', { class: 'grow' }, holdingsCard(s)), h('div', { class: 'side' }, alertsCard(rulesRes.rules))),
       h('div', { class: 'footer-note' },
