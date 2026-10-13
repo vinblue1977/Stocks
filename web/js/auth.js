@@ -1,9 +1,13 @@
 // Sign-in with the Cognito hosted login page using OAuth 2.0 authorization code + PKCE.
 // The password is entered only on Cognito's page; this app never sees it.
 // Tokens live in sessionStorage (cleared when the tab closes); the strict CSP blocks injected scripts.
+// The one-time PKCE verifier is kept in localStorage by state, so a callback opened in another tab still completes.
 
 const STORE = 'pt.tokens';
-const PKCE = 'pt.pkce';
+const PKCE = 'pt.pkce.';
+const PKCE_TTL = 10 * 60 * 1000;
+const RETRY = 'pt.retry';
+const RETRY_WINDOW = 2 * 60 * 1000;
 let cfg;
 
 function b64url(bytes) {
@@ -22,6 +26,34 @@ function authUrl(path, params) {
   const url = new URL(`${cfg.authDomain}${path}`);
   url.search = new URLSearchParams({ client_id: cfg.clientId, ...params }).toString();
   return url.toString();
+}
+
+function local(fn) {
+  try { return fn(localStorage); } catch { return null; }
+}
+
+function readPkce(ls, key) {
+  try { return JSON.parse(ls.getItem(key)); } catch { return null; }
+}
+
+/** Stores the verifier for this sign-in attempt and drops expired ones. */
+function putPkce(state, verifier) {
+  local((ls) => {
+    for (const key of Object.keys(ls)) {
+      if (key.startsWith(PKCE) && !(readPkce(ls, key)?.at > Date.now() - PKCE_TTL)) ls.removeItem(key);
+    }
+    ls.setItem(PKCE + state, JSON.stringify({ verifier, at: Date.now() }));
+  });
+}
+
+/** Returns the verifier for this state once (it's deleted on read), or null if unknown or expired. */
+function takePkce(state) {
+  return local((ls) => {
+    const key = PKCE + state;
+    const record = readPkce(ls, key);
+    ls.removeItem(key);
+    return record?.at > Date.now() - PKCE_TTL ? record.verifier : null;
+  });
 }
 
 function save(tokens) {
@@ -45,7 +77,7 @@ async function tokenRequest(params) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id: cfg.clientId, ...params }),
   });
-  if (!res.ok) throw new Error('Sign-in failed');
+  if (!res.ok) throw new Error(`Sign-in failed (${res.status}). Please try again.`);
   return res.json();
 }
 
@@ -53,7 +85,7 @@ export async function login() {
   const verifier = randomString(48);
   const state = randomString(16);
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
-  sessionStorage.setItem(PKCE, JSON.stringify({ verifier, state }));
+  putPkce(state, verifier);
   location.assign(authUrl('/oauth2/authorize', {
     response_type: 'code',
     redirect_uri: redirectUri(),
@@ -79,19 +111,30 @@ export async function initAuth(config) {
   cfg = config;
   const params = new URLSearchParams(location.search);
   if (params.has('code')) {
-    const pkce = JSON.parse(sessionStorage.getItem(PKCE) || '{}');
-    sessionStorage.removeItem(PKCE);
     history.replaceState(null, '', `${location.pathname}${location.hash || '#/overview'}`);
-    if (!pkce.state || pkce.state !== params.get('state')) {
-      throw new Error('Sign-in could not be verified. Please try again.');
+    try {
+      // Unknown state: an old bookmark, the back button, or a sign-in that expired.
+      const verifier = params.get('state') && takePkce(params.get('state'));
+      if (!verifier && load()) return true; // e.g. back to an old callback URL while signed in
+      if (!verifier) throw new Error('Sign-in could not be verified. Please try again.');
+      save(await tokenRequest({
+        grant_type: 'authorization_code',
+        code: params.get('code'),
+        redirect_uri: redirectUri(),
+        code_verifier: verifier,
+      }));
+      local((ls) => ls.removeItem(RETRY));
+      return true;
+    } catch (e) {
+      // Restart sign-in once (Cognito's session usually makes it instant); another failure within two minutes shows the error.
+      const retried = Number(local((ls) => ls.getItem(RETRY))) > Date.now() - RETRY_WINDOW;
+      if (!retried && local((ls) => { ls.setItem(RETRY, String(Date.now())); return true; })) {
+        await login();
+        return false;
+      }
+      local((ls) => ls.removeItem(RETRY));
+      throw e;
     }
-    save(await tokenRequest({
-      grant_type: 'authorization_code',
-      code: params.get('code'),
-      redirect_uri: redirectUri(),
-      code_verifier: pkce.verifier,
-    }));
-    return true;
   }
   if (params.has('error')) {
     history.replaceState(null, '', location.pathname);
