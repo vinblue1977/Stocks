@@ -248,3 +248,14 @@ th[aria-sort] { color: var(--text); }
   .ed-row input.upper { grid-column: 1 / -1; }
 }
 .summary-points { margin: 0; padding-left: 34px; display: flex; flex-direction: column; gap: 6px; }
+
+/* Stock Holdings trades */
+.trade-type { margin-bottom: 14px; width: fit-content; }
+.history-row td { background: var(--inset); white-space: normal; }
+.history-row td input[type="date"] { height: 32px; padding: 0 8px; border-radius: 6px; border: 1px solid #2A3A57; background: var(--surface); color: var(--text); }
+.history-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; margin-top: 10px; }
+.btn-sm { height: 32px; padding: 0 12px; font-size: 13px; }
+.realized-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 12px; margin-bottom: 14px; }
+.rbox { background: var(--inset); border-radius: 10px; padding: 12px 14px; }
+.rbox-value { font-family: var(--mono); font-size: 22px; margin-top: 4px; }
+input.upper { text-transform: uppercase; }

@@ -524,6 +524,9 @@ class PortfolioTrackerStack(Stack):
             "/news": [apigw.HttpMethod.GET],
             "/watchlist": [apigw.HttpMethod.GET],
             "/watchlist/{ticker}": [apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
+            "/groups/{group}/holdings/{ticker}/transactions": [apigw.HttpMethod.GET, apigw.HttpMethod.POST],
+            "/groups/{group}/holdings/{ticker}/transactions/{txnId}": [apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
+            "/realized": [apigw.HttpMethod.GET],
             "/checkup": [apigw.HttpMethod.GET],
             "/targets": [apigw.HttpMethod.GET, apigw.HttpMethod.PUT],
         }

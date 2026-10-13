@@ -2,6 +2,7 @@
 import { api } from '../api.js';
 import { KINDS, MAX_TICKERS, groupFor, possessive, portfolioTitle } from '../groups.js';
 import { fill, fmt, h, toast, tone } from '../ui.js';
+import { renderStockHoldings } from './trades.js';
 
 const TICKER_PATTERN = '[A-Za-z][A-Za-z0-9.\\-]{0,9}';
 const today = () => new Date().toISOString().slice(0, 10);
@@ -29,6 +30,21 @@ export async function renderPerson(main, person, kind) {
   const otherGroup = groupFor(person, otherKind);
   const info = { label: `${possessive(person)} ${KINDS[kind].label}` }; // e.g. "Sam's Stock Holdings"
   const rerender = () => renderPerson(main, person, kind);
+  if (kind === 'stocks') {
+    // Stock Holdings track each buy and sale (trades.js); Automatic Investment keeps totals (below).
+    const head = ({ note, stats }) => [
+      h('div', null, h('h1', { text: portfolioTitle(person) }),
+        h('div', { class: 'segmented segmented-lg sub-switch', role: 'group', 'aria-label': `${possessive(person)} holdings` },
+          Object.entries(KINDS).map(([key, k]) => h('button', {
+            type: 'button', 'aria-pressed': String(key === kind), text: k.label,
+            onClick: () => { location.hash = `#/${person}/${key}`; },
+          })))),
+      h('div', { class: 'page-head' },
+        h('div', null, h('h2', { class: 'section-title', text: KINDS[kind].label }), h('p', { class: 'muted small', text: note })),
+        h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '24px' } }, stats.map(([label, value, cls]) => stat(label, value, cls)))),
+    ];
+    return renderStockHoldings(main, { person, group, head, rerender, maxTickers: MAX_TICKERS });
+  }
   const [holdingsRes, portfolio] = await Promise.all([api('GET', '/holdings'), api('GET', '/portfolio')]);
   const all = holdingsRes.holdings;
   const mine = all.filter((x) => x.group === group).sort((a, b) => a.ticker.localeCompare(b.ticker));

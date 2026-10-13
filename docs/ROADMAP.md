@@ -5,7 +5,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 ## Know your real returns
 | # | Idea | Effort | Notes |
 |---|---|---|---|
-| 1 | Transactions and sales | L | Buys are already recorded (average cost and earliest date). Add sales and a per-lot history for realized gains and a money-weighted return. Items 2 and 6 build on it |
+| 1 | Transactions and sales | Done | Stock Holdings: buys, sales (FIFO), history and realized gains. Next: Automatic Investment via a broker file import (#11), money-weighted return |
 | 2 | Contributions vs. growth | M | Automatic Investment: amount put in vs. market gain, monthly deposits chart. Needs dated deposits from #1 |
 | 3 | Dividends and income | M | Mockup agreed: Dividends page with annual income, yield, yield on cost, next-12-months by month, upcoming (estimated) and per holding with Both/Stocks/Auto. Store Tiingo's `divCash` and re-fetch ~2 years once. No "received" figures until purchase dates exist (#1). Not added to gains |
 

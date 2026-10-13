@@ -8,6 +8,7 @@ Key design (pk / sk):
     USER#<uid>      ALERT#<iso_ts>#<rule_id>     alert history (expires after 180 days)
     USER#<uid>      WATCH#<ticker>               a watched ticker, not held (gsi1: WATCHLIST / <ticker>#<uid>)
     USER#<uid>      TARGETS                      the user's target mix by area (Checkup)
+    USER#<uid>      TXN#<group>#<ticker>#<date>#<id>  a buy, sell or opening entry (Stock Holdings only)
     USER#<uid>      CHECKUP#<yyyy-mm>            the monthly checkup summary
     PRICE#<ticker>  <yyyy-mm-dd>                 daily adjusted close
     PRICEMETA#<ticker> BACKFILL                  set once the full history has loaded
@@ -335,6 +336,30 @@ class Repository:
             Limit=limit,
         )
         return [_clean(i) for i in response.get("Items", [])]
+
+    # ---------- transactions (Stock Holdings) ----------
+    @staticmethod
+    def _txn_sk(group: str, ticker: str, txn: Mapping[str, Any]) -> str:
+        return f"TXN#{group}#{ticker}#{txn.get('date') or '0000-00-00'}#{txn['txn_id']}"
+
+    def list_txns(self, user_id: str, group: str | None = None, ticker: str | None = None) -> list[dict[str, Any]]:
+        prefix = "TXN#" + (f"{group}#" if group else "") + (f"{ticker}#" if group and ticker else "")
+        items = self._query_all(
+            KeyConditionExpression=Key("pk").eq(f"USER#{user_id}") & Key("sk").begins_with(prefix), ConsistentRead=True
+        )
+        return [_clean(i) for i in items]
+
+    def put_txn(self, user_id: str, group: str, ticker: str, txn: Mapping[str, Any]) -> dict[str, Any]:
+        item = {"pk": f"USER#{user_id}", "sk": self._txn_sk(group, ticker, txn), "group": group, "ticker": ticker, **txn}
+        self.table.put_item(Item=to_dynamo(item))
+        return _clean(item)
+
+    def delete_txn(self, user_id: str, group: str, ticker: str, txn: Mapping[str, Any]) -> None:
+        self.table.delete_item(Key={"pk": f"USER#{user_id}", "sk": self._txn_sk(group, ticker, txn)})
+
+    @staticmethod
+    def new_txn_id() -> str:
+        return uuid.uuid4().hex[:12]
 
     # ---------- checkup ----------
     def get_targets(self, user_id: str) -> dict[str, Any] | None:
