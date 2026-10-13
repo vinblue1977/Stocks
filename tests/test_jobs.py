@@ -24,8 +24,8 @@ def test_price_sync_backfills_then_increments(repo):
     repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
     provider = FakePrices()
     result = price_sync.handler({}, None, repo=repo, provider=provider)
-    assert result["tickers"] == ["SPY", "VTI"]  # benchmark always included
-    assert result["rows_written"] == 10
+    assert result["tickers"] == ["VTI"]
+    assert result["rows_written"] == 5
     first_start = dict(provider.calls)["VTI"]
     assert first_start < (datetime.now(UTC).date() - timedelta(days=365 * 4)).isoformat()
 
@@ -431,24 +431,26 @@ def test_market_hours_follow_new_york_time(moment, is_open):
 
 
 def test_intraday_quotes_one_request_only_when_open(repo):
-    repo.put_holding("u1", {"group": "stocks", "ticker": "VTI", "shares": 1, "avg_cost": 1})
+    for ticker in ("VTI", "VOO"):
+        repo.put_holding("u1", {"group": "stocks", "ticker": ticker, "shares": 1, "avg_cost": 1})
     provider = FakeQuotes()
     closed = intraday_quotes.handler({}, None, repo=repo, provider=provider, now=datetime(2026, 10, 12, 12, 0, tzinfo=UTC))
     assert closed == {"skipped": "market closed"} and provider.calls == []
 
     result = intraday_quotes.handler({}, None, repo=repo, provider=provider, now=datetime(2026, 10, 12, 15, 0, tzinfo=UTC))
-    assert provider.calls == [["SPY", "VTI"]]
+    assert provider.calls == [["VOO", "VTI"]]
     assert result == {"tickers": 2, "quoted": 1, "missing": ["VTI"]}
-    assert repo.latest_quotes() == {"SPY": {"last": 10, "timestamp": "2026-10-12T15:00:00+00:00", "date": "2026-10-12"}}
+    assert repo.latest_quotes() == {"VOO": {"last": 10, "timestamp": "2026-10-12T15:00:00+00:00", "date": "2026-10-12"}}
 
 
 def test_intraday_quotes_keep_todays_quote_when_a_run_skips_a_ticker(repo):
-    repo.put_holding("u1", {"group": "stocks", "ticker": "VTI", "shares": 1, "avg_cost": 1})
+    for ticker in ("VTI", "VOO"):
+        repo.put_holding("u1", {"group": "stocks", "ticker": ticker, "shares": 1, "avg_cost": 1})
     earlier = {"last": 9.0, "timestamp": "2026-10-12T14:00:00+00:00", "date": "2026-10-12"}
     stale = {"last": 8.0, "timestamp": "2026-10-09T19:00:00+00:00", "date": "2026-10-09"}
     repo.put_quotes({"VTI": earlier, "OLD": stale})
     intraday_quotes.handler({}, None, repo=repo, provider=FakeQuotes(), now=datetime(2026, 10, 12, 15, 0, tzinfo=UTC))
-    assert set(repo.latest_quotes()) == {"SPY", "VTI"} and repo.latest_quotes()["VTI"]["last"] == 9
+    assert set(repo.latest_quotes()) == {"VOO", "VTI"} and repo.latest_quotes()["VTI"]["last"] == 9
 
 
 def test_watching_turns_news_on_for_a_partner_only_ticker(repo, monkeypatch):

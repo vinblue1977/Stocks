@@ -1,17 +1,20 @@
 import { api } from '../api.js';
-import { lineChart } from '../charts.js';
-import { KINDS, groupChip, groupLabel, hasPartner, portfolioTitle, possessive } from '../groups.js';
+import { donut, valueChart } from '../charts.js';
+import { GROUPS, KINDS, groupChip, groupLabel, hasPartner, personName, portfolioTitle, possessive } from '../groups.js';
 import { fill, fmt, h, icon, pageHead, tone } from '../ui.js';
 
 const RANGES = { '1M': 22, '3M': 66, '1Y': 252, All: Infinity };
 const PALETTE = ['#BFE3FF', '#7CC4FA', '#3E8FD6', '#2A5F96', '#1D4573', '#F5A35C', '#F5C38F', '#C97B3F', '#8392AB', '#5A6B85'];
 let person = 'household'; // household | mine | partner
 let range = '1Y';
+let breakdown = 'holding'; // Allocation: holding | kind | person
+let kindFilter = 'both'; // Holdings: both | stocks | auto
+let sort = { key: 'value', dir: -1 }; // Holdings column sort
 
-/** Name of what's on screen: "Overall" with one person, else "Household" or e.g. "Sam's portfolio". */
+/** Name of what's on screen: "Overall" with one person, else "Household" or the person's name. */
 function viewLabel() {
   if (!hasPartner()) return 'Overall';
-  return person === 'household' ? 'Household' : `${possessive(person)} portfolio`;
+  return person === 'household' ? 'Household' : personName(person);
 }
 
 function tile(label, value, sub, cls = '') {
@@ -19,10 +22,6 @@ function tile(label, value, sub, cls = '') {
     h('div', { class: 'tile-label', text: label }),
     h('div', { class: `tile-value ${cls}`, text: value }),
     h('div', { class: `tile-sub ${cls}`, text: sub }));
-}
-
-function vsText(b) {
-  return b.difference == null ? '—' : `${b.difference >= 0 ? '+' : '−'}${Math.abs(b.difference * 100).toFixed(1)} pts`;
 }
 
 /** Live during market hours (intraday quotes every 15 min), otherwise the last close. */
@@ -48,77 +47,102 @@ function summaryTable(views, dayLabel) {
       h('td', { text: fmt.money(g.total_cost) }),
       h('td', { class: tone(g.total_gain) }, `${fmt.signedMoney(g.total_gain)} `, h('span', { class: 'xsmall', text: fmt.signedPct(g.total_gain_pct, 1) })),
       h('td', { class: tone(g.day_change), text: fmt.signedMoney(g.day_change) }),
-      h('td', { class: tone(g.benchmark.portfolio_return), text: fmt.signedPct(g.benchmark.portfolio_return, 1) }),
-      h('td', { class: tone(g.benchmark.difference), text: vsText(g.benchmark) }),
+      h('td', { class: tone(g.return_1y), text: fmt.signedPct(g.return_1y, 1) }),
       h('td', { text: total ? fmt.pct(g.total_value / total) : '—' }));
   };
   return h('section', { class: 'card', 'aria-labelledby': 'sum-h' },
     h('div', { class: 'card-head' }, h('h2', { id: 'sum-h', text: `By group · ${viewLabel()}` })),
     h('div', { class: 'table-wrap' }, h('table', null,
-      h('thead', null, h('tr', null, ['Group', 'Value', 'Cost basis', 'Gain / loss', dayLabel, '1Y return', 'vs SPY (1Y)', 'Share of total']
+      h('thead', null, h('tr', null, ['Group', 'Value', 'Cost basis', 'Gain / loss', dayLabel, '1Y return', 'Share of total']
         .map((t, i) => h('th', { scope: 'col', class: i === 0 ? 'text' : null, text: t })))),
       h('tbody', null, row('stocks', KINDS.stocks.label), row('auto', KINDS.auto.label), row('overall', 'Total')))));
 }
 
-function performanceCard(summary, benchHistory, benchTicker) {
-  const card = h('section', { class: 'card grow', 'aria-labelledby': 'perf-h' });
-  const chartHost = h('div');
-  const bench = new Map(benchHistory.map((p) => [p.date, p.close]));
+/** Value of the current holdings over the chosen range, with the range's return above the chart. */
+function performanceCard(summary) {
+  const points = summary.history.slice(-RANGES[range] - 1);
   const buttons = Object.keys(RANGES).map((key) => h('button', {
     type: 'button', 'aria-pressed': String(key === range), text: key,
-    onClick: () => { range = key; buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.textContent === key))); draw(); },
+    onClick: () => { range = key; redraw(); },
   }));
-
-  function draw() {
-    const points = summary.history.slice(-RANGES[range] - 1);
-    chartHost.replaceChildren();
-    if (points.length < 2) {
-      chartHost.append(h('p', { class: 'muted small', text: 'Not enough price history yet for this view.' }));
-      return;
-    }
-    const start = points[0];
-    const benchStart = bench.get(start.date);
-    const benchValues = points.map((p) => (benchStart && bench.has(p.date) ? (bench.get(p.date) / benchStart) * start.value : null));
-    const labels = points.map((p) => new Date(`${p.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: range === '1M' ? 'numeric' : undefined }));
-    chartHost.append(lineChart({
-      series: [{ values: points.map((p) => p.value), color: '#7CC4FA', fill: true }, { values: benchValues, color: '#6F7F99', dashed: true }],
-      labels,
-      ariaLabel: `${viewLabel()} value over ${range}: from ${fmt.money(start.value)} to ${fmt.money(points[points.length - 1].value)}, compared with ${benchTicker}`,
-    }));
+  const card = h('section', { class: 'card grow perf-card', 'aria-labelledby': 'perf-h' });
+  const redraw = () => card.replaceWith(performanceCard(summary));
+  const head = h('div', { class: 'card-head' }, h('h2', { id: 'perf-h', text: `Performance · ${viewLabel()}` }),
+    h('div', { class: 'segmented', role: 'group', 'aria-label': 'Time range' }, buttons));
+  if (points.length < 2) {
+    card.append(head, h('p', { class: 'muted small', text: 'Not enough price history yet for this view.' }));
+    return card;
   }
-
-  card.append(
-    h('div', { class: 'card-head' }, h('h2', { id: 'perf-h', text: `Performance · ${viewLabel()}` }),
-      h('div', { class: 'segmented', role: 'group', 'aria-label': 'Time range' }, buttons)),
-    h('div', { class: 'legend' },
-      h('span', null, h('span', { class: 'swatch' }), viewLabel()),
-      h('span', null, h('span', { class: 'swatch-dashed' }), `${benchTicker}, same starting value`)),
-    chartHost);
-  draw();
+  const first = points[0];
+  const last = points[points.length - 1];
+  const change = last.value - first.value;
+  const span = range === 'All' ? 'all history' : `the last ${range}`;
+  const host = h('div', { class: 'chart-host' });
+  card.append(head,
+    h('div', { class: 'perf-summary' },
+      h('span', { class: `perf-return ${tone(change)}`, text: fmt.signedPct(first.value ? change / first.value : null, 1) }),
+      h('span', { class: tone(change), text: fmt.signedMoney(change) }),
+      h('span', { class: 'muted small', text: `over ${span} · ${fmt.money(first.value)} → ${fmt.money(last.value)}` })),
+    host,
+    h('p', { class: 'xsmall muted', style: { margin: '8px 0 0' }, text: "How today's holdings moved; it ignores past buys and sells. Hover or tap the chart for a day's value." }));
+  valueChart(host, points, {
+    ariaLabel: `${viewLabel()} value over ${span}: from ${fmt.money(first.value)} to ${fmt.money(last.value)}`,
+    sinceLabel: range === 'All' ? 'since the start' : `since ${range} ago`,
+    dayLabel: (d) => new Date(`${d}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: range === '1M' ? 'numeric' : undefined, year: range === 'All' ? '2-digit' : undefined }),
+  });
   return card;
 }
 
+const TOP_SLICES = 6; // the rest are grouped as "Other" so the list stays short
+
+/** Donut of the view by holding, group (Stock Holdings / Automatic Investment) or person (Household only). */
 function allocationCard(summary) {
-  const byTicker = new Map();
+  const options = [['holding', 'Holdings'], ['kind', 'Group'], ...(person === 'household' && hasPartner() ? [['person', 'Person']] : [])];
+  if (!options.some(([key]) => key === breakdown)) breakdown = 'holding';
+  const keyOf = {
+    holding: (p) => p.ticker,
+    kind: (p) => KINDS[GROUPS[p.group]?.kind]?.label || p.group,
+    person: (p) => personName(GROUPS[p.group]?.person),
+  }[breakdown];
+  const sums = new Map();
   for (const p of summary.positions) {
-    if (p.value != null) byTicker.set(p.ticker, (byTicker.get(p.ticker) || 0) + p.value);
+    if (p.value != null) sums.set(keyOf(p), (sums.get(keyOf(p)) || 0) + p.value);
   }
-  const total = [...byTicker.values()].reduce((a, b) => a + b, 0);
-  const items = [...byTicker.entries()].sort((a, b) => b[1] - a[1])
-    .map(([ticker, value], i) => ({ ticker, value, weight: total ? value / total : 0, color: PALETTE[i % PALETTE.length] }));
-  const inBoth = [...new Set(summary.positions.filter((p, i, arr) => arr.findIndex((q) => q.ticker === p.ticker) !== i).map((p) => p.ticker))];
-  return h('section', { class: 'card side', 'aria-labelledby': 'alloc-h' },
-    h('h2', { id: 'alloc-h', text: `Allocation · ${viewLabel()}` }),
-    items.length ? [
-      h('div', { class: 'alloc-bar', role: 'img', 'aria-label': `Allocation: ${items.map((x) => `${x.ticker} ${fmt.pct(x.weight)}`).join(', ')}` },
-        items.map((x) => h('div', { style: { width: `${x.weight * 100}%`, background: x.color } }))),
-      h('div', { style: { marginTop: '16px' } }, items.map((x) => h('div', { class: 'alloc-row' },
+  const total = [...sums.values()].reduce((a, b) => a + b, 0);
+  const sorted = [...sums.entries()].sort((a, b) => b[1] - a[1]);
+  const rest = sorted.length > TOP_SLICES + 1 ? sorted.slice(TOP_SLICES) : [];
+  const kept = rest.length ? [...sorted.slice(0, TOP_SLICES), [`Other (${rest.length})`, rest.reduce((a, [, v]) => a + v, 0)]] : sorted;
+  const items = kept.map(([name, value], i) => ({
+    name, value, weight: total ? value / total : 0,
+    color: rest.length && i === kept.length - 1 ? '#5A6B85' : PALETTE[i % PALETTE.length],
+  }));
+  const card = h('section', { class: 'card side', 'aria-labelledby': 'alloc-h' });
+  const switcher = h('div', { class: 'segmented', role: 'group', 'aria-label': 'Break down by' },
+    options.map(([key, text]) => h('button', {
+      type: 'button', 'aria-pressed': String(key === breakdown), text,
+      onClick: () => { breakdown = key; card.replaceWith(allocationCard(summary)); },
+    })));
+  card.append(h('div', { class: 'card-head' }, h('h2', { id: 'alloc-h', text: `Allocation · ${viewLabel()}` }), switcher));
+  if (!items.length) {
+    card.append(h('p', { class: 'muted', text: 'Nothing in this group yet.' }));
+    return card;
+  }
+  card.append(
+    h('div', { class: 'alloc-top' },
+      donut(items, { label: 'Total', value: compactMoney(total), ariaLabel: `Allocation: ${items.map((x) => `${x.name} ${fmt.pct(x.weight)}`).join(', ')}` }),
+      h('div', { class: 'alloc-list' }, items.map((x) => h('div', { class: 'alloc-row' },
         h('span', { class: 'dot', style: { background: x.color } }),
-        h('strong', { text: x.ticker, style: { width: '56px' } }),
-        h('span', { class: 'muted', style: { flex: '1' }, text: fmt.money(x.value) }),
-        h('span', { class: 'mono', text: fmt.pct(x.weight) })))),
-      inBoth.length ? h('p', { class: 'xsmall muted', style: { margin: '14px 0 0' }, text: `${inBoth.join(', ')} ${inBoth.length === 1 ? 'is' : 'are'} held in more than one group; this view combines them.` }) : null,
-    ] : h('p', { class: 'muted', text: 'Nothing in this group yet.' }));
+        h('strong', { class: 'alloc-name', text: x.name }),
+        h('span', { class: 'muted small', text: compactMoney(x.value) }),
+        h('span', { class: 'mono', text: fmt.pct(x.weight) }))))),
+    rest.length ? h('p', { class: 'xsmall muted', style: { margin: '12px 0 0' }, text: `Other: ${rest.map(([name]) => name).join(', ')}` }) : null);
+  return card;
+}
+
+function compactMoney(v) {
+  if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(1)}k`;
+  return fmt.money(v);
 }
 
 const MOVERS = 3;
@@ -174,25 +198,60 @@ function alertsCard(rules) {
     ...items, h('a', { href: '#/alerts', class: 'small', text: 'Manage rules' }));
 }
 
+const HOLDING_COLUMNS = [
+  // [key, label, text column, hidden on phones]
+  ['ticker', 'Ticker', true], ['group', 'Group', true], ['shares', 'Shares', false, true], ['avg_cost', 'Avg cost', false, true],
+  ['price', 'Price'], ['day_change_pct', 'Today'], ['value', 'Value'], ['weight', 'Weight'], ['gain', 'Gain / loss'],
+];
+
+/** Sortable holdings of the view, filtered to both groups, Stock Holdings or Automatic Investment. */
 function holdingsCard(summary) {
-  const positions = [...summary.positions].sort((a, b) => (b.value || 0) - (a.value || 0));
-  const rows = positions.map((p) => h('tr', null,
+  const rows = summary.positions.filter((p) => kindFilter === 'both' || GROUPS[p.group]?.kind === kindFilter);
+  const maxWeight = Math.max(0, ...rows.map((p) => p.weight || 0));
+  const cell = (p, key) => (key === 'group' ? groupLabel(p.group) : p[key]);
+  const sorted = [...rows].sort((a, b) => {
+    const A = cell(a, sort.key);
+    const B = cell(b, sort.key);
+    if (A == null || B == null) return (A == null) - (B == null); // missing values (no price yet) last
+    return (typeof A === 'string' ? A.localeCompare(B) : A - B) * sort.dir;
+  });
+  const card = h('section', { class: 'card', 'aria-labelledby': 'hold-h' });
+  const redraw = () => card.replaceWith(holdingsCard(summary));
+  const head = h('tr', null, HOLDING_COLUMNS.map(([key, label, text, narrowHidden]) => {
+    const active = key === sort.key;
+    return h('th', {
+      scope: 'col', class: [text ? 'text' : null, narrowHidden ? 'hide-narrow' : null].filter(Boolean).join(' ') || null,
+      'aria-sort': active ? (sort.dir > 0 ? 'ascending' : 'descending') : null,
+    }, h('button', {
+      type: 'button', class: 'sort-btn',
+      onClick: () => { sort = active ? { key, dir: -sort.dir } : { key, dir: text ? 1 : -1 }; redraw(); },
+    }, label, h('span', { class: 'sort-arrow', 'aria-hidden': 'true', text: active ? (sort.dir > 0 ? '▲' : '▼') : '' })));
+  }));
+  const body = sorted.map((p) => h('tr', null,
     h('td', { class: 'text' }, h('strong', { text: p.ticker })),
     h('td', { class: 'text' }, h('span', { class: `group-chip ${groupChip(p.group)}`, text: groupLabel(p.group, { short: true, withPerson: hasPartner() && person === 'household' }) })),
-    h('td', { text: fmt.num(p.shares, 5) }),
-    h('td', { text: fmt.money(p.avg_cost) }),
+    h('td', { class: 'hide-narrow', text: fmt.num(p.shares, 5) }),
+    h('td', { class: 'hide-narrow', text: fmt.money(p.avg_cost) }),
     h('td', { text: p.price == null ? 'Loading…' : fmt.money(p.price) }),
+    h('td', { class: tone(p.day_change) }, `${fmt.signedPct(p.day_change_pct)} `, h('span', { class: 'xsmall', text: fmt.signedMoney(p.day_change) })),
     h('td', { text: fmt.money(p.value) }),
+    h('td', null, h('span', { class: 'weight' }, fmt.pct(p.weight),
+      h('span', { class: 'weight-track', 'aria-hidden': 'true' },
+        h('span', { class: 'weight-fill', style: { width: `${maxWeight ? ((p.weight || 0) / maxWeight) * 100 : 0}%` } })))),
     h('td', { class: tone(p.gain) }, `${fmt.signedMoney(p.gain)} `, h('span', { class: 'xsmall', text: fmt.signedPct(p.gain_pct, 1) }))));
-  return h('section', { class: 'card', 'aria-labelledby': 'hold-h' },
+  const filter = h('div', { class: 'segmented', role: 'group', 'aria-label': 'Show group' },
+    [['both', 'Both'], ['stocks', 'Stocks'], ['auto', 'Auto']].map(([key, text]) => h('button', {
+      type: 'button', 'aria-pressed': String(key === kindFilter), text, onClick: () => { kindFilter = key; redraw(); },
+    })));
+  card.append(
     h('div', { class: 'card-head' }, h('h2', { id: 'hold-h', text: `Holdings · ${viewLabel()}` }),
-      h('span', { class: 'muted small', text: `${rows.length} position${rows.length === 1 ? '' : 's'}` })),
+      h('div', { class: 'card-tools' },
+        h('span', { class: 'muted small', text: `${rows.length} position${rows.length === 1 ? '' : 's'}` }), filter)),
     rows.length
-      ? h('div', { class: 'table-wrap' }, h('table', null,
-        h('thead', null, h('tr', null, ['Ticker', 'Group', 'Shares', 'Avg cost', 'Price', 'Value', 'Gain / loss']
-          .map((t, i) => h('th', { scope: 'col', class: i < 2 ? 'text' : null, text: t })))),
-        h('tbody', null, rows)))
-      : h('p', { class: 'muted', text: 'Nothing in this group yet.' }));
+      ? h('div', { class: 'table-wrap' }, h('table', null, h('thead', null, head), h('tbody', null, body)))
+      : h('p', { class: 'muted', text: 'Nothing in this group yet.' }),
+    rows.length ? h('p', { class: 'xsmall muted', style: { marginBottom: 0 }, text: 'Click a column to sort. Weight is the share of this whole view.' }) : null);
+  return card;
 }
 
 export async function renderOverview(main) {
@@ -211,10 +270,9 @@ export async function renderOverview(main) {
 
   const draw = () => {
     const s = portfolios[person].overall;
-    const b = s.benchmark;
     const switcher = hasPartner()
       ? h('div', { class: 'segmented segmented-lg', role: 'group', 'aria-label': 'Whose holdings' },
-        [['household', 'Household'], ['mine', possessive('mine')], ['partner', possessive('partner')]].map(([key, text]) => h('button', {
+        [['household', 'Household'], ['mine', personName('mine')], ['partner', personName('partner')]].map(([key, text]) => h('button', {
           type: 'button', 'aria-pressed': String(key === person), text, onClick: () => { person = key; draw(); },
         })))
       : null;
@@ -225,11 +283,12 @@ export async function renderOverview(main) {
         tile(`Total value · ${viewLabel()}`, fmt.money(s.total_value), `Cost basis ${fmt.money(s.total_cost)}`),
         tile('Total gain', fmt.signedMoney(s.total_gain), `${fmt.signedPct(s.total_gain_pct)} all time`, tone(s.total_gain)),
         tile(data.live_as_of ? 'Today' : 'Last trading day', fmt.signedMoney(s.day_change), fmt.signedPct(s.day_change_pct), tone(s.day_change)),
-        tile(`vs. ${b.ticker} (1Y)`, vsText(b),
-          b.difference == null ? 'Needs more history' : `This view ${fmt.signedPct(b.portfolio_return, 1)} · ${b.ticker} ${fmt.signedPct(b.benchmark_return, 1)}`, tone(b.difference))),
+        tile(`1Y return · ${viewLabel()}`, fmt.signedPct(s.return_1y, 1),
+          s.return_1y == null ? 'Needs more history' : 'Current holdings over the last year', tone(s.return_1y))),
       moversCard(portfolios, data.live_as_of),
-      h('div', { class: 'row' }, performanceCard(s, data.benchmark_history, data.benchmark_ticker), allocationCard(s)),
-      h('div', { class: 'row' }, h('div', { class: 'grow' }, holdingsCard(s)), h('div', { class: 'side' }, alertsCard(rulesRes.rules))),
+      h('div', { class: 'row' }, performanceCard(s), allocationCard(s)),
+      holdingsCard(s),
+      alertsCard(rulesRes.rules),
       h('div', { class: 'footer-note' },
         h('span', { text: 'Performance shows how current holdings moved; it ignores past buys and sells.' }),
         h('span', { text: 'Describes data only. Not investment advice.' })),
