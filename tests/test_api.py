@@ -1,4 +1,5 @@
 import json
+from datetime import date, timedelta
 
 import pytest
 from conftest import api_event, price_series
@@ -89,6 +90,7 @@ def test_rejects_bad_bodies(repo):
 
 
 def test_rules_lifecycle(repo):
+    repo.put_holding("user-1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
     status, created = call(
         repo, "POST /rules", body=json.dumps({"type": "rsi_below", "ticker": "VTI", "params": {"threshold": 30}})
     )
@@ -486,3 +488,74 @@ def test_migrate_avg_cost(repo):
     assert repo.migrate_avg_cost() == []  # idempotent
     items = {i["ticker"]: i for i in repo.table.scan()["Items"] if i["sk"].startswith("HOLDING#")}
     assert float(items["VTI"]["avg_cost"]) == 250 == float(items["VTI"]["cost_basis"])  # old name kept
+
+
+# ---------------------------------------------------------------- watchlist
+def test_watchlist_add_list_remove(repo, no_backfill):
+    repo.put_holding("user-1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
+    repo.put_prices("NVDA", price_series(100, 1, 30, (date.today() - timedelta(days=40)).isoformat()))
+    assert call(repo, "PUT /watchlist/{ticker}", path={"ticker": "nvda"})[0] == 201
+    assert call(repo, "PUT /watchlist/{ticker}", path={"ticker": "NVDA"})[0] == 200  # already watched
+    call(repo, "PUT /watchlist/{ticker}", path={"ticker": "VTI"})
+    assert no_backfill == ["NVDA"]  # VTI is held, so it already has prices
+    _, body = call(repo, "GET /watchlist")
+    items = {w["ticker"]: w for w in body["watchlist"]}
+    assert items["NVDA"]["held"] is False and items["VTI"]["held"] is True
+    assert items["NVDA"]["signal"]["price"] == pytest.approx(129)  # computed before the evening run stores one
+    assert repo.tracked_tickers() == ["NVDA", "SPY", "VTI"]
+    # Watched tickers never count in holdings or totals
+    assert [h["ticker"] for h in call(repo, "GET /holdings")[1]["holdings"]] == ["VTI"]
+    assert call(repo, "DELETE /watchlist/{ticker}", path={"ticker": "NVDA"})[0] == 204
+    assert [w["ticker"] for w in call(repo, "GET /watchlist")[1]["watchlist"]] == ["VTI"]
+    assert call(repo, "PUT /watchlist/{ticker}", path={"ticker": "../x"})[0] == 400
+
+
+def test_watchlist_caps(repo, monkeypatch):
+    monkeypatch.setattr(api, "MAX_WATCHLIST", 2)
+    monkeypatch.setattr(api, "MAX_TRACKED", 3)
+    repo.put_holding("user-1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
+    call(repo, "PUT /watchlist/{ticker}", path={"ticker": "NVDA"})
+    call(repo, "PUT /watchlist/{ticker}", path={"ticker": "AAPL"})
+    status, body = call(repo, "PUT /watchlist/{ticker}", path={"ticker": "MSFT"})
+    assert status == 409 and "up to 2 tickers" in body["message"]
+    # Holdings share the combined cap with the watchlist
+    status, body = call(
+        repo,
+        "PUT /groups/{group}/holdings/{ticker}",
+        path={"group": "stocks", "ticker": "BND"},
+        body=json.dumps({"shares": 1, "avg_cost": 1}),
+    )
+    assert status == 409 and "across holdings and the watchlist" in body["message"]
+    # Buying a watched ticker adds no new tracked ticker, so it is allowed
+    status, _ = call(
+        repo,
+        "PUT /groups/{group}/holdings/{ticker}",
+        path={"group": "stocks", "ticker": "NVDA"},
+        body=json.dumps({"shares": 1, "avg_cost": 1}),
+    )
+    assert status == 200
+
+
+def test_rules_need_a_held_or_watched_ticker(repo):
+    def create(rule_type, ticker, params):
+        return call(repo, "POST /rules", body=json.dumps({"type": rule_type, "ticker": ticker, "params": params}))[0]
+
+    assert create("rsi_below", "NVDA", {"threshold": 30}) == 400
+    call(repo, "PUT /watchlist/{ticker}", path={"ticker": "NVDA"})
+    assert create("rsi_below", "NVDA", {"threshold": 30}) == 201
+    assert create("weight_above", "NVDA", {"pct": 10}) == 400  # not held, so no portfolio share
+
+
+def test_unwatching_deletes_rules_unless_held(repo):
+    repo.put_holding("user-1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
+    for ticker in ("NVDA", "VTI"):
+        call(repo, "PUT /watchlist/{ticker}", path={"ticker": ticker})
+        call(repo, "POST /rules", body=json.dumps({"type": "rsi_below", "ticker": ticker, "params": {"threshold": 30}}))
+        call(repo, "DELETE /watchlist/{ticker}", path={"ticker": ticker})
+    assert [r["ticker"] for r in call(repo, "GET /rules")[1]["rules"]] == ["VTI"]
+
+
+def test_news_for_a_watched_ticker(repo):
+    assert call(repo, "GET /news", query={"ticker": "NVDA"})[0] == 404
+    call(repo, "PUT /watchlist/{ticker}", path={"ticker": "NVDA"})
+    assert call(repo, "GET /news", query={"ticker": "NVDA"})[0] == 200

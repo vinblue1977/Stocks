@@ -103,7 +103,9 @@ def handler(
     cfg = get_config()
     holdings = repo.all_holdings()
     # Skips e.g. broad index funds that rarely get headlines, and partner-only tickers if partner news is off.
-    tickers = sorted({h["ticker"] for h in holdings} - news_off(holdings, cfg.news_excluded, cfg.partner_news))
+    held = {h["ticker"] for h in holdings} - news_off(holdings, cfg.news_excluded, cfg.partner_news)
+    watched = {w["ticker"] for w in repo.all_watched()} - cfg.news_excluded
+    tickers = sorted(held | watched)
 
     briefs: dict[str, str] = {}
     scores: list[float] = []
@@ -118,8 +120,10 @@ def handler(
             failed.append(ticker)
             continue
         if record:
-            briefs[ticker] = record["summary"]
             (reused if record.get("reused") else summarized).append(ticker)
+            if ticker not in held:
+                continue  # watched only: its own summary, but not part of the portfolio briefing
+            briefs[ticker] = record["summary"]
             if record["sentiment_7d"] is not None:
                 scores.append(record["sentiment_7d"])
 

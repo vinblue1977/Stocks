@@ -10,18 +10,18 @@ function describe(rule, types) {
 }
 
 export async function renderAlerts(main) {
-  const [typesRes, rulesRes, holdingsRes, alertsRes] = await Promise.all([
-    api('GET', '/rule-types'), api('GET', '/rules'), api('GET', '/holdings'), api('GET', '/alerts'),
+  const [typesRes, rulesRes, holdingsRes, alertsRes, watchRes] = await Promise.all([
+    api('GET', '/rule-types'), api('GET', '/rules'), api('GET', '/holdings'), api('GET', '/alerts'), api('GET', '/watchlist'),
   ]);
   const types = typesRes.rule_types;
-  const tickers = [...new Set(holdingsRes.holdings.map((x) => x.ticker))].sort();
+  const tickers = [...new Set([...holdingsRes.holdings, ...watchRes.watchlist].map((x) => x.ticker))].sort();
 
   // ---------- new rule form
   const typeSelect = h('select', { id: 'r-type' }, Object.entries(types).map(([name, spec]) => h('option', { value: name, text: spec.description })));
   const tickerSelect = h('select', { id: 'r-ticker' }, tickers.map((t) => h('option', { value: t, text: t })));
   const paramsHost = h('div', { style: { display: 'contents' } });
   const submit = h('button', { type: 'submit', class: 'btn btn-primary', text: 'Create rule', disabled: !tickers.length });
-  const error = h('p', { class: 'form-error', role: 'alert', text: tickers.length ? '' : 'Add a holding first; rules apply to tickers you hold.' });
+  const error = h('p', { class: 'form-error', role: 'alert', text: tickers.length ? '' : 'Add a holding or a watched ticker first.' });
 
   function drawParams() {
     paramsHost.replaceChildren();

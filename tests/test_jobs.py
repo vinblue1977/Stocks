@@ -217,6 +217,23 @@ def test_weight_rule_uses_combined_portfolio(repo, monkeypatch):
     assert evaluate_signals.handler({}, None, repo=repo)["alerts_sent"] == 1
 
 
+def test_news_covers_watched_tickers_but_not_in_the_portfolio_brief(repo):
+    class Recorder(FakeSummarizer):
+        portfolio_inputs = None
+
+        @staticmethod
+        def brief_for_portfolio(briefs, alerts):
+            Recorder.portfolio_inputs = sorted(briefs)
+            return "Portfolio summary"
+
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
+    repo.put_watch("u1", "NVDA")
+    result = news_ingest.handler({}, None, repo=repo, provider=FakeNews(), summarizer=Recorder)
+    assert result["summarized"] == ["NVDA", "VTI"]
+    assert repo.latest_brief("NVDA")["summary"] == "NVDA summary"
+    assert Recorder.portfolio_inputs == ["VTI"]
+
+
 def test_news_skips_excluded_tickers(repo, monkeypatch):
     import dataclasses
 

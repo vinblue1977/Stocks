@@ -19,7 +19,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 ## Stay informed
 | # | Idea | Effort | Notes |
 |---|---|---|---|
-| 7 | Watchlist | S–M | Tickers you don't own, with signals, news and alerts |
+| 7 | Watchlist | Done | Tickers you don't own, with signals, news and alerts |
 | 8 | Earnings calendar | S | Upcoming earnings dates for holdings (Finnhub free plan). Ex-dividend dates need a paid source |
 | 9 | Intraday alerts | S | Alert rules also checked against the 15-minute intraday prices (when `intradayQuotes` is on), not only after the close |
 | 10 | Daily close email | S | Today's change and biggest movers after the evening run, as an option on the existing report email rather than a second message |

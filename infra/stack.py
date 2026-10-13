@@ -503,6 +503,8 @@ class PortfolioTrackerStack(Stack):
             "/profile": [apigw.HttpMethod.GET],
             "/signals": [apigw.HttpMethod.GET],
             "/news": [apigw.HttpMethod.GET],
+            "/watchlist": [apigw.HttpMethod.GET],
+            "/watchlist/{ticker}": [apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
         }
         for path, methods in routes.items():
             http_api.add_routes(path=path, methods=methods, integration=integration)
