@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { sentimentBars } from '../charts.js';
 import { GROUPS, KINDS, hasPartner, possessive } from '../groups.js';
-import { fmt, h, icon, pageHead, sentimentTag, tone } from '../ui.js';
+import { fill, fmt, h, icon, pageHead, sentimentTag, tone } from '../ui.js';
 
 let selected = 'All';
 let groupFilter = 'all'; // all, a person (mine / partner) or a kind (stocks / auto)
@@ -131,7 +131,7 @@ export async function renderNews(main, { keepWatched = false } = {}) {
       type: 'button', class: 'chip-btn', 'aria-pressed': String(t === selected), text: t,
       onClick: () => { selected = t; if (t !== watched) watched = null; renderNews(main, { keepWatched: true }); },
     })));
-  main.replaceChildren(
+  fill(main,
     pageHead('News & signals', 'Headlines from Finnhub, scored and summarized each weekday evening', groupChips),
     chips,
     offHere.length ? h('p', { class: 'xsmall muted', style: { margin: '-12px 0 0' }, text: `News is turned off for ${offHere.join(', ')}. Their price signals still appear below.` }) : null,

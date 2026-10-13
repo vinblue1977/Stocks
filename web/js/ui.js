@@ -28,6 +28,12 @@ export function h(tag, attrs, ...children) {
   return el;
 }
 
+/** Replaces a container's content, skipping null/false like h() does (replaceChildren would print "null"). */
+export function fill(el, ...children) {
+  el.replaceChildren();
+  append(el, children);
+}
+
 export function s(tag, attrs, ...children) {
   const el = document.createElementNS(SVG_NS, tag);
   apply(el, attrs);

@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { fmt, h, pageHead, sentimentTag, toast, tone } from '../ui.js';
+import { fill, fmt, h, pageHead, sentimentTag, toast, tone } from '../ui.js';
 
 let confirming = null; // ticker whose Remove is waiting for confirmation
 
@@ -107,9 +107,8 @@ export async function renderWatchlist(main) {
     const rules = rulesFor(item.ticker);
     return [row(item, rules, main), confirming === item.ticker ? confirmRow(item, rules, main) : null];
   });
-  main.replaceChildren(
-    pageHead('Watchlist', "Tickers you don't own. Same facts as your holdings; the decision is yours.", form),
-    error,
+  fill(main,
+    pageHead('Watchlist', "Tickers you don't own. Same facts as your holdings; the decision is yours.", h('div', null, form, error)),
     h('section', { class: 'card', 'aria-labelledby': 'wl-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'wl-h', text: 'Watching' }),
         h('span', { class: 'muted small', text: `${items.length} of ${res.max} · prices live during market hours` })),

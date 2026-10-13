@@ -166,6 +166,7 @@ tr.total-row td { font-weight: 600; }
 /* Watchlist */
 .add-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
 .add-form .field input { width: 150px; text-transform: uppercase; }
+.add-form .field input::placeholder { text-transform: none; }
 .held-tag { margin-left: 8px; }
 .live { font-size: 11px; color: var(--accent); margin-left: 6px; font-family: var(--sans); }
 tr.pending td { color: var(--muted); }
