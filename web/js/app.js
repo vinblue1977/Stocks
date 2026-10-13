@@ -87,12 +87,14 @@ async function start() {
     setApiBase(config.apiUrl);
     const signedIn = await initAuth(config);
     if (!signedIn) return; // redirecting to the sign-in page
+    document.documentElement.classList.remove('auth-pending');
     setProfile(await api('GET', '/profile'));
     document.getElementById('nav-mine').textContent = portfolioTitle('mine');
     const partnerNav = document.getElementById('nav-partner');
     partnerNav.textContent = portfolioTitle('partner');
     partnerNav.hidden = !hasPartner();
   } catch (e) {
+    document.documentElement.classList.remove('auth-pending');
     main.replaceChildren(errorCard(e.message), h('p', null, h('a', { href: '/', text: 'Try again' })));
     return;
   }
