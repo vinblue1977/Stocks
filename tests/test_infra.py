@@ -406,3 +406,22 @@ def test_login_branding_uses_only_known_settings():
     defaults = json.loads((root / "fixtures" / "cognito_branding_defaults.json").read_text())
     ours = json.loads((root.parent / "infra" / "login" / "branding.json").read_text())
     assert _setting_paths(ours) <= _setting_paths(defaults)
+
+
+@pytest.mark.parametrize("value", [None, False, True])
+def test_guardduty_is_opt_in_and_alerts(tmp_path_factory, value):
+    template = synth(tmp_path_factory, **({} if value is None else {"guardDuty": value}))
+    template.resource_count_is("AWS::GuardDuty::Detector", 1 if value else 0)
+    if value:
+        template.has_resource_properties(
+            "AWS::Events::Rule",
+            Match.object_like(
+                {
+                    "EventPattern": {
+                        "source": ["aws.guardduty"],
+                        "detail-type": ["GuardDuty Finding"],
+                        "detail": {"severity": [{"numeric": [">=", 4]}]},
+                    }
+                }
+            ),
+        )

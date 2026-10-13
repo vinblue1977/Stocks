@@ -39,6 +39,7 @@ from aws_cdk import aws_cognito as cognito
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_events as events
 from aws_cdk import aws_events_targets as targets
+from aws_cdk import aws_guardduty as guardduty
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_kms as kms
 from aws_cdk import aws_lambda as lambda_
@@ -644,6 +645,31 @@ class PortfolioTrackerStack(Stack):
                             f"{events.EventField.from_path('$.detail.resource')} is accessible from outside the account "
                             f"(public: {events.EventField.from_path('$.detail.isPublic')}). "
                             "Review it in the IAM console under Access Analyzer; archive it there if it is intended."
+                        ),
+                    )
+                ],
+            )
+
+        # ------------------------------------------------------------------ threat detection
+        # GuardDuty watches the account's API, DNS and network activity (e.g. stolen keys used from a strange
+        # place) and emails medium and high findings to the ops topic. Opt-in (`guardDuty: true`): one per region.
+        if _flag(self.node.try_get_context("guardDuty")):
+            guardduty.CfnDetector(self, "GuardDuty", enable=True, finding_publishing_frequency="FIFTEEN_MINUTES")
+            events.Rule(
+                self,
+                "GuardDutyFindings",
+                event_pattern=events.EventPattern(
+                    source=["aws.guardduty"],
+                    detail_type=["GuardDuty Finding"],
+                    detail={"severity": events.Match.greater_than_or_equal(4)},
+                ),
+                targets=[
+                    targets.SnsTopic(
+                        ops_topic,
+                        message=events.RuleTargetInput.from_text(
+                            f"GuardDuty (severity {events.EventField.from_path('$.detail.severity')}): "
+                            f"{events.EventField.from_path('$.detail.title')}. "
+                            "Review it in the GuardDuty console."
                         ),
                     )
                 ],
