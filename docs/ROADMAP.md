@@ -7,7 +7,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 |---|---|---|---|
 | 1 | Transactions and sales | L | Buys are already recorded (average cost and earliest date). Add sales and a per-lot history for realized gains and a money-weighted return. Items 2 and 6 build on it |
 | 2 | Contributions vs. growth | M | Automatic Investment: amount put in vs. market gain, monthly deposits chart. Needs dated deposits from #1 |
-| 3 | Dividends and income | M | Keep Tiingo's per-day dividend amount (currently dropped) to show dividends received per year and yield on cost. Returns already include dividends (adjusted closes), so this is a separate income view and must not be added to gains. Upcoming payments need another source |
+| 3 | Dividends and income | M | Mockup agreed: Dividends page with annual income, yield, yield on cost, next-12-months by month, upcoming (estimated) and per holding with Both/Stocks/Auto. Store Tiingo's `divCash` and re-fetch ~2 years once. No "received" figures until purchase dates exist (#1). Not added to gains |
 
 ## Plan and stay on track
 | # | Idea | Effort | Notes |
@@ -36,7 +36,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 ## Understand what you own
 | # | Idea | Effort | Notes |
 |---|---|---|---|
-| 16 | Fund overlap | M | Look through ETFs to real holdings, e.g. VTI and VOO overlap |
+| 16 | Fund overlap | M | "Shared underneath your funds" on the Checkup, plus a single-company ceiling. Free SEC N-PORT holdings (quarterly; prototype worked; SPY has none, use VOO) |
 | 17 | Sector and region mix | M | From fund holdings; fits the Allocation donut |
 | 18 | Fees in dollars | S | Expense ratios as dollars per year |
 
@@ -66,6 +66,16 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 - Newer Claude model for news summaries once the account has access.
 - Custom domain for the dashboard.
 - Broker sync (for example through an aggregator), parked.
+
+## Bigger ideas
+- Company filings digest: Claude summarizes each holding's new 10-Q, 10-K and 8-K (SEC EDGAR, free).
+- Earnings call summaries: key numbers, guidance and tone (transcripts need a paid source).
+- Company fundamentals per stock: valuation, growth, margins, estimates (paid data).
+- Real-time quotes instead of 15-minute updates (paid data).
+- Risk extras on the Checkup: correlation between holdings, stress tests (2008, 2020), Monte Carlo projection toward #5 goals.
+- iPhone home-screen widget with today's change (pairs with #14).
+- Separate logins per person, with shared household views.
+- Checkup email to both people (second SES-verified address), or an HTML body.
 
 ## Security and ops
 - CloudTrail trail to S3 for a long-term audit log (free history is 90 days).
