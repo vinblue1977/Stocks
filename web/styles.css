@@ -15,6 +15,8 @@
   --warn: #F5A35C;
   --warn-bg: #2A1F15;
   --neutral-bg: #1A2336;
+  --auto: #E4D5BA; /* Automatic Investment: sand */
+  --auto-bg: #2E2921;
   --radius: 12px;
   --mono: 'IBM Plex Mono', ui-monospace, monospace;
   --sans: 'IBM Plex Sans', system-ui, sans-serif;
@@ -154,7 +156,7 @@ tr.highlight { background: var(--chip-bg); }
 .preview { margin: 14px 0 0; color: var(--text-2); background: var(--inset); border-radius: 8px; padding: 12px 14px; }
 .group-chip { font-size: 12px; font-weight: 500; border-radius: 999px; padding: 3px 10px; font-family: var(--sans); white-space: nowrap; }
 .chip-stocks { color: var(--accent-strong); background: var(--chip-bg); }
-.chip-auto { color: #F5C38F; background: #2E2216; }
+.chip-auto { color: var(--auto); background: var(--auto-bg); }
 .segmented-lg { border-radius: 10px; }
 .segmented-lg button { height: 40px; padding: 0 16px; font-size: 14px; }
 .segmented-lg button[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
