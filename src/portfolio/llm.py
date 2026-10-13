@@ -32,8 +32,12 @@ Produce:
   to +1.0 (clearly positive), 0 when neutral or unrelated;
 - a 2-3 sentence factual summary of what the coverage says about the ticker.
 
-Describe what the news says. Do not recommend buying, selling or holding, do not predict
-prices, and do not give investment advice."""
+Report only what the articles state: events, figures, company announcements, and views
+attributed to a named source ("analysts at X said..."). Write in a neutral, plain tone.
+- No opinions or judgments of your own, including soft ones such as "suggests caution",
+  "remains attractive", "worth watching" or "raises questions about".
+- No recommendations to buy, sell or hold, no price predictions, and no investment advice.
+- Do not infer what the news means for the investor; if the coverage is thin or mixed, say so."""
 
 PORTFOLIO_INSTRUCTION = "\n\nThis request is the whole-portfolio briefing: combine the per-ticker summaries into 3-4 sentences."
 UNAVAILABLE = "Summary unavailable for this update."
