@@ -15,7 +15,7 @@ function apply(el, attrs) {
 }
 
 function append(el, children) {
-  for (const child of children.flat()) {
+  for (const child of children.flat(Infinity)) {
     if (child === null || child === undefined || child === false) continue;
     el.append(child instanceof Node ? child : document.createTextNode(String(child)));
   }
@@ -26,6 +26,13 @@ export function h(tag, attrs, ...children) {
   apply(el, attrs);
   append(el, children);
   return el;
+}
+
+/** Replaces a container's content, skipping null/false like h() does (replaceChildren would print "null"). */
+export function fill(el, ...children) {
+  const nodes = document.createDocumentFragment();
+  append(nodes, children);
+  el.replaceChildren(nodes);
 }
 
 export function s(tag, attrs, ...children) {

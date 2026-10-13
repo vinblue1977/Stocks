@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { lineChart } from '../charts.js';
 import { KINDS, groupChip, groupLabel, hasPartner, portfolioTitle, possessive } from '../groups.js';
-import { fmt, h, icon, pageHead, tone } from '../ui.js';
+import { fill, fmt, h, icon, pageHead, tone } from '../ui.js';
 
 const RANGES = { '1M': 22, '3M': 66, '1Y': 252, All: Infinity };
 const PALETTE = ['#BFE3FF', '#7CC4FA', '#3E8FD6', '#2A5F96', '#1D4573', '#F5A35C', '#F5C38F', '#C97B3F', '#8392AB', '#5A6B85'];
@@ -161,7 +161,7 @@ export async function renderOverview(main) {
   const { portfolios } = data;
   if (!hasPartner()) person = 'household';
   if (!portfolios.household.overall.positions.length) {
-    main.replaceChildren(pageHead('Overview'), h('div', { class: 'card empty-card' },
+    fill(main, pageHead('Overview'), h('div', { class: 'card empty-card' },
       h('h2', { text: 'Add your first holding' }),
       h('p', { class: 'muted', text: 'Record purchases under Stock Holdings or Automatic Investment, and the app tracks value, gains, news and alerts from there.' }),
       h('div', { style: { display: 'flex', gap: '12px', justifyContent: 'center' } },
@@ -179,7 +179,7 @@ export async function renderOverview(main) {
           type: 'button', 'aria-pressed': String(key === person), text, onClick: () => { person = key; draw(); },
         })))
       : null;
-    main.replaceChildren(
+    fill(main,
       liveMarker(pageHead('Overview', pricesNote(data), switcher), data.live_as_of),
       summaryTable(portfolios[person], data.live_as_of ? 'Today' : 'Last day'),
       h('section', { class: 'tiles', 'aria-label': `Summary for ${viewLabel()}` },
