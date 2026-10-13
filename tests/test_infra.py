@@ -372,6 +372,7 @@ def test_site_https_only_with_strict_headers(any_template):
         "script-src 'self'",
         "frame-ancestors 'none'",
         "object-src 'none'",
+        "manifest-src 'self'",  # installable app
         '"FrameOption": "DENY"',
         "Permissions-Policy",
     ):
@@ -419,3 +420,13 @@ def test_guardduty_is_opt_in_and_alerts_ops(tmp_path_factory, value):
         assert rule["Properties"]["EventPattern"]["detail"] == {"severity": [{"numeric": [">=", 4]}]}
         (target,) = rule["Properties"]["Targets"]
         assert "OpsTopic" in json.dumps(target["Arn"])
+
+
+def test_web_app_manifest_is_installable():
+    web = Path(__file__).parent.parent / "web"
+    manifest = json.loads((web / "manifest.json").read_text())
+    assert manifest["display"] == "standalone" and manifest["start_url"].startswith("/")
+    for icon in manifest["icons"]:
+        assert (web / icon["src"]).read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+    assert {i["sizes"] for i in manifest["icons"]} >= {"192x192", "512x512"}
+    assert 'rel="manifest" href="manifest.json"' in (web / "index.html").read_text()

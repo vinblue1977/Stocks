@@ -228,6 +228,7 @@ class PortfolioTrackerStack(Stack):
                 "style-src 'self' https://fonts.googleapis.com",
                 "font-src https://fonts.gstatic.com",
                 "img-src 'self' data:",
+                "manifest-src 'self'",
                 f"connect-src 'self' https://*.execute-api.{Aws.REGION}.amazonaws.com {auth_url}",
                 "base-uri 'none'",
                 "form-action 'self'",
