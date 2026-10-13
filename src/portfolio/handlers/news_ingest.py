@@ -51,7 +51,8 @@ def ingest_ticker(
     previous = repo.latest_brief(ticker)
     fresh = [a for a in articles if a["article_id"] not in already_scored]
 
-    if not fresh and previous and previous.get("summary") and previous["summary"] != llm.UNAVAILABLE:
+    current = previous and previous.get("prompt_version") == llm.PROMPT_VERSION
+    if not fresh and current and previous.get("summary") and previous["summary"] != llm.UNAVAILABLE:
         # Nothing new: keep the summary, refresh only the 7-day score (older headlines age out).
         sentiment, count = _sentiment_7d(repo, ticker, now)
         record = {
@@ -61,6 +62,7 @@ def ingest_ticker(
             "headline_count": count,
             "generated_at": now.isoformat(timespec="seconds"),
             "reused": True,
+            "prompt_version": llm.PROMPT_VERSION,
         }
         record.setdefault("summarized_at", previous.get("generated_at"))
         repo.put_brief(ticker, now.date().isoformat(), record)
@@ -82,6 +84,7 @@ def ingest_ticker(
         "generated_at": stamp,
         "summarized_at": stamp,
         "reused": False,
+        "prompt_version": llm.PROMPT_VERSION,
     }
     repo.put_brief(ticker, now.date().isoformat(), record)
     return record
@@ -125,7 +128,8 @@ def handler(
         active = sorted(r["detail"] for r in _active_rule_details(repo) if r.get("detail"))
         overall = round(sum(scores) / len(scores), 3) if scores else None
         # Fingerprint of everything the portfolio briefing is based on.
-        inputs_key = hashlib.sha256(json.dumps({"briefs": briefs, "alerts": active}, sort_keys=True).encode()).hexdigest()
+        inputs = {"briefs": briefs, "alerts": active, "prompt": llm.PROMPT_VERSION}
+        inputs_key = hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
         previous = repo.latest_brief("ALL")
         if previous and previous.get("inputs_key") == inputs_key and previous.get("summary") != llm.UNAVAILABLE:
             summary = previous["summary"]
