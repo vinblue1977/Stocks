@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { fill, h, icon, pageHead, toast } from '../ui.js';
+import { add, fill, h, icon, pageHead, toast } from '../ui.js';
 
 const PARAM_LABELS = { window: 'Days in average', pct: 'Percent', threshold: 'Threshold' };
 
@@ -24,10 +24,10 @@ export async function renderAlerts(main) {
   const error = h('p', { class: 'form-error', role: 'alert', text: tickers.length ? '' : 'Add a holding or a watched ticker first.' });
 
   function drawParams() {
-    paramsHost.replaceChildren();
+    fill(paramsHost);
     for (const [name, range] of Object.entries(types[typeSelect.value].params)) {
       const input = h('input', { id: `r-${name}`, name, type: 'number', required: true, min: range.min, max: range.max, step: 'any', inputmode: 'decimal' });
-      paramsHost.append(h('div', { class: 'field' },
+      add(paramsHost, h('div', { class: 'field' },
         h('label', { for: input.id, text: `${PARAM_LABELS[name] || name} (${range.min} to ${range.max})` }), input));
     }
   }
