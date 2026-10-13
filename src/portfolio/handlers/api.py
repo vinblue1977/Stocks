@@ -122,10 +122,10 @@ def put_holding(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     group = _group(event)
     ticker = _ticker(event.get("pathParameters", {}).get("ticker"))
     body = _body(event)
-    if "cost_basis" in body:  # the field's old name, still accepted
-        if "avg_cost" in body:
+    if body.get("cost_basis") is not None:  # the field's old name, still accepted
+        if body.get("avg_cost") is not None:
             raise ApiError(400, "Send avg_cost only (cost_basis is its old name)")
-        body["avg_cost"] = body.pop("cost_basis")
+        body["avg_cost"] = body["cost_basis"]
     shares = _number(body, "shares", 0.000001, 1_000_000_000)
     holding: dict[str, Any] = {
         "ticker": ticker,

@@ -465,7 +465,7 @@ def test_legacy_cost_basis_is_read_and_replaced(repo, no_backfill):
     status, body = buy(repo, "VTI", 5, 280)  # conditional write matches the old attribute name
     assert status == 200 and body["holding"]["avg_cost"] == pytest.approx(260.0)
     stored = repo.table.get_item(Key={"pk": "USER#user-1", "sk": "HOLDING#stocks#VTI"})["Item"]
-    assert "cost_basis" not in stored and float(stored["avg_cost"]) == pytest.approx(260.0)
+    assert float(stored["avg_cost"]) == pytest.approx(260.0) == float(stored["cost_basis"])  # old name kept for rollback
 
 
 def test_old_cost_basis_input_still_accepted(repo, no_backfill):
@@ -474,12 +474,15 @@ def test_old_cost_basis_input_still_accepted(repo, no_backfill):
     assert status == 200 and body["avg_cost"] == 25 and "cost_basis" not in body
     status, _ = call(repo, route, path=path, body=json.dumps({"shares": 4, "cost_basis": 25, "avg_cost": 25}))
     assert status == 400
+    status, body = call(repo, route, path=path, body=json.dumps({"shares": 4, "cost_basis": None, "avg_cost": 30}))
+    assert status == 200 and body["avg_cost"] == 30
 
 
 def test_migrate_avg_cost(repo):
     _put_legacy_holding(repo, "VTI", 10, 250)
     buy(repo, "VOO", 1, 500)  # already new-format
+    assert repo.migrate_avg_cost(dry_run=True) == ["USER#user-1:HOLDING#stocks#VTI"]
     assert repo.migrate_avg_cost() == ["USER#user-1:HOLDING#stocks#VTI"]
     assert repo.migrate_avg_cost() == []  # idempotent
     items = {i["ticker"]: i for i in repo.table.scan()["Items"] if i["sk"].startswith("HOLDING#")}
-    assert "cost_basis" not in items["VTI"] and float(items["VTI"]["avg_cost"]) == 250
+    assert float(items["VTI"]["avg_cost"]) == 250 == float(items["VTI"]["cost_basis"])  # old name kept
