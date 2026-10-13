@@ -591,3 +591,44 @@ def test_signals_include_watched_tickers(repo):
     repo.put_signal("NVDA", {"ticker": "NVDA", "as_of": "2026-01-02", "price": 1.0})
     call(repo, "PUT /watchlist/{ticker}", path={"ticker": "NVDA"})
     assert [s["ticker"] for s in call(repo, "GET /signals")[1]["signals"]] == ["NVDA"]
+
+
+# ---------------------------------------------------------------- checkup
+TARGETS = {
+    "areas": {"us": {"pct": 60, "fund": "vti"}, "intl": {"pct": 25, "fund": "VXUS"}, "sector": {"pct": 15, "fund": "SMH"}},
+    "sector_ceiling": 15,
+    "overrides": {"xyz": "intl"},
+}
+
+
+def test_targets_round_trip_and_checkup(repo):
+    start = (date.today() - timedelta(days=40)).isoformat()
+    for ticker, shares in (("VTI", 6), ("SMH", 4)):
+        repo.put_holding("user-1", {"ticker": ticker, "shares": shares, "avg_cost": 1})
+        repo.put_prices(ticker, price_series(100, 1, 30, start))
+    assert call(repo, "GET /targets")[1]["targets"] is None
+    status, body = call(repo, "PUT /targets", body=json.dumps(TARGETS))
+    assert status == 200 and body["targets"]["areas"]["us"] == {"pct": 60, "fund": "VTI"}
+    assert body["targets"]["overrides"] == {"XYZ": "intl"} and body["targets"]["areas"]["bonds"]["pct"] == 0
+    status, body = call(repo, "GET /checkup")
+    home = body["views"]["household"]
+    assert status == 200 and set(body["views"]) == {"household", "mine"}
+    assert home["by_area"] == {"us": 774.0, "sector": 516.0}
+    assert next(d for d in home["drift"] if d["area"] == "sector")["now"] == 0.4
+    assert body["assigned"] == {"SMH": "sector", "VTI": "us"} and body["summary"] is None
+
+
+@pytest.mark.parametrize(
+    "change, message",
+    [
+        ({"areas": {"us": {"pct": 50}}}, "add up to 100"),
+        ({"areas": {"crypto": {"pct": 100}}}, "areas must use"),
+        ({"areas": {"us": {"pct": 99.5}, "intl": {"pct": 0.5}}}, "whole numbers"),
+        ({"areas": {"us": {"pct": 100, "fund": "../x"}}}, "fund must look like"),
+        ({"areas": {"us": {"pct": 100}}, "overrides": {"VTI": "moon"}}, "overrides.VTI"),
+        ({"areas": {"us": {"pct": 100}}, "sector_ceiling": 150}, "between"),
+    ],
+)
+def test_targets_validation(repo, change, message):
+    status, body = call(repo, "PUT /targets", body=json.dumps({**TARGETS, **change}))
+    assert status == 400 and message in body["message"]

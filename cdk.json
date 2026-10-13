@@ -34,6 +34,7 @@
     "githubRepo": "vinblue1977@13391763/Stocks@1415035954",
     "bedrockModelId": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
     "bedrockApi": "runtime",
+    "checkupModelId": "us.anthropic.claude-opus-4-6-v1",
     "monthlyBudgetUsd": 0,
     "useCustomerManagedKey": false,
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,

@@ -440,6 +440,16 @@ class PortfolioTrackerStack(Stack):
         table.grant_read_data(weekly)
         topic.grant_publish(weekly)
 
+        # Monthly checkup email, written by a stronger model than the nightly news summaries.
+        checkup_model: str = self.node.try_get_context("checkupModelId") or model_id
+        monthly = make_function("MonthlyCheckup", "monthly_checkup", timeout=300, memory=512)
+        monthly.add_environment("CHECKUP_MODEL_ID", checkup_model)
+        monthly.add_environment("SITE_URL", site_url)
+        table.grant_read_write_data(monthly)
+        topic.grant_publish(monthly)
+        for statement in bedrock_statements(bedrock_api, checkup_model):
+            monthly.add_to_role_policy(statement)
+
         api_fn = make_function("Api", "api", timeout=15, memory=512)
         api_fn.add_environment("PRICE_SYNC_FUNCTION_NAME", price_sync.function_name)
         table.grant_read_write_data(api_fn)
@@ -504,6 +514,8 @@ class PortfolioTrackerStack(Stack):
             "/news": [apigw.HttpMethod.GET],
             "/watchlist": [apigw.HttpMethod.GET],
             "/watchlist/{ticker}": [apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
+            "/checkup": [apigw.HttpMethod.GET],
+            "/targets": [apigw.HttpMethod.GET, apigw.HttpMethod.PUT],
         }
         for path, methods in routes.items():
             http_api.add_routes(path=path, methods=methods, integration=integration)
@@ -565,6 +577,12 @@ class PortfolioTrackerStack(Stack):
             "WeeklyReportSchedule",
             schedule=events.Schedule.cron(minute="0", hour="14", week_day="SUN"),
             targets=[targets.LambdaFunction(weekly, retry_attempts=2)],
+        )
+        events.Rule(
+            self,
+            "MonthlyCheckupSchedule",
+            schedule=events.Schedule.expression("cron(0 14 ? * SAT#1 *)"),  # first Saturday, 14:00 UTC
+            targets=[targets.LambdaFunction(monthly, retry_attempts=2)],
         )
 
         # ------------------------------------------------------------------ GitHub Actions deploy role
@@ -682,7 +700,7 @@ class PortfolioTrackerStack(Stack):
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
             alarm_description="The weekday price/news/signals pipeline failed",
         ).add_alarm_action(alarm_action)
-        for fn in (api_fn, price_sync, news_ingest, evaluate, weekly):
+        for fn in (api_fn, price_sync, news_ingest, evaluate, weekly, monthly):
             cloudwatch.Alarm(
                 self,
                 f"{fn.node.id}ErrorsAlarm",
@@ -782,4 +800,5 @@ class PortfolioTrackerStack(Stack):
             "news_ingest": news_ingest,
             "evaluate": evaluate,
             "weekly": weekly,
+            "monthly": monthly,
         }
