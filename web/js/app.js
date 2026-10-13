@@ -1,5 +1,5 @@
 import { api, setApiBase } from './api.js';
-import { addPasskeyUrl, currentEmail, initAuth, logout } from './auth.js';
+import { addPasskeyUrl, currentEmail, hasSession, initAuth, logout } from './auth.js';
 import { KINDS, hasPartner, portfolioTitle, setProfile } from './groups.js';
 import { errorCard, h } from './ui.js';
 import { renderAlerts } from './views/alerts.js';
@@ -81,20 +81,33 @@ async function route({ quiet = false } = {}) {
   if (!quiet) main.focus({ preventScroll: true });
 }
 
+/** Shows the page once sign-in is confirmed (or an error needs showing). */
+function reveal({ header = true } = {}) {
+  document.querySelector('.topbar').hidden = !header;
+  document.documentElement.classList.remove('auth-pending');
+}
+
+// Back after signing out can restore this page from the browser cache; reload so it signs in again.
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted && !hasSession()) {
+    document.documentElement.classList.add('auth-pending');
+    location.reload();
+  }
+});
+
 async function start() {
   try {
     const config = await (await fetch('config.json', { cache: 'no-store' })).json();
     setApiBase(config.apiUrl);
     const signedIn = await initAuth(config);
     if (!signedIn) return; // redirecting to the sign-in page
-    document.documentElement.classList.remove('auth-pending');
     setProfile(await api('GET', '/profile'));
     document.getElementById('nav-mine').textContent = portfolioTitle('mine');
     const partnerNav = document.getElementById('nav-partner');
     partnerNav.textContent = portfolioTitle('partner');
     partnerNav.hidden = !hasPartner();
   } catch (e) {
-    document.documentElement.classList.remove('auth-pending');
+    reveal({ header: false }); // the error alone, without the app's menu
     main.replaceChildren(errorCard(e.message), h('p', null, h('a', { href: '/', text: 'Try again' })));
     return;
   }
@@ -108,6 +121,7 @@ async function start() {
   window.addEventListener('hashchange', () => route());
   setInterval(maybeRefresh, 60 * 1000);
   document.addEventListener('visibilitychange', maybeRefresh); // catch up when the tab comes back
+  reveal(); // after /profile, so a stale session redirects to sign-in before anything shows
   route();
 }
 

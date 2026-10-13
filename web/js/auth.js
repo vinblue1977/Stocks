@@ -162,6 +162,10 @@ export async function getAccessToken(forceRefresh = false) {
   return load().access_token;
 }
 
+export function hasSession() {
+  return Boolean(load());
+}
+
 export function currentEmail() {
   const tokens = load();
   if (!tokens?.id_token) return '';
