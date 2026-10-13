@@ -76,8 +76,5 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 - Restore drill: point-in-time restore of the table to a test copy.
 
 ## CI ideas
-- Smoke test after each deploy: dashboard, sign-in page and API (401 without a token).
-- Weekly scheduled `pip-audit`.
 - Workflow security lint (zizmor or actionlint).
 - ESLint for `web/js`.
-- Dependency review on PRs.
