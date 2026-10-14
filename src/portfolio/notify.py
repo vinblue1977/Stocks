@@ -55,11 +55,15 @@ def push_to_user(repo: Any, user_id: str, title: str, body: str, url: str = "/#/
     from portfolio import webpush  # only loaded where notifications are sent
     from portfolio.secrets import get_secret
 
-    subscriptions = repo.list_push(user_id)
-    if not subscriptions:
+    try:
+        subscriptions = repo.list_push(user_id)
+        if not subscriptions:
+            return 0
+        cfg = get_config()
+        key = get_secret(cfg.vapid_key_param)
+    except Exception:  # e.g. the key can't be read: the alert email has gone out; don't stop the job
+        logger.exception("push setup failed")
         return 0
-    cfg = get_config()
-    key = get_secret(cfg.vapid_key_param)
     sent = 0
     for sub in subscriptions:
         try:

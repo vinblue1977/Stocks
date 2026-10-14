@@ -38,8 +38,13 @@ export async function pushCard(rerender) {
     return state(false, 'Notifications are blocked for this app', 'Turn them on in your device settings (iPhone: Settings › Notifications › Portfolio), then come back here.');
   }
 
-  const subscription = await currentSubscription().catch(() => null);
-  const { devices } = await api('GET', '/push').catch(() => ({ devices: 0 }));
+  let subscription = await currentSubscription().catch(() => null);
+  const query = subscription ? `?endpoint=${encodeURIComponent(subscription.endpoint)}` : '';
+  let { devices, this_device: linked } = await api('GET', `/push${query}`).catch(() => ({ devices: 0, this_device: false }));
+  if (subscription && !linked) {
+    // The phone has a subscription but the server doesn't (an earlier save failed, or it expired): link it again.
+    try { devices = (await api('PUT', '/push', subscription.toJSON())).devices; linked = true; } catch { subscription = null; }
+  }
   const busy = (button, task) => async () => {
     button.disabled = true;
     try { await task(); } catch (e) { toast(e.message, true); button.disabled = false; }
@@ -68,8 +73,9 @@ export async function pushCard(rerender) {
   }));
   const off = h('button', { type: 'button', class: 'btn btn-danger', text: 'Turn off' });
   off.addEventListener('click', busy(off, async () => {
-    await api('DELETE', '/push', { endpoint: subscription.endpoint });
+    // Phone first: if this fails nothing changes; a server record left behind is cleaned up on the next send.
     await subscription.unsubscribe();
+    await api('DELETE', '/push', { endpoint: subscription.endpoint }).catch(() => {});
     toast('Notifications are off for this device.');
     rerender();
   }));

@@ -600,21 +600,27 @@ def _subscription(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_push(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
-    return _response(200, {"devices": len(repo.list_push(_user_id(event)))})
+    """How many devices have notifications on, and whether this device (?endpoint=) is one of them."""
+    subs = repo.list_push(_user_id(event))
+    endpoint = (event.get("queryStringParameters") or {}).get("endpoint")
+    return _response(200, {"devices": len(subs), "this_device": any(s["endpoint"] == endpoint for s in subs)})
 
 
 def put_push(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     user_id = _user_id(event)
-    if len(repo.list_push(user_id)) >= MAX_PUSH_DEVICES:
+    sub = _subscription(_body(event))
+    existing = {s["endpoint"] for s in repo.list_push(user_id)}
+    if sub["endpoint"] not in existing and len(existing) >= MAX_PUSH_DEVICES:  # re-saving the same device is fine
         raise ApiError(409, f"Notifications can be on for up to {MAX_PUSH_DEVICES} devices")
-    repo.put_push(user_id, _subscription(_body(event)))
-    return _response(200, {"devices": len(repo.list_push(user_id))})
+    repo.put_push(user_id, sub)
+    return _response(200, {"devices": len(existing | {sub["endpoint"]})})
 
 
 def delete_push(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     user_id = _user_id(event)
-    repo.delete_push(user_id, str(_body(event).get("endpoint") or ""))
-    return _response(200, {"devices": len(repo.list_push(user_id))})
+    endpoint = str(_body(event).get("endpoint") or "")
+    repo.delete_push(user_id, endpoint)
+    return _response(200, {"devices": len([s for s in repo.list_push(user_id) if s["endpoint"] != endpoint])})
 
 
 def test_push(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
@@ -635,6 +641,9 @@ def test_push(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     except webpush.Gone as exc:
         repo.delete_push(user_id, endpoint)
         raise ApiError(410, "This device's notification subscription expired; turn notifications on again") from exc
+    except Exception as exc:  # push service refused (e.g. 403) or timed out
+        logger.exception("test push failed")
+        raise ApiError(502, "The push service didn't accept the test. Try again, or turn notifications off and on.") from exc
     return _response(200, {"sent": True})
 
 

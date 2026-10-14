@@ -756,7 +756,7 @@ def _sub(endpoint="https://web.push.apple.com/QGabc"):
 
 
 def test_push_subscriptions(repo, monkeypatch):
-    assert call(repo, "GET /push")[1] == {"devices": 0}
+    assert call(repo, "GET /push")[1] == {"devices": 0, "this_device": False}
     assert call(repo, "PUT /push", body=json.dumps(_sub()))[1] == {"devices": 1}
     assert call(repo, "PUT /push", body=json.dumps(_sub()))[1] == {"devices": 1}  # same phone again
     assert call(repo, "PUT /push", body=json.dumps(_sub("https://evil.example/x")))[0] == 400  # not a push service
@@ -768,4 +768,10 @@ def test_push_subscriptions(repo, monkeypatch):
     monkeypatch.setattr(api, "get_secret", lambda name: "unused")
     assert call(repo, "POST /push/test", body=json.dumps({"endpoint": _sub()["endpoint"]}))[0] == 200 and sent
     assert call(repo, "POST /push/test", body=json.dumps({"endpoint": "https://web.push.apple.com/other"}))[0] == 404
+    assert call(repo, "GET /push", query={"endpoint": _sub()["endpoint"]})[1] == {"devices": 1, "this_device": True}
+    monkeypatch.setattr(api.webpush, "send", lambda *a: (_ for _ in ()).throw(RuntimeError("403 BadJwtToken")))
+    assert call(repo, "POST /push/test", body=json.dumps({"endpoint": _sub()["endpoint"]}))[0] == 502
+    monkeypatch.setattr(api, "MAX_PUSH_DEVICES", 1)
+    assert call(repo, "PUT /push", body=json.dumps(_sub()))[0] == 200  # same device at the cap: still fine
+    assert call(repo, "PUT /push", body=json.dumps(_sub("https://web.push.apple.com/other")))[0] == 409
     assert call(repo, "DELETE /push", body=json.dumps({"endpoint": _sub()["endpoint"]}))[1] == {"devices": 0}

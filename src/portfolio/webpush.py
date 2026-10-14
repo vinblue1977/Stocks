@@ -97,7 +97,7 @@ def send(subscription: dict[str, Any], message: dict[str, Any], private_key_b64:
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=10):  # noqa: S310
+        with urllib.request.urlopen(request, timeout=5):  # noqa: S310 - short: runs inside the alert job
             return
     except urllib.error.HTTPError as exc:
         if exc.code in (404, 410):

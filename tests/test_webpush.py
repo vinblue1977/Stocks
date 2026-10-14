@@ -88,3 +88,14 @@ def test_push_to_user_drops_expired_subscriptions(repo, monkeypatch):
     assert notify.push_to_user(repo, "u1", "Alert: NVDA", "Below its 50-day average.") == 1
     assert sent == [{"title": "Alert: NVDA", "body": "Below its 50-day average.", "url": "/#/alerts"}]
     assert [s["endpoint"] for s in repo.list_push("u1")] == ["https://web.push.apple.com/1"]
+
+
+def test_push_setup_failure_does_not_raise(repo, monkeypatch):
+    _, keys = _browser()
+    repo.put_push("u1", {"endpoint": "https://web.push.apple.com/0", "keys": keys})
+
+    def no_key(name):
+        raise RuntimeError("AccessDenied")
+
+    monkeypatch.setattr("portfolio.secrets.get_secret", no_key)
+    assert notify.push_to_user(repo, "u1", "Alert", "x") == 0  # logged, job continues

@@ -379,6 +379,7 @@ class PortfolioTrackerStack(Stack):
             "ALERTS_TOPIC_ARN": topic.topic_arn,
             "PRICE_API_KEY_PARAM": f"{PARAM_PREFIX}/tiingo-api-key",
             "NEWS_API_KEY_PARAM": f"{PARAM_PREFIX}/finnhub-api-key",
+            "VAPID_KEY_PARAM": f"{PARAM_PREFIX}/vapid-private-key",
             "BEDROCK_MODEL_ID": model_id,
             "BEDROCK_API": bedrock_api,
             "NEWS_EXCLUDED_TICKERS": ",".join(self.node.try_get_context("newsExcludedTickers") or []),
