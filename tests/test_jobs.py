@@ -620,6 +620,29 @@ def test_nightly_earnings_refresh(repo):
     assert result is not None
 
 
+def test_nightly_insights_refresh(repo):
+    class Insights(FakeNews):
+        def recommendations(self, ticker):
+            if ticker == "BAD":
+                raise RuntimeError("finnhub down")
+            return [{"period": "2026-09", "buy": 65, "hold": 3, "sell": 1}]
+
+        def insider_trades(self, ticker, since):
+            self.since = since
+            return {"bought": 0, "buys": 0, "sold": 1000, "sells": 1, "routine": 0, "trades": []}
+
+    news_ingest.EARNINGS_PAUSE_SECONDS = 0
+    for ticker in ("NVDA", "BAD", "VTI"):
+        repo.put_holding("u1", {"ticker": ticker, "shares": 1, "avg_cost": 1})
+    repo.put_insights("BAD", {"analysts": [{"period": "2026-08", "buy": 1, "hold": 0, "sell": 0}]})
+    provider = Insights()
+    news_ingest.handler({}, None, repo=repo, provider=provider, summarizer=FakeSummarizer)
+    assert repo.get_insights("NVDA")["analysts"][0]["buy"] == 65
+    assert repo.get_insights("BAD")["analysts"][0]["period"] == "2026-08"  # a failed lookup keeps yesterday's
+    assert repo.get_insights("VTI") is None  # funds are skipped
+    assert provider.since < datetime.now(UTC).date().isoformat()
+
+
 def test_nyse_holidays():
     from datetime import date
 

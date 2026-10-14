@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { EARNINGS_HOUR, fill, fmt, h, pageHead, sentimentTag, toast, tone } from '../ui.js';
+import { insightsCard } from './insights.js';
 
 let confirming = null; // ticker whose Remove is waiting for confirmation
 
@@ -83,7 +84,8 @@ function newsItem(item) {
 }
 
 export async function renderWatchlist(main) {
-  const [res, rulesRes] = await Promise.all([api('GET', '/watchlist'), api('GET', '/rules')]);
+  const [res, rulesRes, insightsRes] = await Promise.all([api('GET', '/watchlist'), api('GET', '/rules'),
+    api('GET', '/insights').catch(() => ({ insights: [] }))]); // optional: the page still works without it
   const items = res.watchlist;
   const rulesFor = (t) => rulesRes.rules.filter((r) => r.ticker === t);
   if (!items.some((i) => i.ticker === confirming)) confirming = null;
@@ -123,6 +125,8 @@ export async function renderWatchlist(main) {
         h('tbody', null, rows.length ? rows
           : h('tr', null, h('td', { colspan: 11, class: 'text muted', text: 'Nothing on your watchlist yet. Add a ticker above.' }))))),
       h('p', { class: 'muted small', style: { marginBottom: 0 }, text: 'Watched tickers are not part of your holdings or totals. Set alerts for them on the Alerts page.' })),
+    insightsCard(insightsRes.insights.filter((i) => i.watched),
+      { id: 'wi-h', subtitle: 'Watched stocks · refreshed each evening', footnote: ' Tap a stock for its monthly ratings and each trade.' }),
     items.length ? h('section', { class: 'card', 'aria-labelledby': 'wn-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'wn-h', text: 'News this week' }),
         h('span', { class: 'muted small', text: 'AI summary by Claude on Amazon Bedrock, each weekday evening' })),

@@ -17,6 +17,7 @@ Key design (pk / sk):
     BRIEF#<ticker>  <yyyy-mm-dd>                 AI news summary; BRIEF#ALL is the portfolio brief
     SIGNAL#<ticker> LATEST                       latest signal snapshot
     EARNINGS#<ticker> NEXT                       next earnings date, from Finnhub (stocks only)
+    INSIGHT#<ticker> LATEST                      analyst ratings and insider trades, from Finnhub (stocks only)
     QUOTES          LATEST                       intraday prices for all tickers (market hours only)
 """
 
@@ -484,6 +485,17 @@ class Repository:
 
     def get_earnings(self, ticker: str) -> dict[str, Any] | None:
         item = self.table.get_item(Key={"pk": f"EARNINGS#{ticker}", "sk": "NEXT"}).get("Item")
+        return _clean(item) if item else None
+
+    # ---------- analysts and insiders ----------
+    def put_insights(self, ticker: str, record: Mapping[str, Any]) -> None:
+        # Expires after two weeks, so a ticker no longer tracked doesn't leave a row forever.
+        expires = int(time.time()) + 14 * 86400
+        item = {"pk": f"INSIGHT#{ticker}", "sk": "LATEST", **record, "fetched_at": _now_iso(), "expires_at": expires}
+        self.table.put_item(Item=to_dynamo(item))
+
+    def get_insights(self, ticker: str) -> dict[str, Any] | None:
+        item = self.table.get_item(Key={"pk": f"INSIGHT#{ticker}", "sk": "LATEST"}).get("Item")
         return _clean(item) if item else None
 
     # ---------- intraday quotes ----------

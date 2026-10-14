@@ -19,6 +19,8 @@ class NewsProvider(Protocol):
 class FinnhubNewsProvider:
     BASE_URL = "https://finnhub.io/api/v1/company-news"
     EARNINGS_URL = "https://finnhub.io/api/v1/calendar/earnings"
+    RECOMMENDATION_URL = "https://finnhub.io/api/v1/stock/recommendation"
+    INSIDER_URL = "https://finnhub.io/api/v1/stock/insider-transactions"
 
     def __init__(self, api_key: str) -> None:
         self._api_key = api_key
@@ -39,6 +41,62 @@ class FinnhubNewsProvider:
             headers={"X-Finnhub-Token": self._api_key},
         )
         return parse_earnings(raw, from_date)
+
+    def recommendations(self, ticker: str) -> list[dict[str, Any]]:
+        """Analyst rating counts by month, newest first."""
+        raw = get_json(self.RECOMMENDATION_URL, params={"symbol": ticker}, headers={"X-Finnhub-Token": self._api_key})
+        return parse_recommendations(raw)
+
+    def insider_trades(self, ticker: str, from_date: str) -> list[dict[str, Any]]:
+        """Insider trades (SEC Form 4) since from_date, newest first."""
+        raw = get_json(self.INSIDER_URL, params={"symbol": ticker, "from": from_date}, headers={"X-Finnhub-Token": self._api_key})
+        return parse_insiders(raw, from_date)
+
+
+ANALYST_MONTHS = 4
+INSIDER_ROWS = 25
+
+
+def parse_recommendations(raw: Any) -> list[dict[str, Any]]:
+    """Strong buy + buy, hold, sell + strong sell for the latest months."""
+    months = sorted((r for r in raw or [] if r.get("period")), key=lambda r: r["period"], reverse=True)
+    count = lambda r, *keys: sum(int(r.get(k) or 0) for k in keys)  # noqa: E731
+    return [
+        {
+            "period": r["period"][:7],
+            "buy": count(r, "strongBuy", "buy"),
+            "hold": count(r, "hold"),
+            "sell": count(r, "sell", "strongSell"),
+        }
+        for r in months[:ANALYST_MONTHS]
+    ]
+
+
+def parse_insiders(raw: Any, from_date: str) -> dict[str, Any]:
+    """Totals for open-market trades (P bought, S sold) and the newest trades; other codes count as routine
+    (awards, gifts, option exercises, shares withheld for tax). Derivative rows are left out."""
+    rows = [
+        r
+        for r in (raw or {}).get("data") or []
+        if not r.get("isDerivative") and str(r.get("transactionDate") or "") >= from_date and r.get("change")
+    ]
+    rows.sort(key=lambda r: (r["transactionDate"], r.get("filingDate") or ""), reverse=True)
+    summary = {"bought": 0.0, "buys": 0, "sold": 0.0, "sells": 0, "routine": 0}
+    trades = []
+    for r in rows:
+        code, shares, price = r.get("transactionCode") or "", abs(int(r["change"])), float(r.get("transactionPrice") or 0)
+        if code == "P":
+            summary["bought"] += shares * price
+            summary["buys"] += 1
+        elif code == "S":
+            summary["sold"] += shares * price
+            summary["sells"] += 1
+        else:
+            summary["routine"] += 1
+        trades.append(
+            {"date": r["transactionDate"], "name": r.get("name") or "", "code": code, "shares": shares, "price": price or None}
+        )
+    return {**summary, "bought": round(summary["bought"]), "sold": round(summary["sold"]), "trades": trades[:INSIDER_ROWS]}
 
 
 def parse_earnings(raw: Any, from_date: str) -> dict[str, Any] | None:
