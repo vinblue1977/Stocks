@@ -60,6 +60,26 @@ jobs:
         env:
           CDK_DEFAULT_REGION: us-east-2
 
+  # Lints the workflow files: actionlint (syntax, expressions, shell) and zizmor (Actions security).
+  workflow-lint:
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          version: "0.12.19"
+      - name: actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+      - name: zizmor
+        run: uvx zizmor==1.30.1 --format=github .github
+        env:
+          GH_TOKEN: ${{ github.token }}  # read-only: lets zizmor check pinned action commits online
+
   # Fails a PR that adds a dependency with a known high-severity vulnerability.
   dependency-review:
     if: github.event_name == 'pull_request'

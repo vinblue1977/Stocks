@@ -102,7 +102,7 @@ About **$0–2/month** for one user: mostly free tier, plus a few cents of Bedro
 
 ## Security
 
-Encryption at rest everywhere, least-privilege role per function, Cognito hosted login (OAuth code + PKCE), private S3 behind CloudFront with a strict CSP and security headers, Cognito JWT on every route, API throttling and access logs, PITR and deletion protection, and API keys in SSM SecureString. CI runs Ruff with Bandit rules, `pip-audit` (also weekly), dependency review, cdk-nag, and template security tests, then deploys via OIDC and smoke-tests the site and API. Details: [docs/SECURITY.md](docs/SECURITY.md).
+Encryption at rest everywhere, least-privilege role per function, Cognito hosted login (OAuth code + PKCE), private S3 behind CloudFront with a strict CSP and security headers, Cognito JWT on every route, API throttling and access logs, PITR and deletion protection, and API keys in SSM SecureString. CI runs Ruff with Bandit rules, actionlint and zizmor on the workflows, `pip-audit` (also weekly), dependency review, cdk-nag, and template security tests, then deploys via OIDC and smoke-tests the site and API. Details: [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Layout
 
