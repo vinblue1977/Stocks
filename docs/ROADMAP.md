@@ -69,7 +69,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 
 
 - Rule backtesting: how an alert rule would have fired historically.
-- Finish the `cost_basis` → `avg_cost` rename: run `scripts/drop_cost_basis.py`, then remove the read fallbacks and the script (no longer written or accepted since #59).
 - Newer Claude model for news summaries once the account has access.
 - Custom domain for the dashboard.
 - Broker sync (for example through an aggregator), parked.
@@ -111,5 +110,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | — | Earnings calendar | #50 |
 | — | Overview redesign: performance by holding, donut, sortable Holdings; SPY removed | #39, #49 |
 | — | CI: smoke test, weekly audit, dependency review, workflow lint | #33, #51 |
+| — | `cost_basis` → `avg_cost` rename finished (old name removed from stored holdings) | #59, #60 |
 
 Finished items move here with their PR; numbers don't change.

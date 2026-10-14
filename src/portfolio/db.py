@@ -135,9 +135,6 @@ class Repository:
     def _holding_out(item: Mapping[str, Any]) -> dict[str, Any]:
         clean = _clean(item)
         clean.setdefault("group", DEFAULT_GROUP)  # items written before groups existed
-        if "cost_basis" in clean:  # old name, until scripts/drop_cost_basis.py has run (then remove this)
-            clean.setdefault("avg_cost", clean["cost_basis"])
-            del clean["cost_basis"]
         return clean
 
     def list_holdings(self, user_id: str, group: str | None = None) -> list[dict[str, Any]]:
@@ -168,10 +165,7 @@ class Repository:
             condition: Any = Attr("pk").not_exists()
         else:
             avg_cost = to_dynamo(float(previous["avg_cost"]))
-            # Items written before the rename have only the old name, until scripts/drop_cost_basis.py has run (then remove).
-            condition = Attr("shares").eq(to_dynamo(float(previous["shares"]))) & (
-                Attr("avg_cost").eq(avg_cost) | (Attr("avg_cost").not_exists() & Attr("cost_basis").eq(avg_cost))
-            )
+            condition = Attr("shares").eq(to_dynamo(float(previous["shares"]))) & Attr("avg_cost").eq(avg_cost)
         try:
             self.table.put_item(Item=to_dynamo(item), ConditionExpression=condition)
         except self.table.meta.client.exceptions.ConditionalCheckFailedException as exc:
@@ -202,27 +196,6 @@ class Repository:
             self.table.delete_item(Key={"pk": item["pk"], "sk": item["sk"]})
             moved.append(f"{user_id}:{ticker}")
         return moved
-
-    def drop_cost_basis(self, dry_run: bool = False) -> list[str]:
-        """Finish the cost_basis -> avg_cost rename on stored holdings: set avg_cost if missing, remove cost_basis.
-
-        Idempotent. Returns the sort key of each item that still had the old name.
-        """
-        changed = []
-        for item in self._all_holding_items():
-            if "cost_basis" not in item:
-                continue
-            if not dry_run:
-                try:
-                    self.table.update_item(
-                        Key={"pk": item["pk"], "sk": item["sk"]},
-                        UpdateExpression="SET avg_cost = if_not_exists(avg_cost, cost_basis) REMOVE cost_basis",
-                        ConditionExpression=Attr("cost_basis").exists(),
-                    )
-                except self.table.meta.client.exceptions.ConditionalCheckFailedException:
-                    continue  # rewritten by the app in the meantime (without the old name)
-            changed.append(f"{item['pk']}:{item['sk']}")
-        return changed
 
     def all_holdings(self) -> list[dict[str, Any]]:
         """Every holding across all users (used by scheduled jobs). Adds `user_id`."""

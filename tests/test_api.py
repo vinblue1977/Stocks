@@ -454,48 +454,13 @@ def test_news_lists_partner_only_tickers_as_off(repo, monkeypatch):
     assert body["brief"] is None and body["articles"] == []
 
 
-def _put_legacy_holding(repo, ticker, shares, cost, **extra):
-    """A holding as stored before the cost_basis -> avg_cost rename (or during it, with both names)."""
-    keys = repo._holding_keys("user-1", "stocks", ticker)
-    repo.table.put_item(Item={**keys, "ticker": ticker, "group": "stocks", "shares": shares, "cost_basis": cost, **extra})
-
-
-def _stored(repo, ticker):
-    return repo.table.get_item(Key={"pk": "USER#user-1", "sk": f"HOLDING#stocks#{ticker}"})["Item"]
-
-
-def test_legacy_cost_basis_is_read_and_dropped_on_write(repo, no_backfill):
-    _put_legacy_holding(repo, "VTI", 10, 250)
-    assert call(repo, "GET /holdings")[1]["holdings"][0]["avg_cost"] == 250
-    assert repo.all_holdings()[0]["avg_cost"] == 250 and "cost_basis" not in repo.all_holdings()[0]
-
-    status, body = buy(repo, "VTI", 5, 280)  # conditional write matches the old attribute name
-    assert status == 200 and body["holding"]["avg_cost"] == pytest.approx(260.0)
-    stored = _stored(repo, "VTI")
-    assert float(stored["avg_cost"]) == pytest.approx(260.0) and "cost_basis" not in stored
-
-
-def test_old_cost_basis_input_rejected(repo, no_backfill):
+def test_old_cost_basis_name_not_accepted(repo, no_backfill):
     route, path = "PUT /groups/{group}/holdings/{ticker}", {"group": "stocks", "ticker": "VTI"}
-    for body in ({"shares": 4, "cost_basis": 25}, {"shares": 4, "cost_basis": 25, "avg_cost": 25}):
-        status, res = call(repo, route, path=path, body=json.dumps(body))
-        assert status == 400 and "renamed" in res["message"]
-    status, res = call(repo, route, path=path, body=json.dumps({"shares": 4, "cost_basis": None, "avg_cost": 30}))
-    assert status == 200 and res["avg_cost"] == 30 and "cost_basis" not in _stored(repo, "VTI")
-
-
-def test_drop_cost_basis(repo):
-    _put_legacy_holding(repo, "VTI", 10, 250)  # old name only
-    _put_legacy_holding(repo, "VOO", 1, 500, avg_cost=500)  # both names, as written during the rename
-    buy(repo, "SCHD", 1, 27)  # new name only
-    expected = ["USER#user-1:HOLDING#stocks#VOO", "USER#user-1:HOLDING#stocks#VTI"]
-    assert sorted(repo.drop_cost_basis(dry_run=True)) == expected
-    assert "cost_basis" in _stored(repo, "VTI")
-    assert sorted(repo.drop_cost_basis()) == expected
-    assert repo.drop_cost_basis() == []  # idempotent
-    for ticker, cost in (("VTI", 250), ("VOO", 500), ("SCHD", 27)):
-        stored = _stored(repo, ticker)
-        assert float(stored["avg_cost"]) == cost and "cost_basis" not in stored
+    assert call(repo, route, path=path, body=json.dumps({"shares": 4, "cost_basis": 25}))[0] == 400
+    status, res = call(repo, route, path=path, body=json.dumps({"shares": 4, "avg_cost": 30}))
+    assert status == 200 and res["avg_cost"] == 30
+    stored = repo.table.get_item(Key={"pk": "USER#user-1", "sk": "HOLDING#stocks#VTI"})["Item"]
+    assert "cost_basis" not in stored
 
 
 # ---------------------------------------------------------------- watchlist
