@@ -456,7 +456,9 @@ def test_news_lists_partner_only_tickers_as_off(repo, monkeypatch):
 
 def test_old_cost_basis_name_not_accepted(repo, no_backfill):
     route, path = "PUT /groups/{group}/holdings/{ticker}", {"group": "stocks", "ticker": "VTI"}
-    assert call(repo, route, path=path, body=json.dumps({"shares": 4, "cost_basis": 25}))[0] == 400
+    for body in ({"shares": 4, "cost_basis": 25}, {"shares": 4, "cost_basis": 25, "avg_cost": 25}):
+        status, res = call(repo, route, path=path, body=json.dumps(body))
+        assert status == 400 and "renamed" in res["message"]
     status, res = call(repo, route, path=path, body=json.dumps({"shares": 4, "avg_cost": 30}))
     assert status == 200 and res["avg_cost"] == 30
     stored = repo.table.get_item(Key={"pk": "USER#user-1", "sk": "HOLDING#stocks#VTI"})["Item"]
