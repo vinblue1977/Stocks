@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { SAVED_OVERVIEW, currentEmail } from '../auth.js';
+import { LAST_VISIT, SAVED_OVERVIEW, currentEmail } from '../auth.js';
 import { donut, valueChart } from '../charts.js';
 import { GROUPS, KINDS, groupChip, groupLabel, hasPartner, personName, portfolioTitle, possessive } from '../groups.js';
 import { EARNINGS_HOUR, add, fill, fmt, h, icon, pageHead, tone } from '../ui.js';
@@ -404,10 +404,88 @@ export function renderSavedOverview(main, failed = false) {
   return true;
 }
 
+// "Since your last visit": the first Overview load in each app session compares with the visit before it,
+// if that was 4+ hours ago. Every load then records this visit (time and household total) on the device.
+const AWAY_MS = 4 * 60 * 60 * 1000;
+let lastVisit; // undefined until the session's first load; then the earlier visit, or null
+let changes = null; // GET /changes since that visit
+let sinceDismissed = false;
+let recording = false; // whether this session updates the stored visit
+
+function storedVisit() {
+  try {
+    const v = JSON.parse(localStorage.getItem(LAST_VISIT));
+    return v?.email && v.email === currentEmail() ? v : null;
+  } catch { return null; }
+}
+
+function readLastVisit() {
+  const v = storedVisit();
+  return v && Date.now() - v.at >= AWAY_MS ? v : null;
+}
+
+/** Saves this visit as the next baseline, but only in a session that started 4+ hours after the stored one
+ *  (or with none): a quick look in between leaves the baseline alone, so it still shows what changed since
+ *  you were last away. */
+function recordVisit(data) {
+  if (!recording) return;
+  try {
+    localStorage.setItem(LAST_VISIT, JSON.stringify({ email: currentEmail(), at: Date.now(), value: data.portfolios.household.overall.total_value }));
+  } catch { /* storage blocked: no "since" strip next time */ }
+}
+
 export async function renderOverview(main) {
-  const [data, rulesRes] = await Promise.all([api('GET', '/portfolio'), api('GET', '/rules'), loadReturns()]);
+  const first = lastVisit === undefined;
+  const earlier = first ? readLastVisit() : null;
+  const [data, rulesRes, changesRes] = await Promise.all([api('GET', '/portfolio'), api('GET', '/rules'), loadReturns(),
+    earlier ? api('GET', `/changes?since=${encodeURIComponent(new Date(earlier.at).toISOString())}`).catch(() => null) : null]);
+  if (first) { lastVisit = earlier; changes = changesRes; recording = !storedVisit() || Boolean(earlier); }
+  recordVisit(data);
   saveOverview(data, rulesRes.rules);
   drawOverview(main, data, rulesRes.rules, null);
+}
+
+/** The strip at the top: value change, alerts fired and new headlines since the last visit. */
+function sinceStrip(data) {
+  if (!lastVisit || sinceDismissed) return null;
+  const now = data.portfolios.household.overall.total_value;
+  const rawDelta = typeof lastVisit.value === 'number' && now != null ? now - lastVisit.value : null;
+  const delta = rawDelta != null && Math.abs(rawDelta) >= 0.5 ? rawDelta : null; // no "+$0.00" strip
+  const alerts = changes?.alerts || [];
+  const headlines = changes?.headlines || 0;
+  if (delta == null && !alerts.length && !headlines) return null;
+  // Within the last week the weekday is enough; older visits (up to 30 days) also get the date.
+  const recent = (t) => Date.now() - new Date(t).getTime() < 6 * 86400000;
+  const day = (t) => new Date(t).toLocaleDateString('en-US', recent(t) ? { weekday: 'short' } : { month: 'short', day: 'numeric' });
+  const when = `${day(lastVisit.at)} ${new Date(lastVisit.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+  const strip = h('section', { class: 'since', 'aria-labelledby': 'since-h' },
+    h('div', { class: 'since-when' },
+      h('span', null, h('strong', { id: 'since-h', text: 'Since your last visit' }), ` · ${when}`),
+      h('button', { type: 'button', class: 'dismiss', text: 'Dismiss', onClick: () => { sinceDismissed = true; strip.remove(); } })),
+    h('div', { class: 'since-items' },
+      delta != null ? h('span', { class: 'pill' }, `${hasPartner() ? 'Household' : 'Total'} `,
+        h('span', { class: `mono ${tone(delta)}`, text: `${fmt.signedMoney(delta)}${lastVisit.value ? ` (${fmt.signedPct(delta / lastVisit.value, 1)})` : ''}` })) : null,
+      alerts.length ? h('a', { class: 'pill alerting', href: '#/alerts', text: `${alerts.length} alert${alerts.length === 1 ? '' : 's'} fired` }) : null,
+      headlines ? h('a', { class: 'pill', href: '#/news', text: `${headlines} new headline${headlines === 1 ? '' : 's'}` }) : null),
+    alerts.length ? h('ul', { class: 'since-alerts' }, alerts.slice(0, 3).map((a) => h('li', null,
+      h('time', { datetime: a.created_at, text: day(a.created_at) }), a.message))) : null);
+  return strip;
+}
+
+/** Warns when last night's price sync or news run didn't arrive (nothing on a normal day). */
+function lateBanner(data) {
+  const f = data.freshness;
+  if (!f || (!f.prices_late && !f.news_late && !f.late_tickers?.length)) return null;
+  const day = (iso) => new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const newsDay = f.news_at ? new Date(f.news_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : null;
+  return h('section', { class: 'late', role: 'status' }, icon('warn', 'currentColor'),
+    h('div', null,
+      h('strong', { text: f.prices_late ? "The evening price update didn't arrive. "
+        : f.late_tickers?.length ? `Last night's prices didn't arrive for ${f.late_tickers.join(', ')}. ` : "The evening news update didn't arrive. " }),
+      f.prices_late && data.as_of ? `Prices are from the ${day(data.as_of)} close, so these numbers may be out of date. `
+        : f.late_tickers?.length ? 'Their earlier closes are used in the totals. ' : '',
+      f.news_late && newsDay ? `News summaries are from ${newsDay}. ` : '',
+      'It usually catches up on the next evening run.'));
 }
 
 /** `savedNote` marks a saved copy shown instead of fresh data. */
@@ -434,7 +512,9 @@ function drawOverview(main, data, rules, savedNote) {
       : null;
     fill(main,
       liveMarker(pageHead('Overview', savedNote ? `${pricesNote(data)} · ${savedNote}` : pricesNote(data), switcher), data.live_as_of),
+      savedNote ? null : lateBanner(data),
       marketBanner(data),
+      savedNote ? null : sinceStrip(data),
       summaryTable(portfolios[person], data.live_as_of ? 'Today' : 'Last day'),
       h('section', { class: 'tiles', 'aria-label': `Summary for ${viewLabel()}` },
         tile(`Total value · ${viewLabel()}`, fmt.money(s.total_value), `Cost basis ${fmt.money(s.total_cost)}`),

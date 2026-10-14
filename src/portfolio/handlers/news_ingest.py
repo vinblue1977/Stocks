@@ -46,9 +46,13 @@ def ingest_ticker(
     if not articles:
         return None
 
-    already_scored = {
-        a["article_id"] for a in repo.recent_news(ticker, (now - timedelta(days=8)).isoformat(timespec="seconds"), limit=200)
+    # When each stored headline was first picked up (older items fall back to their publish time), so the
+    # Overview can count headlines that arrived since the last visit.
+    first_seen = {
+        a["article_id"]: a.get("first_seen") or a.get("published_at")
+        for a in repo.recent_news(ticker, (now - timedelta(days=8)).isoformat(timespec="seconds"), limit=200)
     }
+    already_scored = set(first_seen)
     previous = repo.latest_brief(ticker)
     fresh = [a for a in articles if a["article_id"] not in already_scored]
 
@@ -73,6 +77,7 @@ def ingest_ticker(
     scores = {s.article_id: s.score for s in brief.article_scores}
     for article in articles:
         article["score"] = scores.get(article["article_id"], 0.0)
+        article["first_seen"] = first_seen.get(article["article_id"]) or now.isoformat(timespec="seconds")
     repo.put_news(ticker, articles)
 
     sentiment, count = _sentiment_7d(repo, ticker, now)
@@ -156,6 +161,8 @@ def handler(
         )
     earnings = refresh_earnings(repo, provider, now)
     insights = refresh_insights(repo, provider, now)
+    if not tickers or len(failed) < len(tickers):  # not when every ticker failed (e.g. the news key expired)
+        repo.put_job_run("news_ingest")  # the Overview warns when this is older than the last trading day
     claude_calls = len(summarized) + (1 if briefs and not portfolio_reused else 0)
     log(
         logger,

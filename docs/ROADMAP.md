@@ -17,7 +17,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 ## Stay informed
 | # | Idea | Effort | Notes |
 |---|---|---|---|
-| 8 | Earnings calendar | S | Upcoming earnings dates for holdings (Finnhub free plan). Ex-dividend dates need a paid source |
 | 9 | Intraday alerts | S | Alert rules also checked against the 15-minute intraday prices (when `intradayQuotes` is on), not only after the close |
 | 10 | Daily close email | S | Today's change and biggest movers after the evening run, as an option on the existing report email rather than a second message |
 
@@ -46,7 +45,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 25 | Risk stats | S | Volatility, max drawdown and Sharpe ratio from stored price history |
 | 26 | Concentration warning | S | Flag one holding above a set share (e.g. 25%), on the page and in the weekly email |
 | 27 | Rebalance helper | M | "Where should my next $X go?" Builds on #4 |
-| 28 | Since your last visit | S | Banner with changes, new alerts and news |
 
 ## Look and feel
 | # | Idea | Effort | Notes |
@@ -62,7 +60,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 35 | Earnings reaction history | S | How each stock moved the day after its last few reports (Finnhub + stored prices) |
 | 37 | Weekly email upgrade | S | Add this week's earnings and biggest movers to the Sunday email |
 | 38 | Data health page | S | When each job last ran, how fresh prices and news are, and month-to-date AWS spend (cached daily) |
-| 39 | Stale-data banner | S | Overview warns if prices or news didn't update (a job failed) instead of quietly showing old numbers |
 | 41 | Backup download | S | One-click JSON/CSV of holdings, trades and targets (pairs with #11) |
 | 42 | Wealthfront file import | M | Automatic Investment buys from a downloaded statement, so its history is exact too (#11) |
 
@@ -105,9 +102,11 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 19 | Today's movers | #38 |
 | 29 | Faster phone open (last Overview shown instantly, then refreshed) | #56 |
 | 34 | Price-level alerts (`price_below`, `price_above`) | #56 |
+| 28 | Since your last visit (Overview strip) | #63 |
+| 39 | Late-update warning on the Overview | #63 |
 | 36 | Analysts & insiders (News & signals, Watchlist) | #61 |
 | 40 | NYSE holidays and early closes, closed-market banner | #48, #54 |
-| — | Earnings calendar | #50 |
+| 8 | Earnings calendar | #50 |
 | — | Overview redesign: performance by holding, donut, sortable Holdings; SPY removed | #39, #49 |
 | — | CI: smoke test, weekly audit, dependency review, workflow lint | #33, #51 |
 | — | `cost_basis` → `avg_cost` rename finished (old name removed from stored holdings) | #59, #60 |

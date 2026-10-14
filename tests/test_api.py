@@ -1,5 +1,5 @@
 import json
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from conftest import api_event, price_series
@@ -772,3 +772,44 @@ def test_price_histories_match_one_at_a_time(repo):
         assert repo.price_histories(["VTI", "AMZN", "NVDA", "VTI"], since) == {
             t: repo.price_history(t, since) for t in ("AMZN", "NVDA", "VTI")
         }
+
+
+def test_portfolio_flags_late_updates(repo, no_backfill, monkeypatch):
+    buy(repo, "VTI", 1, 100)
+    repo.put_prices("VTI", price_series(100, 1, 3, "2026-10-08"))  # last close Oct 10
+    monkeypatch.setattr(api, "expected_close", lambda now: date(2026, 10, 13))
+    fresh = call(repo, "GET /portfolio")[1]["freshness"]
+    assert fresh["prices_late"] is True and fresh["news_late"] is False and fresh["news_at"] is None  # no run recorded yet
+    repo.table.put_item(Item={"pk": "JOB#news_ingest", "sk": "LAST", "finished_at": "2026-10-12T23:00:00+00:00"})
+    repo.put_prices("VTI", price_series(110, 1, 1, "2026-10-13"))
+    fresh = call(repo, "GET /portfolio")[1]["freshness"]
+    assert fresh["prices_late"] is False and fresh["news_late"] is True and fresh["late_tickers"] == []
+    buy(repo, "NVDA", 1, 100)
+    repo.put_prices("NVDA", price_series(100, 1, 1, "2026-10-12"))  # its Oct 13 close is missing
+    fresh = call(repo, "GET /portfolio")[1]["freshness"]
+    assert fresh["prices_late"] is False and fresh["late_tickers"] == ["NVDA"]
+
+
+def test_changes_since_last_visit(repo, no_backfill):
+    buy(repo, "NVDA", 1, 100)
+    now = datetime.now(UTC)
+    old, recent = (
+        (now - timedelta(days=2)).isoformat(timespec="seconds"),
+        (now - timedelta(hours=1)).isoformat(timespec="seconds"),
+    )
+    repo.put_watch("user-1", "AMD")
+    news = lambda id_, published, seen: {"article_id": id_, "published_at": published, "first_seen": seen, "headline": id_}  # noqa: E731
+    repo.put_news("NVDA", [news("a", old, old), news("b", recent, recent)])
+    repo.put_news("NVDA", [news("c", old, recent)])  # published before the visit, picked up after it: new to you
+    repo.put_news("AMD", [news("d", recent, recent)])  # watched
+    repo.put_news("MSFT", [news("e", recent, recent)])  # neither held nor watched
+    repo.record_alert("user-1", "r1", "NVDA closed at $198.40, below your $200.00 level")
+    since = (now - timedelta(hours=5)).isoformat(timespec="seconds")
+    status, body = call(repo, "GET /changes", query={"since": since})
+    assert status == 200 and body["headlines"] == 3
+    assert [a["message"] for a in body["alerts"]] == ["NVDA closed at $198.40, below your $200.00 level"]
+    assert call(repo, "GET /changes", query={"since": "yesterday"})[0] == 400
+    assert call(repo, "GET /changes", query={"since": "2026-10-01T10:00:00"})[0] == 400  # no time zone
+    # A very old visit is capped at 30 days
+    status, body = call(repo, "GET /changes", query={"since": "2020-01-01T00:00:00Z"})
+    assert status == 200 and body["since"] > "2026-01-01"
