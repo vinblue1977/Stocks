@@ -57,11 +57,11 @@ function nyMinutes(date = new Date()) {
 }
 
 /** Live during market hours (intraday quotes every 15 min), otherwise the last close. Between the
- *  close and the evening price sync the last quotes stay, and are labeled as closing prices. */
+ *  close and the evening price sync the last quotes stay, and are labeled as closing prices.
+ *  Whether the market is open comes from the server, not this device's clock. */
 function pricesNote(data) {
   if (data.live_as_of) {
-    const closed = nyMinutes() >= (data.market?.early_close ? 13 * 60 : 16 * 60);
-    return closed
+    return data.market?.open === false
       ? `Market closed · prices as of ${fmt.time(data.live_as_of)} · official close added this evening`
       : `Live prices as of ${fmt.time(data.live_as_of)} · updates every 15 min`;
   }
@@ -79,7 +79,7 @@ function marketBanner(data) {
       lastClose ? ` Prices are from the last close (${lastClose}).` : '');
   }
   if (m.early_close) {
-    if (nyMinutes() > 13 * 60) {
+    if (nyMinutes() >= 13 * 60) {
       return h('div', { class: 'market-banner', role: 'status', 'data-market-closed': '' }, h('strong', { text: 'Markets closed early today, at 1:00 PM ET.' }),
         ' Prices are from that close until the evening update stores it.');
     }

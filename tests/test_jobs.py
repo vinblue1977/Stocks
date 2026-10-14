@@ -646,6 +646,11 @@ def test_market_closed_on_holidays_and_status():
         "date": "2026-11-26",
         "holiday": "Thanksgiving Day",
         "early_close": False,
+        "open": False,
     }
     assert market_status(datetime(2026, 11, 27, 15, 0, tzinfo=UTC))["early_close"] is True
+    assert market_status(datetime(2026, 11, 27, 17, 59, tzinfo=UTC))["open"] is True  # 12:59 PM EST, early-close day
+    assert market_status(datetime(2026, 11, 27, 18, 1, tzinfo=UTC))["open"] is False
+    assert market_status(datetime(2026, 10, 14, 20, 0, tzinfo=UTC))["open"] is True  # 4:00 PM EDT, the last quote
+    assert market_status(datetime(2026, 10, 14, 20, 35, tzinfo=UTC))["open"] is False
     assert market_status(datetime(2027, 12, 24, 15, 0, tzinfo=UTC))["holiday"] == "Christmas Day"  # observed, not a half day
