@@ -21,7 +21,7 @@ from portfolio.config import get_config
 from portfolio.db import GROUPS, KINDS, PEOPLE, ConcurrentUpdateError, Repository, kind_of, person_of
 from portfolio.llm import sentiment_label
 from portfolio.logs import get_logger, log
-from portfolio.market import trading_day
+from portfolio.market import market_status, trading_day
 from portfolio.news_policy import news_off
 
 logger = get_logger(__name__)
@@ -492,7 +492,8 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     # During market hours today's intraday quote replaces the last close, and "today" is measured against
     # that close. Tickers without a quote today count as unchanged, so the day change never mixes in
     # yesterday's move. Once the evening sync stores today's close, the quote is no longer newer.
-    today = trading_day(datetime.now(UTC)).isoformat()
+    now = datetime.now(UTC)  # one clock reading, so the live quotes and the market banner agree on the day
+    today = trading_day(now).isoformat()
     live = {
         t: q
         for t, q in repo.latest_quotes().items()
@@ -532,6 +533,7 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         {
             "as_of": max((h[-1][0] for h in histories.values() if h), default=None),
             "live_as_of": max((q["timestamp"] for q in live.values()), default=None),
+            "market": market_status(now),
             "portfolios": portfolios,
         },
     )

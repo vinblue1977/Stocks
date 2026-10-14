@@ -615,3 +615,34 @@ def test_nightly_earnings_refresh(repo):
     assert repo.get_earnings("NVDA")["date"] == "2026-11-17" and repo.get_earnings("AMZN") is None
     assert repo.get_earnings("BAD")["date"] == "2026-11-01"  # a failed lookup keeps yesterday's date
     assert result is not None
+
+
+def test_nyse_holidays():
+    from datetime import date
+
+    from portfolio.market import holidays
+
+    assert sorted(holidays(2026)) == [
+        date(2026, *md) for md in ((1, 1), (1, 19), (2, 16), (4, 3), (5, 25), (6, 19), (7, 3), (9, 7), (11, 26), (12, 25))
+    ]
+    observed_2027 = sorted(holidays(2027))
+    assert date(2027, 6, 18) in observed_2027 and date(2027, 7, 5) in observed_2027 and date(2027, 12, 24) in observed_2027
+    assert date(2027, 3, 26) in observed_2027  # Good Friday
+    from portfolio.market import holiday
+
+    assert holiday(date(2027, 12, 31)) is None and date(2028, 1, 1) not in holidays(2028)  # Jan 1, 2028 is a Saturday
+    assert holiday(date(2021, 6, 18)) is None  # Juneteenth closures start in 2022
+
+
+def test_market_closed_on_holidays_and_status():
+    from portfolio.market import market_status
+
+    thanksgiving = datetime(2026, 11, 26, 16, 0, tzinfo=UTC)  # 11:00 AM EST
+    assert market_open(thanksgiving) is False
+    assert market_status(thanksgiving) == {
+        "date": "2026-11-26",
+        "holiday": "Thanksgiving Day",
+        "early_close": False,
+    }
+    assert market_status(datetime(2026, 11, 27, 15, 0, tzinfo=UTC))["early_close"] is True
+    assert market_status(datetime(2027, 12, 24, 15, 0, tzinfo=UTC))["holiday"] == "Christmas Day"  # observed, not a half day

@@ -72,7 +72,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 37 | Weekly email upgrade | S | Add this week's earnings and biggest movers to the Sunday email |
 | 38 | Data health page | S | When each job last ran, how fresh prices and news are, and month-to-date AWS spend (cached daily) |
 | 39 | Stale-data banner | S | Overview warns if prices or news didn't update (a job failed) instead of quietly showing old numbers |
-| 40 | Full NYSE holiday calendar | S | Skip quotes on market holidays too (early closes already handled) |
+| 40 | Full NYSE holiday calendar | Done | No live quotes on exchange holidays; Overview banner on holidays and 1 PM early closes |
 | 41 | Backup download | S | One-click JSON/CSV of holdings, trades and targets (pairs with #11) |
 | 42 | Wealthfront file import | M | Automatic Investment buys from a downloaded statement, so its history is exact too (#11) |
 
