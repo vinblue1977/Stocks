@@ -6,6 +6,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7  # skip releases younger than a week (time for a bad release to be caught and pulled)
     commit-message:
       prefix: ci
       include: scope
@@ -17,6 +19,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7  # skip releases younger than a week (time for a bad release to be caught and pulled)
     commit-message:
       prefix: build
       include: scope

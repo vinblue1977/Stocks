@@ -60,6 +60,31 @@ jobs:
         env:
           CDK_DEFAULT_REGION: us-east-2
 
+  # Lints the workflow files: actionlint (syntax, expressions, shell) and zizmor (Actions security).
+  workflow-lint:
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: actionlint
+        # The release binary, checked against its published SHA-256 before it runs.
+        run: |
+          curl -sSfLo actionlint.tar.gz https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint.tar.gz" | sha256sum -c -
+          tar xzf actionlint.tar.gz actionlint
+          # One GitHub annotation per finding (the line break inside the quotes ends each one).
+          # shellcheck disable=SC2016  # $err is actionlint's template variable, not a shell one
+          ./actionlint -format '{{range $err := .}}::error file={{$err.Filepath}},line={{$err.Line}},col={{$err.Column}}::{{$err.Message}}
+          {{end}}'
+      - uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482  # v0.6.4
+        with:
+          inputs: .github
+          version: "1.30.1"
+          advanced-security: false  # findings as PR annotations, not uploaded to code scanning
+          annotations: true
+
   # Fails a PR that adds a dependency with a known high-severity vulnerability.
   dependency-review:
     if: github.event_name == 'pull_request'
@@ -99,11 +124,11 @@ jobs:
           BEFORE: ${{ github.event.before }}
 
   deploy:
-    needs: [checks, changes]
+    needs: [checks, changes, workflow-lint]
     # Auto on merges that change code or infra; manual dispatch stays as a fallback. Main only, and the
     # production environment and the AWS role trust both enforce that too.
     if: >-
-      always() && needs.checks.result == 'success' && github.ref == 'refs/heads/main' &&
+      always() && needs.checks.result == 'success' && needs.workflow-lint.result == 'success' && github.ref == 'refs/heads/main' &&
       ((github.event_name == 'push' && needs.changes.outputs.deploy == 'true') ||
        (github.event_name == 'workflow_dispatch' && inputs.deploy))
     concurrency:

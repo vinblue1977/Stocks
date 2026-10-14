@@ -84,5 +84,4 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 - Restore drill: point-in-time restore of the table to a test copy.
 
 ## CI ideas
-- Workflow security lint (zizmor or actionlint).
 - ESLint for `web/js`.
