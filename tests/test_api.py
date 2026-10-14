@@ -746,3 +746,32 @@ def test_upcoming_earnings(repo):
     assert [(e["ticker"], e["where"]) for e in body] == [("MSFT", ["watchlist"]), ("NVDA", ["stocks"])]
     watched = call(repo, "GET /watchlist")[1]["watchlist"][0]
     assert watched["earnings"]["date"] == soon
+
+
+# ---------------------------------------------------------------- phone notifications
+def _sub(endpoint="https://web.push.apple.com/QGabc"):
+    from portfolio import webpush
+
+    return {"endpoint": endpoint, "keys": {"p256dh": webpush.b64url(b"\x04" + b"k" * 64), "auth": webpush.b64url(b"a" * 16)}}
+
+
+def test_push_subscriptions(repo, monkeypatch):
+    assert call(repo, "GET /push")[1] == {"devices": 0, "this_device": False}
+    assert call(repo, "PUT /push", body=json.dumps(_sub()))[1] == {"devices": 1}
+    assert call(repo, "PUT /push", body=json.dumps(_sub()))[1] == {"devices": 1}  # same phone again
+    assert call(repo, "PUT /push", body=json.dumps(_sub("https://evil.example/x")))[0] == 400  # not a push service
+    bad = _sub()
+    bad["keys"]["auth"] = "c2hvcnQ"
+    assert call(repo, "PUT /push", body=json.dumps(bad))[0] == 400
+    sent = []
+    monkeypatch.setattr(api.webpush, "send", lambda sub, message, key, subject: sent.append(message["body"]))
+    monkeypatch.setattr(api, "get_secret", lambda name: "unused")
+    assert call(repo, "POST /push/test", body=json.dumps({"endpoint": _sub()["endpoint"]}))[0] == 200 and sent
+    assert call(repo, "POST /push/test", body=json.dumps({"endpoint": "https://web.push.apple.com/other"}))[0] == 404
+    assert call(repo, "GET /push", query={"endpoint": _sub()["endpoint"]})[1] == {"devices": 1, "this_device": True}
+    monkeypatch.setattr(api.webpush, "send", lambda *a: (_ for _ in ()).throw(RuntimeError("403 BadJwtToken")))
+    assert call(repo, "POST /push/test", body=json.dumps({"endpoint": _sub()["endpoint"]}))[0] == 502
+    monkeypatch.setattr(api, "MAX_PUSH_DEVICES", 1)
+    assert call(repo, "PUT /push", body=json.dumps(_sub()))[0] == 200  # same device at the cap: still fine
+    assert call(repo, "PUT /push", body=json.dumps(_sub("https://web.push.apple.com/other")))[0] == 409
+    assert call(repo, "DELETE /push", body=json.dumps({"endpoint": _sub()["endpoint"]}))[1] == {"devices": 0}

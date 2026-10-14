@@ -235,6 +235,7 @@ class PortfolioTrackerStack(Stack):
                 "font-src https://fonts.gstatic.com",
                 "img-src 'self' data:",
                 "manifest-src 'self'",
+                "worker-src 'self'",  # the push-only service worker (sw.js)
                 f"connect-src 'self' https://*.execute-api.{Aws.REGION}.amazonaws.com {auth_url}",
                 "base-uri 'none'",
                 "form-action 'self'",
@@ -378,6 +379,7 @@ class PortfolioTrackerStack(Stack):
             "ALERTS_TOPIC_ARN": topic.topic_arn,
             "PRICE_API_KEY_PARAM": f"{PARAM_PREFIX}/tiingo-api-key",
             "NEWS_API_KEY_PARAM": f"{PARAM_PREFIX}/finnhub-api-key",
+            "VAPID_KEY_PARAM": f"{PARAM_PREFIX}/vapid-private-key",
             "BEDROCK_MODEL_ID": model_id,
             "BEDROCK_API": bedrock_api,
             "NEWS_EXCLUDED_TICKERS": ",".join(self.node.try_get_context("newsExcludedTickers") or []),
@@ -475,6 +477,12 @@ class PortfolioTrackerStack(Stack):
         # database load. Needs an account concurrency quota above the 10 AWS keeps unreserved (default 1,000).
         api_fn = make_function("Api", "api", timeout=15, memory=512, max_concurrency=API_MAX_CONCURRENCY)
         api_fn.add_environment("PRICE_SYNC_FUNCTION_NAME", price_sync.function_name)
+        # Phone notifications: the API (test sends) and the alert job sign pushes with the VAPID key.
+        for fn in (api_fn, evaluate):
+            fn.add_environment("VAPID_SUBJECT", site_url)
+            fn.add_to_role_policy(
+                iam.PolicyStatement(actions=["ssm:GetParameter"], resources=[ssm_param_arn("vapid-private-key")])
+            )
         table.grant_read_write_data(api_fn)
         price_sync.grant_invoke(api_fn)
 
@@ -541,6 +549,8 @@ class PortfolioTrackerStack(Stack):
             "/groups/{group}/holdings/{ticker}/transactions/{txnId}": [apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
             "/realized": [apigw.HttpMethod.GET],
             "/earnings": [apigw.HttpMethod.GET],
+            "/push": [apigw.HttpMethod.GET, apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
+            "/push/test": [apigw.HttpMethod.POST],
             "/checkup": [apigw.HttpMethod.GET],
             "/targets": [apigw.HttpMethod.GET, apigw.HttpMethod.PUT],
         }
@@ -798,6 +808,7 @@ class PortfolioTrackerStack(Stack):
                         "apiUrl": http_api.api_endpoint,
                         "authDomain": auth_url,
                         "clientId": user_pool_client.user_pool_client_id,
+                        "vapidPublicKey": self.node.try_get_context("vapidPublicKey") or "",
                     },
                 ),
             ],

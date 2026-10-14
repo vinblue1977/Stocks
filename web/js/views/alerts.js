@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { add, fill, h, icon, pageHead, toast } from '../ui.js';
+import { pushCard } from './push.js';
 
 const PARAM_LABELS = { window: 'Days in average', pct: 'Percent', threshold: 'Threshold' };
 
@@ -10,8 +11,9 @@ function describe(rule, types) {
 }
 
 export async function renderAlerts(main) {
-  const [typesRes, rulesRes, holdingsRes, alertsRes, watchRes] = await Promise.all([
+  const [typesRes, rulesRes, holdingsRes, alertsRes, watchRes, push] = await Promise.all([
     api('GET', '/rule-types'), api('GET', '/rules'), api('GET', '/holdings'), api('GET', '/alerts'), api('GET', '/watchlist'),
+    pushCard(() => renderAlerts(main)).catch(() => null), // the notifications card never blocks the page
   ]);
   const types = typesRes.rule_types;
   const tickers = [...new Set([...holdingsRes.holdings, ...watchRes.watchlist].map((x) => x.ticker))].sort();
@@ -77,7 +79,8 @@ export async function renderAlerts(main) {
     h('td', { class: 'text', text: a.message })));
 
   fill(main,
-    pageHead('Alerts', 'Emails go to your alert address when a rule changes from not met to met'),
+    pageHead('Alerts', 'Email (and phone notifications, if on) when a rule changes from not met to met'),
+    push,
     h('section', { class: 'card', 'aria-labelledby': 'new-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'new-h', text: 'New rule' })), form, error),
     h('section', { class: 'card stack', 'aria-labelledby': 'rules-h' },

@@ -59,6 +59,7 @@ def handler(event: dict[str, Any] | None, context: Any, repo: Repository | None 
             repo.record_alert(user_id, rule["rule_id"], detail)
             description = rules.RULE_TYPES[rule["type"]].description
             notify.send_email(f"Alert: {rule['ticker']} rule triggered", f"{detail}.\n\nRule: {description}.")
+            notify.push_to_user(repo, user_id, f"Alert: {rule['ticker']}", f"{detail}.")
     log(logger, "signals_complete", tickers=sorted(snapshots), rules=len(all_rules), fired=fired)
     return {"tickers": sorted(snapshots), "rules_evaluated": len(all_rules), "alerts_sent": fired}
 

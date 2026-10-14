@@ -5,21 +5,18 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 ## Know your real returns
 | # | Idea | Effort | Notes |
 |---|---|---|---|
-| 1 | Transactions and sales | Done | Stock Holdings: buys, sales (FIFO), history and realized gains. Next: Automatic Investment via a broker file import (#11), money-weighted return |
 | 2 | Contributions vs. growth | M | Automatic Investment: amount put in vs. market gain, monthly deposits chart. Needs dated deposits from #1 |
 | 3 | Dividends and income | M | Mockup agreed: Dividends page with annual income, yield, yield on cost, next-12-months by month, upcoming (estimated) and per holding with Both/Stocks/Auto. Store Tiingo's `divCash` and re-fetch ~2 years once. No "received" figures until purchase dates exist (#1). Not added to gains |
 
 ## Plan and stay on track
 | # | Idea | Effort | Notes |
 |---|---|---|---|
-| 4 | Target allocation and drift | Done | Checkup page and monthly email; next: what's inside each fund (SEC holdings) and a single-company ceiling |
 | 5 | Goals | M | "$X by year Y" per person or household, with progress and a simple projection |
 | 6 | Tax view | M | Short- vs long-term gains and positions below cost. Needs per-lot dates from #1: holdings keep only the earliest purchase date. Describes data only, not tax advice |
 
 ## Stay informed
 | # | Idea | Effort | Notes |
 |---|---|---|---|
-| 7 | Watchlist | Done | Tickers you don't own, with signals, news and alerts |
 | 8 | Earnings calendar | S | Upcoming earnings dates for holdings (Finnhub free plan). Ex-dividend dates need a paid source |
 | 9 | Intraday alerts | S | Alert rules also checked against the 15-minute intraday prices (when `intradayQuotes` is on), not only after the close |
 | 10 | Daily close email | S | Today's change and biggest movers after the evening run, as an option on the existing report email rather than a second message |
@@ -28,9 +25,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | # | Idea | Effort | Notes |
 |---|---|---|---|
 | 11 | CSV export and import | S–M | Download holdings and history; import a broker export. Also the simple route to broker sync |
-| 12 | Install on your phone | Done | Home-screen icon, full screen (PR #30) |
 | 13 | Ask about my portfolio | M | Questions answered by Claude from your own data. Small Bedrock cost per question |
-| 14 | Push notifications | M | Alerts as phone notifications (home-screen app on iOS 16.4+) |
 | 15 | Stay signed in on the phone | M | A few days, with Face ID on open. Security trade-off; design first |
 
 ## Understand what you own
@@ -43,7 +38,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 ## Track progress
 | # | Idea | Effort | Notes |
 |---|---|---|---|
-| 19 | Biggest movers | Done | Today's top 3 gainers and losers in Stock Holdings, per person (Overview) |
 | 20 | Daily gains calendar | S | Heatmap of up and down days |
 | 21 | Year-end summary | M | Growth, contributions, best and worst, dividends; optional PDF |
 | 22 | Notes per holding | S | "Why I bought" notes and a decision journal |
@@ -72,7 +66,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 37 | Weekly email upgrade | S | Add this week's earnings and biggest movers to the Sunday email |
 | 38 | Data health page | S | When each job last ran, how fresh prices and news are, and month-to-date AWS spend (cached daily) |
 | 39 | Stale-data banner | S | Overview warns if prices or news didn't update (a job failed) instead of quietly showing old numbers |
-| 40 | Full NYSE holiday calendar | Done | No live quotes on exchange holidays; Overview banner on holidays and 1 PM early closes |
 | 41 | Backup download | S | One-click JSON/CSV of holdings, trades and targets (pairs with #11) |
 | 42 | Wealthfront file import | M | Automatic Investment buys from a downloaded statement, so its history is exact too (#11) |
 
@@ -104,3 +97,19 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 - Type checking for Python (mypy or pyright).
 - Accessibility check of the dashboard pages (axe) on PRs.
 - Yearly reminder to rotate the Tiingo and Finnhub API keys.
+
+## Done
+| # | Idea | PR |
+|---|---|---|
+| 1 | Transactions and sales (Stock Holdings: buys, FIFO sales, realized gains) | #47 |
+| 4 | Target mix, Checkup page and monthly PDF email | #42, #44 |
+| 7 | Watchlist | #34 |
+| 12 | Install on your phone | #30 |
+| 14 | Push notifications for rule alerts (installed app) | #55 |
+| 19 | Today's movers | #38 |
+| 40 | NYSE holidays and early closes, closed-market banner | #48, #54 |
+| — | Earnings calendar | #50 |
+| — | Overview redesign: performance by holding, donut, sortable Holdings; SPY removed | #39, #49 |
+| — | CI: smoke test, weekly audit, dependency review, workflow lint | #33, #51 |
+
+Finished items move here with their PR; numbers don't change.

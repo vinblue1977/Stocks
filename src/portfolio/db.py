@@ -8,6 +8,7 @@ Key design (pk / sk):
     USER#<uid>      ALERT#<iso_ts>#<rule_id>     alert history (expires after 180 days)
     USER#<uid>      WATCH#<ticker>               a watched ticker, not held (gsi1: WATCHLIST / <ticker>#<uid>)
     USER#<uid>      TARGETS                      the user's target mix by area (Checkup)
+    USER#<uid>      PUSH#<hash of endpoint>      a phone's Web Push subscription (endpoint + keys)
     USER#<uid>      TXN#<group>#<ticker>#<date>#<id>  a buy, sell or opening entry (Stock Holdings only)
     USER#<uid>      CHECKUP#<yyyy-mm>            the monthly checkup summary
     PRICE#<ticker>  <yyyy-mm-dd>                 daily adjusted close
@@ -21,6 +22,7 @@ Key design (pk / sk):
 
 from __future__ import annotations
 
+import hashlib
 import time
 import uuid
 from collections.abc import Iterable, Mapping
@@ -361,6 +363,22 @@ class Repository:
     @staticmethod
     def new_txn_id() -> str:
         return uuid.uuid4().hex[:12]
+
+    # ---------- push subscriptions ----------
+    @staticmethod
+    def _push_sk(endpoint: str) -> str:
+        return "PUSH#" + hashlib.sha256(endpoint.encode()).hexdigest()[:24]
+
+    def put_push(self, user_id: str, subscription: Mapping[str, Any]) -> None:
+        item = {"pk": f"USER#{user_id}", "sk": self._push_sk(subscription["endpoint"]), **subscription, "created_at": _now_iso()}
+        self.table.put_item(Item=to_dynamo(item))
+
+    def list_push(self, user_id: str) -> list[dict[str, Any]]:
+        items = self._query_all(KeyConditionExpression=Key("pk").eq(f"USER#{user_id}") & Key("sk").begins_with("PUSH#"))
+        return [_clean(i) for i in items]
+
+    def delete_push(self, user_id: str, endpoint: str) -> None:
+        self.table.delete_item(Key={"pk": f"USER#{user_id}", "sk": self._push_sk(endpoint)})
 
     # ---------- checkup ----------
     def get_targets(self, user_id: str) -> dict[str, Any] | None:
