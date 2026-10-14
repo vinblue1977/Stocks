@@ -14,6 +14,17 @@ let kindFilter = 'both'; // Holdings: both | stocks | auto
 let holdingsMode = 'value'; // Holdings columns: value | perf
 const sorts = { value: { key: 'value', dir: -1 }, perf: { key: 'return_1y', dir: -1 } }; // each view keeps its own sort
 let returns = new Map(); // ticker -> signal snapshot (period returns), from GET /signals
+let returnsAt = 0;
+
+/** Period returns change once each evening: fetch at most hourly (not on every 15-minute refresh), and never
+ *  let a failure take down the Overview; Performance then shows "—". */
+async function loadReturns() {
+  if (Date.now() - returnsAt < 60 * 60 * 1000) return;
+  try {
+    returns = new Map((await api('GET', '/signals')).signals.map((s) => [s.ticker, s]));
+    returnsAt = Date.now();
+  } catch { /* keep what we had */ }
+}
 
 /** Replaces a card after one of its buttons was pressed, keeping keyboard focus on the same button. */
 function swapCard(card, next) {
@@ -262,7 +273,7 @@ function holdingsCard(summary) {
       onClick: () => { sorts[holdingsMode] = active ? { key, dir: -sort.dir } : { key, dir: text ? 1 : -1 }; redraw(); },
     }, label, h('span', { class: 'sort-arrow', 'aria-hidden': 'true', text: active ? (sort.dir > 0 ? '▲' : '▼') : '' })));
   }));
-  const chip = (group, kinds) => h('span', { class: `group-chip ${kinds ? (kinds.size === 1 ? KINDS[[...kinds][0]]?.chip || '' : 'chip-stocks') : groupChip(group)}`,
+  const chip = (group, kinds) => h('span', { class: `group-chip ${kinds ? (kinds.size === 1 ? KINDS[[...kinds][0]]?.chip || '' : 'chip-mixed') : groupChip(group)}`,
     text: kinds ? group : groupLabel(group, { short: true, withPerson: hasPartner() && person === 'household' }) });
   const body = sorted.map((p) => (perf
     ? h('tr', null,
@@ -299,8 +310,7 @@ function holdingsCard(summary) {
 }
 
 export async function renderOverview(main) {
-  const [data, rulesRes, signalsRes] = await Promise.all([api('GET', '/portfolio'), api('GET', '/rules'), api('GET', '/signals')]);
-  returns = new Map(signalsRes.signals.map((s) => [s.ticker, s]));
+  const [data, rulesRes] = await Promise.all([api('GET', '/portfolio'), api('GET', '/rules'), loadReturns()]);
   const { portfolios } = data;
   if (!hasPartner()) person = 'household';
   if (!portfolios.household.overall.positions.length) {
