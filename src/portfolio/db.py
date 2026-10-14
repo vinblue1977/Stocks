@@ -17,6 +17,7 @@ Key design (pk / sk):
     BRIEF#<ticker>  <yyyy-mm-dd>                 AI news summary; BRIEF#ALL is the portfolio brief
     SIGNAL#<ticker> LATEST                       latest signal snapshot
     EARNINGS#<ticker> NEXT                       next earnings date, from Finnhub (stocks only)
+    INSIGHT#<ticker> LATEST                      analyst ratings and insider trades, from Finnhub (stocks only)
     QUOTES          LATEST                       intraday prices for all tickers (market hours only)
 """
 
@@ -485,6 +486,29 @@ class Repository:
     def get_earnings(self, ticker: str) -> dict[str, Any] | None:
         item = self.table.get_item(Key={"pk": f"EARNINGS#{ticker}", "sk": "NEXT"}).get("Item")
         return _clean(item) if item else None
+
+    # ---------- analysts and insiders ----------
+    def put_insights(self, ticker: str, record: Mapping[str, Any]) -> None:
+        # Expires after two weeks, so a ticker no longer tracked doesn't leave a row forever.
+        expires = int(time.time()) + 14 * 86400
+        item = {"pk": f"INSIGHT#{ticker}", "sk": "LATEST", **record, "fetched_at": _now_iso(), "expires_at": expires}
+        self.table.put_item(Item=to_dynamo(item))
+
+    def get_insights(self, ticker: str) -> dict[str, Any] | None:
+        return self.get_insights_many([ticker]).get(ticker)
+
+    def get_insights_many(self, tickers: Iterable[str]) -> dict[str, dict[str, Any]]:
+        """Stored insights for many tickers in one or two batch reads (pages load faster than one read each)."""
+        keys = [{"pk": f"INSIGHT#{t}", "sk": "LATEST"} for t in sorted(set(tickers))]
+        client, name, found = self.table.meta.client, self.table.name, {}
+        for start in range(0, len(keys), 100):  # BatchGetItem's limit
+            request = {name: {"Keys": keys[start : start + 100]}}
+            while request:
+                response = client.batch_get_item(RequestItems=request)
+                for item in response["Responses"].get(name, []):
+                    found[item["pk"].removeprefix("INSIGHT#")] = _clean(item)
+                request = response.get("UnprocessedKeys") or None
+        return found
 
     # ---------- intraday quotes ----------
     def put_quotes(self, quotes: Mapping[str, Mapping[str, Any]]) -> None:

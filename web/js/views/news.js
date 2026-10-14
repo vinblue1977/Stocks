@@ -2,6 +2,7 @@ import { api } from '../api.js';
 import { sentimentBars } from '../charts.js';
 import { GROUPS, KINDS, hasPartner, personName } from '../groups.js';
 import { fill, fmt, h, icon, pageHead, sentimentTag, tone } from '../ui.js';
+import { insightsCard, insightsDetail } from './insights.js';
 
 let selected = 'All';
 let groupFilter = 'all'; // all, a person (mine / partner) or a kind (stocks / auto)
@@ -101,7 +102,9 @@ export async function renderNews(main, { keepWatched = false } = {}) {
   } else if (!keepWatched) {
     watched = null; // a fresh visit shows only your holdings
   }
-  const [holdingsRes, signalsRes, rulesRes] = await Promise.all([api('GET', '/holdings'), api('GET', '/signals'), api('GET', '/rules')]);
+  const [holdingsRes, signalsRes, rulesRes, insightsRes] = await Promise.all([api('GET', '/holdings'), api('GET', '/signals'), api('GET', '/rules'),
+    api('GET', '/insights').catch(() => ({ insights: [] }))]); // optional: the page still works without it
+  const insightFor = new Map(insightsRes.insights.map((i) => [i.ticker, i]));
   const filters = hasPartner()
     ? [['all', 'Everyone'], ['mine', personName('mine')], ['partner', personName('partner')]]
     : [['all', 'All groups'], ['stocks', KINDS.stocks.label], ['auto', KINDS.auto.label]];
@@ -138,6 +141,10 @@ export async function renderNews(main, { keepWatched = false } = {}) {
     briefCard(news.brief, selected === 'All' ? 'All' : selected),
     h('div', { class: 'row' }, headlinesCard(news.articles), trendCard(news.articles)),
     signalsCard(signalsRes.signals, rulesRes.rules),
+    selected === 'All'
+      ? insightsCard(allTickers.filter((t) => t !== watched && insightFor.has(t)).map((t) => insightFor.get(t)),
+        { id: 'ins-h', subtitle: 'Your stocks · refreshed each evening', footnote: ' Funds have no analyst ratings or insiders.' })
+      : insightsDetail(insightFor.get(selected)),
     h('div', { class: 'footer-note' }, h('span', { text: 'Signals describe data; they are not buy or sell recommendations.' })),
   );
 }

@@ -155,11 +155,13 @@ def handler(
             },
         )
     earnings = refresh_earnings(repo, provider, now)
+    insights = refresh_insights(repo, provider, now)
     claude_calls = len(summarized) + (1 if briefs and not portfolio_reused else 0)
     log(
         logger,
         "news_ingest_complete",
         tickers=tickers,
+        insights=insights,
         summarized=summarized,
         reused=reused,
         failed=failed,
@@ -201,3 +203,27 @@ def refresh_earnings(repo: Repository, provider: NewsProvider, now: datetime) ->
         found += record is not None
         time.sleep(EARNINGS_PAUSE_SECONDS)  # spread the calls: Finnhub's free tier allows 60 a minute
     return found
+
+
+INSIDER_DAYS = 90
+
+
+def refresh_insights(repo: Repository, provider: NewsProvider, now: datetime) -> int:
+    """Analyst ratings and insider trades for every held or watched stock (two Finnhub calls each); returns how many stored."""
+    ratings, trades = getattr(provider, "recommendations", None), getattr(provider, "insider_trades", None)
+    if ratings is None or trades is None:
+        return 0
+    since = (now.date() - timedelta(days=INSIDER_DAYS)).isoformat()
+    stored = 0
+    for ticker in repo.tracked_tickers():
+        if buckets.is_fund(ticker):
+            continue  # funds have no analysts or insiders
+        try:
+            analysts = ratings(ticker)
+            time.sleep(EARNINGS_PAUSE_SECONDS)  # one call a second keeps under Finnhub's 60 a minute
+            repo.put_insights(ticker, {"analysts": analysts, "insiders": trades(ticker, since)})
+            stored += 1
+        except Exception:
+            logger.exception("insights refresh failed for %s", ticker)  # keep yesterday's; try again tomorrow
+        time.sleep(EARNINGS_PAUSE_SECONDS)
+    return stored

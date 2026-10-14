@@ -283,3 +283,19 @@ input.upper { text-transform: uppercase; }
 .dot-state { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; flex: none; background: var(--muted-2); }
 .dot-state.on { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-bg); }
 .push-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Analysts & insiders: Buy | Hold | Sell bar with 2px gaps and rounded ends */
+.abar { display: flex; gap: 2px; height: 10px; width: 160px; }
+.abar.wide { width: 100%; height: 14px; }
+.abar span { display: block; height: 100%; }
+.abar span:first-child { border-radius: 4px 0 0 4px; }
+.abar span:last-child { border-radius: 0 4px 4px 0; }
+.abar span:only-child { border-radius: 4px; }
+.abar .buy, .abar-buy { background: var(--accent); }
+.abar .hold, .abar-hold { background: #5A6B85; }
+.abar .sell, .abar-sell { background: var(--warn); }
+.insights { display: flex; flex-wrap: wrap; gap: 24px; }
+.insights > div { flex: 1 1 320px; min-width: 0; }
+.insights h3 { margin: 0 0 12px; font-size: 14px; font-weight: 600; color: var(--text-2); }
+.insights-fact { margin: 0 0 14px; font-size: 14px; color: var(--text-2); line-height: 1.5; }
+.months { display: grid; grid-template-columns: 40px 1fr auto; gap: 10px 14px; align-items: center; font-size: 13px; }

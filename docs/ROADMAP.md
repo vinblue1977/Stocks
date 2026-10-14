@@ -60,7 +60,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 32 | Tax-loss finder | S–M | Stock Holdings below cost, long vs. short term, and a 30-day wash-sale reminder. Facts only (pairs with #6) |
 | 33 | "What if" trade preview | M | Try a sale or buy and see the new mix vs. target, risk and concentration before doing it at the broker |
 | 35 | Earnings reaction history | S | How each stock moved the day after its last few reports (Finnhub + stored prices) |
-| 36 | Analyst and insider activity | S | Analyst rating trends and insider buys/sells for held stocks (Finnhub free tier) |
 | 37 | Weekly email upgrade | S | Add this week's earnings and biggest movers to the Sunday email |
 | 38 | Data health page | S | When each job last ran, how fresh prices and news are, and month-to-date AWS spend (cached daily) |
 | 39 | Stale-data banner | S | Overview warns if prices or news didn't update (a job failed) instead of quietly showing old numbers |
@@ -106,6 +105,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 19 | Today's movers | #38 |
 | 29 | Faster phone open (last Overview shown instantly, then refreshed) | #56 |
 | 34 | Price-level alerts (`price_below`, `price_above`) | #56 |
+| 36 | Analysts & insiders (News & signals, Watchlist) | #61 |
 | 40 | NYSE holidays and early closes, closed-market banner | #48, #54 |
 | — | Earnings calendar | #50 |
 | — | Overview redesign: performance by holding, donut, sortable Holdings; SPY removed | #39, #49 |

@@ -674,6 +674,27 @@ def get_earnings(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     return _response(200, {"earnings": sorted(upcoming, key=lambda e: (e["date"], e["ticker"]))})
 
 
+# ---------------------------------------------------------------- analysts and insiders
+def get_insights(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """Analyst ratings and insider trades for held and watched stocks (funds have none), with where each is held."""
+    user_id = _user_id(event)
+    held = {h["ticker"] for h in repo.list_holdings(user_id)}
+    watched = repo.watched_tickers(user_id)  # a ticker can be both: it then shows on both pages
+    stored = repo.get_insights_many(held | watched)
+    insights = []
+    for ticker in sorted(held | watched):
+        record = stored.get(ticker)
+        if record and (record.get("analysts") or record.get("insiders")):
+            insights.append(
+                {
+                    "ticker": ticker,
+                    "watched": ticker in watched,
+                    **{k: record.get(k) for k in ("analysts", "insiders", "fetched_at")},
+                }
+            )
+    return _response(200, {"insights": insights})
+
+
 # ---------------------------------------------------------------- watchlist
 def list_watchlist(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     """Watched tickers with everything the page shows: signals, today's live price and the news summary."""
@@ -829,6 +850,7 @@ ROUTES: dict[str, Route] = {
     "DELETE /groups/{group}/holdings/{ticker}/transactions/{txnId}": delete_transaction,
     "GET /realized": get_realized,
     "GET /earnings": get_earnings,
+    "GET /insights": get_insights,
     "GET /push": get_push,
     "PUT /push": put_push,
     "DELETE /push": delete_push,

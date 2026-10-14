@@ -465,6 +465,20 @@ def test_old_cost_basis_name_not_accepted(repo, no_backfill):
     assert "cost_basis" not in stored
 
 
+def test_insights_for_held_and_watched_stocks(repo, no_backfill):
+    buy(repo, "NVDA", 1, 100)
+    buy(repo, "VTI", 1, 100)
+    repo.put_watch("user-1", "AMD")
+    repo.put_watch("user-1", "NVDA")  # also held: listed once, and on the Watchlist page too
+    analysts = [{"period": "2026-09", "buy": 65, "hold": 3, "sell": 1}]
+    repo.put_insights("NVDA", {"analysts": analysts, "insiders": {"sold": 1000, "sells": 1, "trades": []}})
+    repo.put_insights("AMD", {"analysts": analysts, "insiders": None})
+    repo.put_insights("MSFT", {"analysts": analysts, "insiders": None})  # not this user's
+    body = call(repo, "GET /insights")[1]["insights"]
+    assert [(i["ticker"], i["watched"]) for i in body] == [("AMD", True), ("NVDA", True)]
+    assert body[1]["analysts"][0]["buy"] == 65 and body[1]["insiders"]["sold"] == 1000
+
+
 # ---------------------------------------------------------------- watchlist
 def test_watchlist_add_list_remove(repo, no_backfill):
     repo.put_holding("user-1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})

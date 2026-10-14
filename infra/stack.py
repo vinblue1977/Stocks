@@ -549,6 +549,7 @@ class PortfolioTrackerStack(Stack):
             "/groups/{group}/holdings/{ticker}/transactions/{txnId}": [apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
             "/realized": [apigw.HttpMethod.GET],
             "/earnings": [apigw.HttpMethod.GET],
+            "/insights": [apigw.HttpMethod.GET],
             "/push": [apigw.HttpMethod.GET, apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
             "/push/test": [apigw.HttpMethod.POST],
             "/checkup": [apigw.HttpMethod.GET],
