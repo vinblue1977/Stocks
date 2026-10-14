@@ -701,3 +701,15 @@ def test_news_ingest_records_its_run(repo):
     assert repo.get_job_run("news_ingest") is None
     news_ingest.handler({}, None, repo=repo, provider=FakeNews(), summarizer=FakeSummarizer)
     assert repo.get_job_run("news_ingest") is not None
+    stored = repo.recent_news("VTI", "2000-01-01")
+    assert stored and all(a.get("first_seen") for a in stored)
+
+
+def test_news_ingest_not_recorded_when_every_ticker_fails(repo):
+    class Down(FakeNews):
+        def company_news(self, ticker, from_date, to_date):
+            raise RuntimeError("bad key")
+
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
+    news_ingest.handler({}, None, repo=repo, provider=Down(), summarizer=FakeSummarizer)
+    assert repo.get_job_run("news_ingest") is None

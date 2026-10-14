@@ -528,12 +528,11 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         ]
 
     portfolios = {p: {k: build(pick(p, k)) for k in ("overall", *KINDS)} for p in ("household", *PEOPLE)}
-    as_of = max((h[-1][0] for h in histories.values() if h), default=None)
     return _response(
         200,
         {
-            "as_of": as_of,
-            "freshness": _freshness(repo, as_of, now),
+            "as_of": max((h[-1][0] for h in histories.values() if h), default=None),
+            "freshness": _freshness(repo, {t: h[-1][0] for t, h in histories.items() if h}, now),
             "live_as_of": max((q["timestamp"] for q in live.values()), default=None),
             "market": market_status(now),
             "portfolios": portfolios,
@@ -541,14 +540,18 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     )
 
 
-def _freshness(repo: Repository, as_of: str | None, now: datetime) -> dict[str, Any]:
-    """Whether the evening price sync and news run are late (older than the last trading day's close)."""
+def _freshness(repo: Repository, last_close: dict[str, str], now: datetime) -> dict[str, Any]:
+    """Whether the evening price sync and news run are late (older than the last trading day's close).
+
+    `late_tickers` names held tickers whose close didn't arrive while others did (a partial failure)."""
     expected = expected_close(now).isoformat()
+    late = sorted(t for t, day in last_close.items() if day < expected)
     news_at = repo.get_job_run("news_ingest")
     news_day = datetime.fromisoformat(news_at).astimezone(NEW_YORK).date().isoformat() if news_at else None
     return {
         "expected": expected,
-        "prices_late": bool(as_of) and as_of < expected,
+        "prices_late": bool(last_close) and len(late) == len(last_close),
+        "late_tickers": late if len(late) < len(last_close) else [],
         "news_at": news_at,
         "news_late": bool(news_day) and news_day < expected,  # unknown until the first run records itself
     }
@@ -708,10 +711,11 @@ def get_changes(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     since_iso = since.isoformat(timespec="seconds")
     alerts = [
         {"message": a["message"], "created_at": a["created_at"]}
-        for a in repo.list_alerts(user_id)
+        for a in repo.list_alerts(user_id, limit=500)
         if a.get("created_at", "") >= since_iso
     ]
-    tickers = {h["ticker"] for h in repo.list_holdings(user_id)}
+    # Held and watched, as the news run covers both.
+    tickers = {h["ticker"] for h in repo.list_holdings(user_id)} | repo.watched_tickers(user_id)
     return _response(200, {"since": since_iso, "alerts": alerts, "headlines": repo.count_news_since(tickers, since_iso)})
 
 

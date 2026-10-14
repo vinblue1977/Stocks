@@ -78,7 +78,7 @@ def early_close(day: date) -> bool:
 
 def market_open(now: datetime) -> bool:
     local = now.astimezone(NEW_YORK)
-    if local.weekday() >= 5 or holiday(local.date()):
+    if not is_trading_day(local.date()):
         return False
     close = EARLY_CLOSE if early_close(local.date()) else MARKET_CLOSE
     return MARKET_OPEN <= local.time() <= close

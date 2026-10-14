@@ -29,7 +29,7 @@ import time
 import uuid
 from collections.abc import Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from functools import lru_cache
 from typing import Any
@@ -459,13 +459,16 @@ class Repository:
         return [_clean(i) for i in response.get("Items", [])]
 
     def count_news_since(self, tickers: Iterable[str], since_iso: str) -> int:
-        """Headlines stored since a time, across tickers (counted side by side; the Table's client is thread-safe)."""
+        """Headlines first picked up since a time, across tickers (counted side by side; the Table's client is
+        thread-safe). A headline can arrive days after it was published, so the key range reaches back a week."""
         client, name = self.table.meta.client, self.table.name
+        published_from = (datetime.fromisoformat(since_iso) - timedelta(days=7)).isoformat(timespec="seconds")
 
         def one(ticker: str) -> int:
             kwargs: dict[str, Any] = {
                 "TableName": name,
-                "KeyConditionExpression": Key("pk").eq(f"NEWS#{ticker}") & Key("sk").gte(since_iso),
+                "KeyConditionExpression": Key("pk").eq(f"NEWS#{ticker}") & Key("sk").gte(published_from),
+                "FilterExpression": Attr("first_seen").gte(since_iso),
                 "Select": "COUNT",
             }
             total = 0
