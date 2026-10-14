@@ -50,12 +50,13 @@ def holidays(year: int) -> dict[date, str]:
         _nth_weekday(year, 2, 0, 3): "Washington's Birthday",
         _easter(year) - timedelta(days=2): "Good Friday",
         _nth_weekday(year, 5, 0, -1): "Memorial Day",
-        _observed(date(year, 6, 19)): "Juneteenth",
         _observed(date(year, 7, 4)): "Independence Day",
         _nth_weekday(year, 9, 0, 1): "Labor Day",
         _nth_weekday(year, 11, 3, 4): "Thanksgiving Day",
         _observed(date(year, 12, 25)): "Christmas Day",
     }
+    if year >= 2022:  # NYSE first closed for Juneteenth in 2022
+        days[_observed(date(year, 6, 19))] = "Juneteenth"
     new_year = date(year, 1, 1)
     if new_year.weekday() != 5:  # on a Saturday NYSE doesn't close the Friday before (it's the prior year-end)
         days[_observed(new_year)] = "New Year's Day"
@@ -70,9 +71,9 @@ def holiday(day: date) -> str | None:
 def early_close(day: date) -> bool:
     """NYSE 1:00 PM closes: the day after Thanksgiving, Christmas Eve (Mon-Thu) and July 3 (Mon-Thu)."""
     if day.month == 11:
-        first_thursday = 1 + (3 - date(day.year, 11, 1).weekday()) % 7
-        return day == date(day.year, 11, first_thursday + 21) + timedelta(days=1)
-    return (day.month, day.day) in ((12, 24), (7, 3)) and day.weekday() < 4 and holiday(day) is None
+        return day == _nth_weekday(day.year, 11, 3, 4) + timedelta(days=1)  # day after Thanksgiving
+    # On a Friday these dates are the observed holiday instead (July 4 or Christmas on a Saturday).
+    return (day.month, day.day) in ((12, 24), (7, 3)) and day.weekday() < 4
 
 
 def market_open(now: datetime) -> bool:
@@ -86,4 +87,4 @@ def market_open(now: datetime) -> bool:
 def market_status(now: datetime) -> dict[str, object]:
     """Today's session for the dashboard: a holiday's name, or whether it closes early."""
     day = trading_day(now)
-    return {"date": day.isoformat(), "holiday": holiday(day), "early_close": early_close(day), "weekend": day.weekday() >= 5}
+    return {"date": day.isoformat(), "holiday": holiday(day), "early_close": early_close(day)}

@@ -59,13 +59,19 @@ function marketBanner(data) {
   const m = data.market;
   if (!m) return null;
   const lastClose = data.as_of ? new Date(`${data.as_of}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : null;
+  // data-market-closed tells the app (app.js) not to keep re-fetching: nothing will change until the evening.
   if (m.holiday) {
-    return h('div', { class: 'market-banner', role: 'status' }, h('strong', { text: `Markets are closed today for ${m.holiday}.` }),
+    return h('div', { class: 'market-banner', role: 'status', 'data-market-closed': '' }, h('strong', { text: `Markets are closed today for ${m.holiday}.` }),
       lastClose ? ` Prices are from the last close (${lastClose}).` : '');
   }
   if (m.early_close) {
-    return h('div', { class: 'market-banner', role: 'status' }, h('strong', { text: 'Markets close early today at 1:00 PM ET.' }),
-      ' Live prices stop then; the evening update stores the close.');
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(new Date());
+    const part = (type) => Number(parts.find((p) => p.type === type)?.value || 0);
+    if (part('hour') * 60 + part('minute') > 13 * 60) {
+      return h('div', { class: 'market-banner', role: 'status', 'data-market-closed': '' }, h('strong', { text: 'Markets closed early today, at 1:00 PM ET.' }),
+        ' Prices are from that close until the evening update stores it.');
+    }
+    return h('div', { class: 'market-banner', role: 'status' }, h('strong', { text: 'Markets close early today at 1:00 PM ET.' }), ' Live prices stop then.');
   }
   return null;
 }

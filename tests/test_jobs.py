@@ -628,8 +628,10 @@ def test_nyse_holidays():
     observed_2027 = sorted(holidays(2027))
     assert date(2027, 6, 18) in observed_2027 and date(2027, 7, 5) in observed_2027 and date(2027, 12, 24) in observed_2027
     assert date(2027, 3, 26) in observed_2027  # Good Friday
-    assert not any(d.year == 2027 and d.month == 12 and d.day == 31 for d in holidays(2028))  # Jan 1, 2028 is a Saturday
-    assert date(2028, 1, 1) not in holidays(2028)
+    from portfolio.market import holiday
+
+    assert holiday(date(2027, 12, 31)) is None and date(2028, 1, 1) not in holidays(2028)  # Jan 1, 2028 is a Saturday
+    assert holiday(date(2021, 6, 18)) is None  # Juneteenth closures start in 2022
 
 
 def test_market_closed_on_holidays_and_status():
@@ -641,7 +643,6 @@ def test_market_closed_on_holidays_and_status():
         "date": "2026-11-26",
         "holiday": "Thanksgiving Day",
         "early_close": False,
-        "weekend": False,
     }
     assert market_status(datetime(2026, 11, 27, 15, 0, tzinfo=UTC))["early_close"] is True
     assert market_status(datetime(2027, 12, 24, 15, 0, tzinfo=UTC))["holiday"] == "Christmas Day"  # observed, not a half day

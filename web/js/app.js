@@ -36,6 +36,7 @@ function marketOpen(now = new Date()) {
 
 function maybeRefresh() {
   if (document.hidden || currentRoute()[0] !== 'overview') return;
+  if (main.querySelector('[data-market-closed]')) return; // holiday or after an early close: nothing new until evening
   if (!marketOpen() && !main.querySelector('[data-live]')) return;
   const now = Date.now();
   const lastJob = Math.floor((now - JOB_DELAY_MS) / QUARTER_MS) * QUARTER_MS + JOB_DELAY_MS;
