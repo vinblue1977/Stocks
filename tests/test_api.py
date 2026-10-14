@@ -726,3 +726,20 @@ def test_unreadable_position_does_not_break_realized(repo):
     repo.put_txn("user-1", "stocks", "AMD", {"txn_id": "zz", "type": "sell", "date": "2026-01-06", "shares": 9, "price": 1})
     status, body = call(repo, "GET /realized")
     assert status == 200 and body["unreadable"] == ["AMD"]
+
+
+def test_upcoming_earnings(repo):
+    from portfolio.market import trading_day
+
+    today = trading_day(__import__("datetime").datetime.now(__import__("datetime").UTC))
+    soon, later = (today + timedelta(days=5)).isoformat(), (today + timedelta(days=80)).isoformat()
+    repo.put_holding("user-1", {"ticker": "NVDA", "group": "stocks", "shares": 1, "avg_cost": 1})
+    repo.put_holding("user-1", {"ticker": "AVGO", "group": "partner_stocks", "shares": 1, "avg_cost": 1})
+    call(repo, "PUT /watchlist/{ticker}", path={"ticker": "MSFT"})
+    repo.put_earnings("NVDA", {"date": soon, "hour": "amc", "eps_estimate": 2.53})
+    repo.put_earnings("MSFT", {"date": soon, "hour": "amc", "eps_estimate": 3.7})
+    repo.put_earnings("AVGO", {"date": later, "hour": "amc", "eps_estimate": 2.0})  # beyond 60 days
+    body = call(repo, "GET /earnings")[1]["earnings"]
+    assert [(e["ticker"], e["where"]) for e in body] == [("MSFT", ["watchlist"]), ("NVDA", ["stocks"])]
+    watched = call(repo, "GET /watchlist")[1]["watchlist"][0]
+    assert watched["earnings"]["date"] == soon

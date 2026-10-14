@@ -18,6 +18,7 @@ class NewsProvider(Protocol):
 
 class FinnhubNewsProvider:
     BASE_URL = "https://finnhub.io/api/v1/company-news"
+    EARNINGS_URL = "https://finnhub.io/api/v1/calendar/earnings"
 
     def __init__(self, api_key: str) -> None:
         self._api_key = api_key
@@ -29,6 +30,25 @@ class FinnhubNewsProvider:
             headers={"X-Finnhub-Token": self._api_key},
         )
         return parse_finnhub(raw)
+
+    def next_earnings(self, ticker: str, from_date: str, to_date: str) -> dict[str, Any] | None:
+        """The next scheduled earnings report in the window, or None (funds don't report)."""
+        raw = get_json(
+            self.EARNINGS_URL,
+            params={"symbol": ticker, "from": from_date, "to": to_date},
+            headers={"X-Finnhub-Token": self._api_key},
+        )
+        return parse_earnings(raw, from_date)
+
+
+def parse_earnings(raw: Any, from_date: str) -> dict[str, Any] | None:
+    upcoming = [e for e in (raw or {}).get("earningsCalendar") or [] if str(e.get("date") or "") >= from_date]
+    if not upcoming:
+        return None
+    nxt = min(upcoming, key=lambda e: e["date"])
+    hour = nxt.get("hour") if nxt.get("hour") in ("bmo", "amc", "dmh") else None
+    estimate = nxt.get("epsEstimate")
+    return {"date": nxt["date"], "hour": hour, "eps_estimate": None if estimate is None else round(float(estimate), 2)}
 
 
 def parse_finnhub(raw: Any, max_items: int = 25) -> list[dict[str, Any]]:

@@ -15,13 +15,16 @@ let holdingsMode = 'value'; // Holdings columns: value | perf
 const sorts = { value: { key: 'value', dir: -1 }, perf: { key: 'return_1y', dir: -1 } }; // each view keeps its own sort
 let returns = new Map(); // ticker -> signal snapshot (period returns), from GET /signals
 let returnsAt = 0;
+let earnings = []; // upcoming earnings reports (GET /earnings), refreshed with the returns
 
 /** Period returns change once each evening: fetch at most hourly (not on every 15-minute refresh), and never
  *  let a failure take down the Overview; Performance then shows "—". */
 async function loadReturns() {
   if (Date.now() - returnsAt < 60 * 60 * 1000) return;
   try {
-    returns = new Map((await api('GET', '/signals')).signals.map((s) => [s.ticker, s]));
+    const [signalsRes, earningsRes] = await Promise.all([api('GET', '/signals'), api('GET', '/earnings')]);
+    returns = new Map(signalsRes.signals.map((s) => [s.ticker, s]));
+    earnings = earningsRes.earnings;
     returnsAt = Date.now();
   } catch { /* keep what we had */ }
 }
@@ -171,6 +174,31 @@ function compactMoney(v) {
   if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
   if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(1)}k`;
   return fmt.money(v);
+}
+
+const EARNINGS_HOUR = { bmo: 'Before the open', amc: 'After the close', dmh: 'During market hours' };
+
+/** Next earnings reports for held and watched stocks (funds don't report). Hidden when there are none. */
+function earningsCard() {
+  if (!earnings.length) return null;
+  const today = new Date(`${new Date().toLocaleDateString('en-CA')}T12:00:00`);
+  const daysAway = (d) => Math.round((new Date(`${d}T12:00:00`) - today) / 864e5);
+  const whereLabel = (place) => (place === 'watchlist' ? 'Watchlist' : groupLabel(place, { short: true, withPerson: hasPartner() }));
+  const soon = earnings.filter((e) => daysAway(e.date) <= 7);
+  const weekday = (d) => new Date(`${d}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' });
+  return h('section', { class: 'card', 'aria-labelledby': 'er-h' },
+    h('div', { class: 'card-head' }, h('h2', { id: 'er-h', text: 'Upcoming earnings' }),
+      h('span', { class: 'muted small', text: "Your stocks and watchlist · next 60 days · funds don't report earnings" })),
+    soon.length ? h('div', { class: 'er-banner', text: `This week: ${soon.map((e) => `${e.ticker} ${weekday(e.date)}${e.hour ? ` ${EARNINGS_HOUR[e.hour].toLowerCase()}` : ''}`).join(' · ')}` }) : null,
+    h('div', null, earnings.map((e) => {
+      const n = daysAway(e.date);
+      return h('div', { class: 'er' },
+        h('span', { class: 'er-day' }, fmt.date(e.date).replace(/, \d{4}$/, ''), h('small', { class: n <= 7 ? 'soon' : null, text: n <= 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days` })),
+        h('strong', { text: e.ticker }),
+        h('span', null, e.hour ? EARNINGS_HOUR[e.hour] : 'Time not announced', h('div', { class: 'xsmall muted', text: e.where.map(whereLabel).join(', ') })),
+        h('span', { class: 'er-est mono small muted', text: e.eps_estimate == null ? '' : `EPS est. ${fmt.money(e.eps_estimate)}` }));
+    })),
+    h('p', { class: 'xsmall muted', style: { margin: '10px 0 0' }, text: 'Dates and estimates from Finnhub, refreshed each evening; companies sometimes move them.' }));
 }
 
 const MOVERS = 3;
@@ -341,6 +369,7 @@ export async function renderOverview(main) {
         tile(`1Y return · ${viewLabel()}`, fmt.signedPct(s.return_1y, 1),
           s.return_1y == null ? 'Needs a year of price history' : 'Current holdings over the last year', tone(s.return_1y))),
       moversCard(portfolios, data.live_as_of),
+      earningsCard(),
       h('div', { class: 'row' }, performanceCard(s), allocationCard(s)),
       holdingsCard(s),
       alertsCard(rulesRes.rules),
