@@ -82,6 +82,8 @@ def parse_tiingo(raw: Any) -> list[dict[str, Any]]:
                 "close": float(close),
                 "raw_close": float(entry.get("close", close)),
                 "volume": int(entry.get("adjVolume", entry.get("volume", 0)) or 0),
+                "div_cash": float(entry.get("divCash") or 0),  # dividend per share paid that day (ex-date)
+                "split_factor": float(entry.get("splitFactor") or 1),
             }
         )
     rows.sort(key=lambda r: r["date"])

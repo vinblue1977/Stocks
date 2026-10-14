@@ -553,3 +553,22 @@ def test_intraday_uses_the_scheduled_time_not_the_late_start(repo, monkeypatch):
         "skipped": "market closed"
     }
     assert intraday_quotes._scheduled_time({}) is None and intraday_quotes._scheduled_time({"time": "junk"}) is None
+
+
+def test_dividend_day_reloads_full_history(repo):
+    class Provider:
+        def __init__(self):
+            self.starts = []
+
+        def daily_prices(self, ticker, start_date):
+            self.starts.append(start_date)
+            rows = price_series(100, 0.5, 3, start_date)
+            if len(self.starts) == 2:  # the incremental fetch brings an ex-dividend day
+                rows[-1]["div_cash"] = 0.25
+            return rows
+
+    repo.put_holding("u1", {"ticker": "SCHD", "shares": 1, "avg_cost": 1})
+    provider = Provider()
+    price_sync.handler({}, None, repo=repo, provider=provider)  # backfill
+    price_sync.handler({}, None, repo=repo, provider=provider)  # new days include a dividend -> full reload
+    assert len(provider.starts) == 3 and provider.starts[2] == provider.starts[0]

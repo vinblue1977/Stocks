@@ -40,9 +40,9 @@ def test_value_history_and_trailing_return():
     holdings = [{"ticker": "VTI", "shares": 1, "avg_cost": 0}, {"ticker": "SCHD", "shares": 1, "avg_cost": 0}]
     series = analytics.value_history(holdings, histories)
     assert series == [("2025-01-02", 120.0), ("2025-01-03", 131.0)]
-    assert analytics.trailing_return(series, days=1) == pytest.approx(0.0917, abs=1e-4)
-    assert analytics.trailing_return(series + [("2025-01-06", 144.1)], days=1) == pytest.approx(0.1, abs=1e-4)
     assert analytics.trailing_return(series) is None  # less than a year of history: no "1Y" figure
+    year = [("2024-01-02", 100.0), ("2024-06-03", 105.0), ("2025-01-02", 120.0)]
+    assert analytics.trailing_return(year) == pytest.approx(0.2)  # same calendar date a year earlier
 
 
 def test_compute_signals_shapes():
@@ -56,3 +56,30 @@ def test_compute_signals_shapes():
     assert snap["sentiment_7d"] == 0.123
     assert "20" in snap["smas"]
     assert signals.compute_signals("X", []) is None
+
+
+def test_period_returns_by_calendar_date():
+    from portfolio import indicators
+
+    history = [
+        ("2022-10-12", 50.0),
+        ("2023-10-12", 80.0),
+        ("2025-10-10", 100.0),
+        ("2025-12-31", 110.0),
+        ("2026-04-10", 115.0),
+        ("2026-07-10", 118.0),
+        ("2026-10-12", 132.0),
+    ]
+    r = indicators.period_returns(history)
+    assert r["return_3m"] == pytest.approx(132 / 118 - 1)  # Jul 12 falls on a weekend: the prior close counts
+    assert r["return_6m"] == pytest.approx(132 / 115 - 1)
+    assert r["return_ytd"] == pytest.approx(132 / 110 - 1)  # vs. the last close of the previous year
+    assert r["return_1y"] == pytest.approx(132 / 100 - 1)
+    assert r["return_3y_ann"] == pytest.approx((132 / 80) ** (1 / 3) - 1)  # from Oct 12, 2023
+    assert indicators.period_returns(history[-2:])["return_1y"] is None  # not enough history
+    assert indicators.months_before(__import__("datetime").date(2026, 5, 31), 3).isoformat() == "2026-02-28"
+
+
+def test_signal_snapshot_has_period_returns():
+    s = signals.compute_signals("VTI", [("2025-10-13", 100.0), ("2026-10-13", 110.0)])
+    assert s["return_1y"] == pytest.approx(0.1) and {"return_3m", "return_6m", "return_ytd", "return_3y_ann"} <= set(s)

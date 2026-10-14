@@ -11,7 +11,20 @@ let person = 'household'; // household | mine | partner
 let range = '1Y';
 let breakdown = 'holding'; // Allocation: holding | kind | person
 let kindFilter = 'both'; // Holdings: both | stocks | auto
-let sort = { key: 'value', dir: -1 }; // Holdings column sort
+let holdingsMode = 'value'; // Holdings columns: value | perf
+const sorts = { value: { key: 'value', dir: -1 }, perf: { key: 'return_1y', dir: -1 } }; // each view keeps its own sort
+let returns = new Map(); // ticker -> signal snapshot (period returns), from GET /signals
+let returnsAt = 0;
+
+/** Period returns change once each evening: fetch at most hourly (not on every 15-minute refresh), and never
+ *  let a failure take down the Overview; Performance then shows "—". */
+async function loadReturns() {
+  if (Date.now() - returnsAt < 60 * 60 * 1000) return;
+  try {
+    returns = new Map((await api('GET', '/signals')).signals.map((s) => [s.ticker, s]));
+    returnsAt = Date.now();
+  } catch { /* keep what we had */ }
+}
 
 /** Replaces a card after one of its buttons was pressed, keeping keyboard focus on the same button. */
 function swapCard(card, next) {
@@ -213,64 +226,91 @@ function alertsCard(rules) {
     ...items, h('a', { href: '#/alerts', class: 'small', text: 'Manage rules' }));
 }
 
-const HOLDING_COLUMNS = [
+const HOLDING_COLUMNS = {
   // [key, label, text column, hidden on phones]
-  ['ticker', 'Ticker', true], ['group', 'Group', true], ['shares', 'Shares', false, true], ['avg_cost', 'Avg cost', false, true],
-  ['price', 'Price'], ['day_change_pct', 'Today'], ['value', 'Value'], ['weight', 'Weight'], ['gain', 'Gain / loss'],
-];
+  value: [['ticker', 'Ticker', true], ['group', 'Group', true], ['shares', 'Shares', false, true], ['avg_cost', 'Avg cost', false, true],
+    ['price', 'Price'], ['day_change_pct', 'Today'], ['value', 'Value'], ['weight', 'Weight'], ['gain', 'Gain / loss']],
+  perf: [['ticker', 'Ticker', true], ['group', 'Group', true, true], ['return_3m', '3M'], ['return_6m', '6M'], ['return_ytd', 'YTD'],
+    ['return_1y', '1Y'], ['return_3y_ann', '3Y / yr']],
+};
+const PERIODS = ['return_3m', 'return_6m', 'return_ytd', 'return_1y', 'return_3y_ann'];
 
-/** Sortable holdings of the view, filtered to both groups, Stock Holdings or Automatic Investment. */
+/** Performance rows: one per ticker (a fund in several groups shows once), with its period returns. */
+function performanceRows(positions) {
+  const byTicker = new Map();
+  for (const p of positions) {
+    const label = groupLabel(p.group, { short: true, withPerson: hasPartner() && person === 'household' });
+    const row = byTicker.get(p.ticker);
+    if (row) { row.groups.push(label); row.kinds.add(GROUPS[p.group]?.kind); continue; }
+    byTicker.set(p.ticker, { ticker: p.ticker, groups: [label], kinds: new Set([GROUPS[p.group]?.kind]), ...Object.fromEntries(PERIODS.map((k) => [k, returns.get(p.ticker)?.[k] ?? null])) });
+  }
+  return [...byTicker.values()].map((row) => ({ ...row, group: row.groups.join(', ') }));
+}
+
+/** Sortable holdings of the view: Value or Performance columns, filtered to both groups, Stocks or Auto. */
 function holdingsCard(summary) {
-  const rows = summary.positions.filter((p) => kindFilter === 'both' || GROUPS[p.group]?.kind === kindFilter);
-  const maxWeight = Math.max(0, ...rows.map((p) => p.weight || 0));
-  const cell = (p, key) => (key === 'group' ? groupLabel(p.group) : p[key]);
+  const positions = summary.positions.filter((p) => kindFilter === 'both' || GROUPS[p.group]?.kind === kindFilter);
+  const perf = holdingsMode === 'perf';
+  const rows = perf ? performanceRows(positions) : positions;
+  const sort = sorts[holdingsMode];
+  const maxWeight = Math.max(0, ...positions.map((p) => p.weight || 0));
+  const cell = (p, key) => (key === 'group' ? (perf ? p.group : groupLabel(p.group)) : p[key]);
   const sorted = [...rows].sort((a, b) => {
     const A = cell(a, sort.key);
     const B = cell(b, sort.key);
-    if (A == null || B == null) return (A == null) - (B == null); // missing values (no price yet) last
+    if (A == null || B == null) return (A == null) - (B == null); // missing values (no price or history yet) last
     return (typeof A === 'string' ? A.localeCompare(B) : A - B) * sort.dir;
   });
   const card = h('section', { class: 'card oneline-head', 'aria-labelledby': 'hold-h' });
   const redraw = () => swapCard(card, holdingsCard(summary));
-  const head = h('tr', null, HOLDING_COLUMNS.map(([key, label, text, narrowHidden]) => {
+  const head = h('tr', null, HOLDING_COLUMNS[holdingsMode].map(([key, label, text, narrowHidden]) => {
     const active = key === sort.key;
     return h('th', {
       scope: 'col', class: [text ? 'text' : null, narrowHidden ? 'hide-narrow' : null].filter(Boolean).join(' ') || null,
       'aria-sort': active ? (sort.dir > 0 ? 'ascending' : 'descending') : null,
     }, h('button', {
       type: 'button', class: 'sort-btn',
-      onClick: () => { sort = active ? { key, dir: -sort.dir } : { key, dir: text ? 1 : -1 }; redraw(); },
+      onClick: () => { sorts[holdingsMode] = active ? { key, dir: -sort.dir } : { key, dir: text ? 1 : -1 }; redraw(); },
     }, label, h('span', { class: 'sort-arrow', 'aria-hidden': 'true', text: active ? (sort.dir > 0 ? '▲' : '▼') : '' })));
   }));
-  const body = sorted.map((p) => h('tr', null,
-    h('td', { class: 'text' }, h('strong', { text: p.ticker })),
-    h('td', { class: 'text' }, h('span', { class: `group-chip ${groupChip(p.group)}`, text: groupLabel(p.group, { short: true, withPerson: hasPartner() && person === 'household' }) })),
-    h('td', { class: 'hide-narrow', text: fmt.num(p.shares, 5) }),
-    h('td', { class: 'hide-narrow', text: fmt.money(p.avg_cost) }),
-    h('td', { text: p.price == null ? 'Loading…' : fmt.money(p.price) }),
-    h('td', { class: tone(p.day_change) }, `${fmt.signedPct(p.day_change_pct)} `, h('span', { class: 'xsmall', text: fmt.signedMoney(p.day_change) })),
-    h('td', { text: fmt.money(p.value) }),
-    h('td', null, h('span', { class: 'weight' }, fmt.pct(p.weight),
-      h('span', { class: 'weight-track', 'aria-hidden': 'true' },
-        h('span', { class: 'weight-fill', style: { width: `${maxWeight ? ((p.weight || 0) / maxWeight) * 100 : 0}%` } })))),
-    h('td', { class: tone(p.gain) }, `${fmt.signedMoney(p.gain)} `, h('span', { class: 'xsmall', text: fmt.signedPct(p.gain_pct, 1) }))));
-  const filter = h('div', { class: 'segmented', role: 'group', 'aria-label': 'Show group' },
-    [['both', 'Both'], ['stocks', 'Stocks'], ['auto', 'Auto']].map(([key, text]) => h('button', {
-      type: 'button', 'aria-pressed': String(key === kindFilter), text, onClick: () => { kindFilter = key; redraw(); },
-    })));
+  const chip = (group, kinds) => h('span', { class: `group-chip ${kinds ? (kinds.size === 1 ? KINDS[[...kinds][0]]?.chip || '' : 'chip-mixed') : groupChip(group)}`,
+    text: kinds ? group : groupLabel(group, { short: true, withPerson: hasPartner() && person === 'household' }) });
+  const body = sorted.map((p) => (perf
+    ? h('tr', null,
+      h('td', { class: 'text' }, h('strong', { text: p.ticker })),
+      h('td', { class: 'text hide-narrow' }, chip(p.group, p.kinds)),
+      PERIODS.map((key) => h('td', { class: tone(p[key]), text: fmt.signedPct(p[key], 1) })))
+    : h('tr', null,
+      h('td', { class: 'text' }, h('strong', { text: p.ticker })),
+      h('td', { class: 'text' }, chip(p.group)),
+      h('td', { class: 'hide-narrow', text: fmt.num(p.shares, 5) }),
+      h('td', { class: 'hide-narrow', text: fmt.money(p.avg_cost) }),
+      h('td', { text: p.price == null ? 'Loading…' : fmt.money(p.price) }),
+      h('td', { class: tone(p.day_change) }, `${fmt.signedPct(p.day_change_pct)} `, h('span', { class: 'xsmall', text: fmt.signedMoney(p.day_change) })),
+      h('td', { text: fmt.money(p.value) }),
+      h('td', null, h('span', { class: 'weight' }, fmt.pct(p.weight),
+        h('span', { class: 'weight-track', 'aria-hidden': 'true' },
+          h('span', { class: 'weight-fill', style: { width: `${maxWeight ? ((p.weight || 0) / maxWeight) * 100 : 0}%` } })))),
+      h('td', { class: tone(p.gain) }, `${fmt.signedMoney(p.gain)} `, h('span', { class: 'xsmall', text: fmt.signedPct(p.gain_pct, 1) })))));
+  const segmented = (label, options, current, choose) => h('div', { class: 'segmented', role: 'group', 'aria-label': label },
+    options.map(([key, text]) => h('button', { type: 'button', 'aria-pressed': String(key === current), text, onClick: () => { choose(key); redraw(); } })));
   add(card,
     h('div', { class: 'card-head' }, h('h2', { id: 'hold-h', text: `Holdings · ${viewLabel()}` }),
       h('div', { class: 'card-tools' },
-        h('span', { class: 'muted small', text: `${rows.length} position${rows.length === 1 ? '' : 's'}` }), filter)),
+        h('span', { class: 'muted small', text: `${rows.length} ${perf ? 'ticker' : 'position'}${rows.length === 1 ? '' : 's'}` }),
+        segmented('Columns', [['value', 'Value'], ['perf', 'Performance']], holdingsMode, (key) => { holdingsMode = key; }),
+        segmented('Show group', [['both', 'Both'], ['stocks', 'Stocks'], ['auto', 'Auto']], kindFilter, (key) => { kindFilter = key; }))),
     rows.length
       ? h('div', { class: 'table-wrap' }, h('table', null, h('thead', null, head), h('tbody', null, body)))
       : h('p', { class: 'muted', text: 'Nothing in this group yet.' }),
-    rows.length ? h('p', { class: 'xsmall muted', style: { marginBottom: 0 }, text: 'Click a column to sort. Weight is the share of this whole view.' }) : null);
+    rows.length ? h('p', { class: 'xsmall muted', style: { marginBottom: 0 }, text: perf
+      ? 'Total return of each fund or stock (dividends included) as of the last close; not your own return, which depends on when you bought. 3Y is per year. Tap a column to sort.'
+      : 'Tap a column to sort. Weight is the share of this whole view.' }) : null);
   return card;
 }
 
 export async function renderOverview(main) {
-  const [data, rulesRes] = await Promise.all([api('GET', '/portfolio'), api('GET', '/rules')]);
+  const [data, rulesRes] = await Promise.all([api('GET', '/portfolio'), api('GET', '/rules'), loadReturns()]);
   const { portfolios } = data;
   if (!hasPartner()) person = 'household';
   if (!portfolios.household.overall.positions.length) {

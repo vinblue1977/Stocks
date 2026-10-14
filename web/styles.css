@@ -259,3 +259,10 @@ th[aria-sort] { color: var(--text); }
 .rbox { background: var(--inset); border-radius: 10px; padding: 12px 14px; }
 .rbox-value { font-family: var(--mono); font-size: 22px; margin-top: 4px; }
 input.upper { text-transform: uppercase; }
+/* Phones: a little less padding so wide tables (e.g. Holdings → Performance) fit without much sideways scrolling */
+@media (max-width: 640px) {
+  .card { padding: 16px; }
+  th, td { padding-left: 6px; padding-right: 6px; }
+  .card-tools { width: 100%; }
+}
+.chip-mixed { color: var(--text-2); background: var(--neutral-bg); } /* held in both groups */

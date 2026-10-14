@@ -34,7 +34,7 @@ All routes need `Authorization: Bearer <Cognito token>`.
 | `POST /groups/{group}/holdings/{ticker}/purchases` | Record a buy: `{"shares": 5, "price": 280}` or `{"shares": 0.28, "amount": 200}`. Updates that group's total shares and weighted average cost |
 | `GET /profile` | Display names (`owner_name`, `partner_name`) and whether to show the partner page |
 | `GET /portfolio` | Value, gains, allocation, history and 1Y return, under `portfolios.<household\|mine\|partner>.<overall\|stocks\|auto>`. During market hours values use intraday prices (`live_as_of` is the quote time, otherwise null); history stays on closing prices. The Overview re-fetches every 15 minutes while open and visible |
-| `GET /signals` | RSI, moving averages, drawdown, sentiment |
+| `GET /signals` | RSI, moving averages, drawdown, sentiment, and 3M/6M/YTD/1Y/3Y-per-year total returns by calendar date |
 | `GET /news?ticker=VTI` | AI briefing and scored headlines (held or watched tickers) |
 | `GET/POST/DELETE /rules[/{ruleId}]`, `GET /rule-types` | Alert rules, e.g. `{"type": "drawdown_below", "ticker": "VTI", "params": {"pct": 10}}` |
 | `GET /alerts` | Alert history |

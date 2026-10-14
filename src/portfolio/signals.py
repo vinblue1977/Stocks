@@ -8,7 +8,7 @@ from typing import Any
 from portfolio import indicators
 
 TRADING_DAYS_PER_YEAR = 252
-HISTORY_DAYS = 450  # calendar days of prices a snapshot needs: a 200-day average plus a 1-year high
+HISTORY_DAYS = 1130  # calendar days of prices a snapshot needs: 3-year return (plus holidays), 200-day average
 
 
 def _round(value: float | None, digits: int = 4) -> float | None:
@@ -41,7 +41,7 @@ def compute_signals(
         "vs_sma50": _round(indicators.pct_change(price, sma50)),
         "vs_sma200": _round(indicators.pct_change(price, sma200)),
         "drawdown_from_high": _round(indicators.drawdown_from_high(closes, TRADING_DAYS_PER_YEAR)),
-        "return_1y": _round(indicators.trailing_return(closes, TRADING_DAYS_PER_YEAR)),
+        **{k: _round(v) for k, v in indicators.period_returns(history).items()},  # 3M/6M/YTD/1Y/3Y by calendar date
         "sentiment_7d": _round(sentiment_7d, 3),
         "smas": {str(w): _round(indicators.sma(closes, w)) for w in sorted(set(extra_sma_windows))},
     }

@@ -24,13 +24,19 @@ def sync_ticker(ticker: str, repo: Repository, provider: PriceProvider, today: d
 
     If a backfill is interrupted, the marker is missing and the next run reloads the full history,
     so a partial load can't leave a permanent gap.
+
+    Stored closes are dividend- and split-adjusted as of when they were loaded. When a new day brings a
+    dividend or split, the whole history is reloaded so earlier closes reflect it and returns stay total returns.
     """
     last = repo.latest_price_date(ticker)
     if last and repo.backfill_complete(ticker):
         start = date.fromisoformat(last) + timedelta(days=1)
         if start > today:
             return 0
-        return repo.put_prices(ticker, provider.daily_prices(ticker, start.isoformat()))
+        rows = provider.daily_prices(ticker, start.isoformat())
+        if not any(r.get("div_cash") or r.get("split_factor", 1) != 1 for r in rows):
+            return repo.put_prices(ticker, rows)
+        log(logger, "price_history_readjusted", ticker=ticker)
 
     rows = provider.daily_prices(ticker, (today - timedelta(days=365 * get_config().history_years)).isoformat())
     written = repo.put_prices(ticker, rows)
