@@ -49,9 +49,22 @@ function tile(label, value, sub, cls = '') {
     h('div', { class: `tile-sub ${cls}`, text: sub }));
 }
 
-/** Live during market hours (intraday quotes every 15 min), otherwise the last close. */
+/** Minutes since midnight in New York (market time). */
+function nyMinutes(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(date);
+  const part = (type) => Number(parts.find((p) => p.type === type)?.value || 0);
+  return part('hour') * 60 + part('minute');
+}
+
+/** Live during market hours (intraday quotes every 15 min), otherwise the last close. Between the
+ *  close and the evening price sync the last quotes stay, and are labeled as closing prices.
+ *  Whether the market is open comes from the server, not this device's clock. */
 function pricesNote(data) {
-  if (data.live_as_of) return `Live prices as of ${fmt.time(data.live_as_of)} · updates every 15 min`;
+  if (data.live_as_of) {
+    return data.market?.open === false
+      ? `Market closed · prices as of ${fmt.time(data.live_as_of)} · official close added this evening`
+      : `Live prices as of ${fmt.time(data.live_as_of)} · updates every 15 min`;
+  }
   return data.as_of ? `Prices as of ${fmt.date(data.as_of)} close` : 'Waiting for the first price sync';
 }
 
@@ -66,9 +79,7 @@ function marketBanner(data) {
       lastClose ? ` Prices are from the last close (${lastClose}).` : '');
   }
   if (m.early_close) {
-    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(new Date());
-    const part = (type) => Number(parts.find((p) => p.type === type)?.value || 0);
-    if (part('hour') * 60 + part('minute') > 13 * 60) {
+    if (nyMinutes() >= 13 * 60) {
       return h('div', { class: 'market-banner', role: 'status', 'data-market-closed': '' }, h('strong', { text: 'Markets closed early today, at 1:00 PM ET.' }),
         ' Prices are from that close until the evening update stores it.');
     }

@@ -153,7 +153,7 @@ def test_portfolio_uses_intraday_quote_until_the_close_is_stored(repo):
     moves = {p["ticker"]: (p["day_change"], p["day_change_pct"]) for p in body["portfolios"]["mine"]["stocks"]["positions"]}
     assert moves == {"VTI": (20.0, pytest.approx(0.0155, abs=1e-4)), "FUND": (0.0, 0.0)}
     assert body["live_as_of"] == quote["timestamp"]
-    assert set(body["market"]) == {"date", "holiday", "early_close"}
+    assert set(body["market"]) == {"date", "holiday", "early_close", "open"}
     assert len(overall["history"]) == 30  # the chart stays on closing prices
 
     # A quote from an earlier day (e.g. the evening sync failed) is not shown as live.

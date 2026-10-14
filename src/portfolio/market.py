@@ -85,6 +85,6 @@ def market_open(now: datetime) -> bool:
 
 
 def market_status(now: datetime) -> dict[str, object]:
-    """Today's session for the dashboard: a holiday's name, or whether it closes early."""
+    """Today's session for the dashboard: a holiday's name, whether it closes early, and whether it's open now."""
     day = trading_day(now)
-    return {"date": day.isoformat(), "holiday": holiday(day), "early_close": early_close(day)}
+    return {"date": day.isoformat(), "holiday": holiday(day), "early_close": early_close(day), "open": market_open(now)}
