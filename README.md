@@ -50,7 +50,7 @@ All routes need `Authorization: Bearer <Cognito token>`.
 Needs the AWS CLI, Python 3.13+, Node 20+, free [Tiingo](https://www.tiingo.com/) and [Finnhub](https://finnhub.io/) keys, and access to Claude on Bedrock. Defaults target **us-east-2** with Claude Haiku 4.5 through the `us.` cross-region inference profile, so requests may be processed in us-east-1, us-east-2 or us-west-2.
 
 ```bash
-make install && make test
+make install && npm ci --ignore-scripts && make lint test   # npm only for ESLint (dev)
 
 # Store API keys (read -s keeps them out of shell history)
 read -rs K && aws ssm put-parameter --name /portfolio-tracker/tiingo-api-key --type SecureString --value "$K"

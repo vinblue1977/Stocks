@@ -1,7 +1,7 @@
 // Push-only service worker: shows notifications and opens the app when one is tapped.
 // It deliberately has no fetch handler, so it never caches pages or data (nothing can go stale).
 self.addEventListener('push', (event) => {
-  let data = {};
+  let data;
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data && event.data.text() }; }
   event.waitUntil(self.registration.showNotification(data.title || 'Portfolio Tracker', {
     body: data.body || '',

@@ -1,0 +1,14 @@
+{
+  "name": "portfolio-tracker-dev",
+  "private": true,
+  "description": "Dev tools only (ESLint for web/js); nothing here ships to AWS.",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint web"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.11.0",
+    "globals": "17.12.0"
+  }
+}

@@ -1,4 +1,4 @@
-# Weekly update PRs for GitHub Actions (keeps the pinned commit SHAs current) and Python dependencies.
+# Weekly update PRs for GitHub Actions (keeps the pinned commit SHAs current), Python dependencies and ESLint.
 # Titles follow Conventional Commits ("ci(deps): ...", "build(deps): ...") to pass the PR title check.
 version: 2
 updates:
@@ -34,3 +34,16 @@ updates:
       # anthropic is capped <2 in layer/requirements.txt; a new major needs a deliberate upgrade.
       - dependency-name: anthropic
         versions: [">=2.0.0"]
+  # ESLint and its config packages (package.json; dev only, nothing ships).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7  # skip releases younger than a week (time for a bad release to be caught and pulled)
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      eslint:
+        patterns: ["*"]

@@ -86,7 +86,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 - Restore drill: point-in-time restore of the table to a test copy.
 
 ## CI ideas
-- ESLint for `web/js`.
 - Type checking for Python (mypy or pyright).
 - Accessibility check of the dashboard pages (axe) on PRs.
 - Yearly reminder to rotate the Tiingo and Finnhub API keys.
@@ -108,7 +107,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 40 | NYSE holidays and early closes, closed-market banner | #48, #54 |
 | 8 | Earnings calendar | #50 |
 | — | Overview redesign: performance by holding, donut, sortable Holdings; SPY removed | #39, #49 |
-| — | CI: smoke test, weekly audit, dependency review, workflow lint | #33, #51 |
+| — | CI: smoke test, weekly audit, dependency review, workflow lint, ESLint | #33, #51, #64 |
 | — | `cost_basis` → `avg_cost` rename finished (old name removed from stored holdings) | #59, #60 |
 
 Finished items move here with their PR; numbers don't change.

@@ -11,9 +11,10 @@ install:            ## Create the virtualenv and install everything
 layer:              ## Build the Lambda dependency layer (arm64, Python 3.13)
 	PYTHON=$(PYTHON) scripts/build_layer.sh
 
-lint:
+lint:               ## Python (ruff) and the dashboard's JavaScript (ESLint; run `npm ci` once first)
 	$(PYTHON) -m ruff check .
 	$(PYTHON) -m ruff format --check .
+	npx --no-install eslint web
 
 test:
 	$(PYTHON) -m pytest
