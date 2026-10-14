@@ -29,3 +29,8 @@ Accepted cdk-nag exceptions and their reasons are in [`infra/nag.py`](../infra/n
 4. **WAF and custom domain:** add AWS WAF (about $6+/month) and a custom domain with an ACM certificate to enforce TLS 1.2+ on the dashboard.
 5. **CI:** done: Actions are pinned to commit SHAs, the runner is pinned, and Dependabot proposes weekly updates.
 6. **Deploy role:** done: the OIDC role (`githubDeploy`) trusts only this repo's `production` environment, which allows only `main`, and can only assume the CDK bootstrap roles.
+
+Also:
+- Dashboard pages are served only to `allowedCountries` (this repo: US). The API and Cognito sign-in stay reachable worldwide, protected by sign-in.
+- The API Lambda is capped at 20 concurrent runs, with an alarm on throttling.
+- GitHub (repo settings): every CI check required, admins included; SHA-pinned actions only; private vulnerability reporting on.
