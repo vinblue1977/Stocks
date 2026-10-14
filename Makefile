@@ -7,11 +7,12 @@ install:            ## Create the virtualenv and install everything
 	python3 -m venv .venv
 	$(PYTHON) -m pip install --upgrade pip
 	$(PYTHON) -m pip install -r requirements-dev.txt
+	npm ci --ignore-scripts --no-audit --no-fund  # ESLint for the dashboard (dev only)
 
 layer:              ## Build the Lambda dependency layer (arm64, Python 3.13)
 	PYTHON=$(PYTHON) scripts/build_layer.sh
 
-lint:               ## Python (ruff) and the dashboard's JavaScript (ESLint; run `npm ci` once first)
+lint:               ## Python (ruff) and the dashboard's JavaScript (ESLint)
 	$(PYTHON) -m ruff check .
 	$(PYTHON) -m ruff format --check .
 	npx --no-install eslint web

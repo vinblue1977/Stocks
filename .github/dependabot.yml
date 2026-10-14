@@ -47,3 +47,7 @@ updates:
     groups:
       eslint:
         patterns: ["*"]
+    ignore:
+      # A new ESLint major can change the recommended rules: upgrade deliberately.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
