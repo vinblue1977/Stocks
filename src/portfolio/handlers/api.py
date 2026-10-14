@@ -584,6 +584,11 @@ def get_news(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
 EARNINGS_WINDOW_DAYS = 60
 
 
+def _upcoming(record: dict[str, Any] | None, today: str) -> dict[str, Any] | None:
+    """A stored report date only while it's today or later (a failed nightly refresh keeps the old one)."""
+    return record if record and record.get("date", "") >= today else None
+
+
 def get_earnings(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     """Upcoming earnings for held and watched tickers (funds have none), soonest first, with where each is held."""
     user_id = _user_id(event)
@@ -639,7 +644,7 @@ def list_watchlist(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
                 if brief
                 else None,
                 "news_off": ticker in no_news,
-                "earnings": repo.get_earnings(ticker),
+                "earnings": _upcoming(repo.get_earnings(ticker), today),
             }
         )
     return _response(200, {"watchlist": items, "max": MAX_WATCHLIST})

@@ -463,7 +463,9 @@ class Repository:
         if record is None:
             self.table.delete_item(Key=key)
         else:
-            self.table.put_item(Item=to_dynamo({**key, **record, "fetched_at": _now_iso()}))
+            # Expires a week after the report date, so a ticker no longer tracked doesn't leave a row forever.
+            expires = int(datetime.fromisoformat(f"{record['date']}T00:00:00+00:00").timestamp()) + 7 * 86400
+            self.table.put_item(Item=to_dynamo({**key, **record, "fetched_at": _now_iso(), "expires_at": expires}))
 
     def get_earnings(self, ticker: str) -> dict[str, Any] | None:
         item = self.table.get_item(Key={"pk": f"EARNINGS#{ticker}", "sk": "NEXT"}).get("Item")

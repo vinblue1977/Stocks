@@ -607,10 +607,11 @@ def test_nightly_earnings_refresh(repo):
                 raise RuntimeError("finnhub down")
             return {"date": "2026-11-17", "hour": "amc", "eps_estimate": 2.53} if ticker == "NVDA" else None
 
-    for ticker in ("NVDA", "SMH", "BAD"):
+    news_ingest.EARNINGS_PAUSE_SECONDS = 0
+    for ticker in ("NVDA", "AMZN", "BAD", "SMH"):
         repo.put_holding("u1", {"ticker": ticker, "shares": 1, "avg_cost": 1})
     repo.put_earnings("BAD", {"date": "2026-11-01", "hour": None, "eps_estimate": None})
     result = news_ingest.handler({}, None, repo=repo, provider=Earnings(), summarizer=FakeSummarizer)
-    assert repo.get_earnings("NVDA")["date"] == "2026-11-17" and repo.get_earnings("SMH") is None
+    assert repo.get_earnings("NVDA")["date"] == "2026-11-17" and repo.get_earnings("AMZN") is None
     assert repo.get_earnings("BAD")["date"] == "2026-11-01"  # a failed lookup keeps yesterday's date
     assert result is not None

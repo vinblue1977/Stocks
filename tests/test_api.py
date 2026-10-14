@@ -729,9 +729,11 @@ def test_unreadable_position_does_not_break_realized(repo):
 
 
 def test_upcoming_earnings(repo):
+    from datetime import UTC, datetime
+
     from portfolio.market import trading_day
 
-    today = trading_day(__import__("datetime").datetime.now(__import__("datetime").UTC))
+    today = trading_day(datetime.now(UTC))
     soon, later = (today + timedelta(days=5)).isoformat(), (today + timedelta(days=80)).isoformat()
     repo.put_holding("user-1", {"ticker": "NVDA", "group": "stocks", "shares": 1, "avg_cost": 1})
     repo.put_holding("user-1", {"ticker": "AVGO", "group": "partner_stocks", "shares": 1, "avg_cost": 1})

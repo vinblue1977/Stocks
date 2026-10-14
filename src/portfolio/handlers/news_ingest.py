@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from portfolio import llm
+from portfolio import buckets, llm
 from portfolio.config import get_config
 from portfolio.db import Repository
 from portfolio.logs import get_logger, log
@@ -178,6 +179,7 @@ def _active_rule_details(repo: Repository) -> list[dict[str, Any]]:
 
 
 EARNINGS_DAYS = 90
+EARNINGS_PAUSE_SECONDS = 1.0
 
 
 def refresh_earnings(repo: Repository, provider: NewsProvider, now: datetime) -> int:
@@ -188,11 +190,14 @@ def refresh_earnings(repo: Repository, provider: NewsProvider, now: datetime) ->
     start, end = now.date().isoformat(), (now.date() + timedelta(days=EARNINGS_DAYS)).isoformat()
     found = 0
     for ticker in repo.tracked_tickers():
+        if buckets.is_fund(ticker):
+            continue  # funds don't report earnings: no call needed
         try:
             record = lookup(ticker, start, end)
+            repo.put_earnings(ticker, record)
         except Exception:
-            logger.exception("earnings lookup failed")  # keep the stored date; try again tomorrow
+            logger.exception("earnings refresh failed")  # keep the stored date; try again tomorrow
             continue
-        repo.put_earnings(ticker, record)
         found += record is not None
+        time.sleep(EARNINGS_PAUSE_SECONDS)  # spread the calls: Finnhub's free tier allows 60 a minute
     return found

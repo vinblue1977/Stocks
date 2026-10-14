@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { donut, valueChart } from '../charts.js';
 import { GROUPS, KINDS, groupChip, groupLabel, hasPartner, personName, portfolioTitle, possessive } from '../groups.js';
-import { add, fill, fmt, h, icon, pageHead, tone } from '../ui.js';
+import { EARNINGS_HOUR, add, fill, fmt, h, icon, pageHead, tone } from '../ui.js';
 
 const RANGES = { '1M': 22, '3M': 66, '1Y': 252, All: Infinity };
 /** A group's color, from the same CSS tokens as its chip (Stock Holdings blue, Automatic Investment sand). */
@@ -21,12 +21,11 @@ let earnings = []; // upcoming earnings reports (GET /earnings), refreshed with 
  *  let a failure take down the Overview; Performance then shows "—". */
 async function loadReturns() {
   if (Date.now() - returnsAt < 60 * 60 * 1000) return;
-  try {
-    const [signalsRes, earningsRes] = await Promise.all([api('GET', '/signals'), api('GET', '/earnings')]);
-    returns = new Map(signalsRes.signals.map((s) => [s.ticker, s]));
-    earnings = earningsRes.earnings;
-    returnsAt = Date.now();
-  } catch { /* keep what we had */ }
+  // Each loads on its own, so one failing doesn't blank the other.
+  const [signalsRes, earningsRes] = await Promise.allSettled([api('GET', '/signals'), api('GET', '/earnings')]);
+  if (signalsRes.status === 'fulfilled') returns = new Map(signalsRes.value.signals.map((s) => [s.ticker, s]));
+  if (earningsRes.status === 'fulfilled') earnings = earningsRes.value.earnings;
+  if (signalsRes.status === 'fulfilled' && earningsRes.status === 'fulfilled') returnsAt = Date.now();
 }
 
 /** Replaces a card after one of its buttons was pressed, keeping keyboard focus on the same button. */
@@ -176,7 +175,6 @@ function compactMoney(v) {
   return fmt.money(v);
 }
 
-const EARNINGS_HOUR = { bmo: 'Before the open', amc: 'After the close', dmh: 'During market hours' };
 
 /** Next earnings reports for held and watched stocks (funds don't report). Hidden when there are none. */
 function earningsCard() {
@@ -193,7 +191,7 @@ function earningsCard() {
     h('div', null, earnings.map((e) => {
       const n = daysAway(e.date);
       return h('div', { class: 'er' },
-        h('span', { class: 'er-day' }, fmt.date(e.date).replace(/, \d{4}$/, ''), h('small', { class: n <= 7 ? 'soon' : null, text: n <= 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days` })),
+        h('span', { class: 'er-day' }, fmt.shortDate(e.date), h('small', { class: n <= 7 ? 'soon' : null, text: n <= 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days` })),
         h('strong', { text: e.ticker }),
         h('span', null, e.hour ? EARNINGS_HOUR[e.hour] : 'Time not announced', h('div', { class: 'xsmall muted', text: e.where.map(whereLabel).join(', ') })),
         h('span', { class: 'er-est mono small muted', text: e.eps_estimate == null ? '' : `EPS est. ${fmt.money(e.eps_estimate)}` }));

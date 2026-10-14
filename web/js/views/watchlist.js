@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { fill, fmt, h, pageHead, sentimentTag, toast, tone } from '../ui.js';
+import { EARNINGS_HOUR, fill, fmt, h, pageHead, sentimentTag, toast, tone } from '../ui.js';
 
 let confirming = null; // ticker whose Remove is waiting for confirmation
 
@@ -39,7 +39,7 @@ function row(item, rules, main) {
     h('td', { class: tone(sg.vs_sma200), text: fmt.signedPct(sg.vs_sma200, 1) }),
     h('td', { class: tone(news), text: fmt.score(news) }),
     h('td', { class: 'text' }, item.earnings
-      ? [fmt.date(item.earnings.date).replace(/, \d{4}$/, ''), h('div', { class: 'xsmall muted', text: { bmo: 'before the open', amc: 'after the close', dmh: 'during market hours' }[item.earnings.hour] || '' })]
+      ? [fmt.shortDate(item.earnings.date), h('div', { class: 'xsmall muted', text: (EARNINGS_HOUR[item.earnings.hour] || '').toLowerCase() })]
       : h('span', { class: 'muted', text: '—' })),
     h('td', { class: 'text' }, rulesCell(rules)),
     h('td', null, remove));
