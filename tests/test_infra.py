@@ -483,3 +483,18 @@ def test_web_app_manifest_is_installable():
     bg = re.search(r"--bg: (#[0-9A-Fa-f]{6})", (web / "styles.css").read_text()).group(1)
     assert manifest["background_color"] == manifest["theme_color"] == bg
     assert f'name="theme-color" content="{bg}"' in html
+
+
+def test_api_concurrency_is_capped(template):
+    api = next(f for f in app_functions(template) if f["Properties"]["Handler"].endswith("api.handler"))
+    assert api["Properties"]["ReservedConcurrentExecutions"] == 10
+
+
+def test_geo_restriction_is_opt_in(template, tmp_path_factory):
+    def geo(t):
+        dist = next(iter(t.find_resources("AWS::CloudFront::Distribution").values()))
+        return dist["Properties"]["DistributionConfig"].get("Restrictions")
+
+    assert geo(template) is None  # default: open everywhere
+    us = synth(tmp_path_factory, allowedCountries=["US"])
+    assert geo(us) == {"GeoRestriction": {"Locations": ["US"], "RestrictionType": "whitelist"}}

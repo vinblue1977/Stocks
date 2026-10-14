@@ -81,6 +81,7 @@ Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <Pi
 | `alertEmail` | none | Alerts, reports, alarms, budget warnings |
 | `allowedOrigins` | `localhost:5173` | CORS origins |
 | `ownerName` / `partnerName` | none | Names on the portfolio pages and weekly email, e.g. `-c ownerName=Alex -c partnerName=Sam` (or `make deploy OWNER_NAME=Alex PARTNER_NAME=Sam`); the partner page appears only when `partnerName` is set. Pass them at deploy time rather than committing them; they're served only to signed-in users |
+| `allowedCountries` | `["US"]` | Countries that can load the dashboard (CloudFront geo restriction); `[]` allows all |
 | `newsExcludedTickers` | `["ITOT", "MGV", "DGRO", "DVY", "IWB", "ONEQ", "SPYD"]` | Tickers to skip when fetching news (e.g. broad index funds with no headlines); price signals still apply |
 | `intradayQuotes` | `true` | Fetch intraday prices every 15 minutes while the US market is open (one Tiingo request for all tickers, about 27 a day). `false` shows closing prices only |
 | `partnerNews` | `true` (this repo's `cdk.json`: `false`) | `false` skips news for the partner's tickers unless the owner also holds them. Price signals and price-based alerts still apply; `sentiment_below` rules on those tickers can't fire |

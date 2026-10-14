@@ -108,6 +108,7 @@ class PortfolioTrackerStack(Stack):
 
         alert_email: str | None = self.node.try_get_context("alertEmail")
         allowed_origins: list[str] = self.node.try_get_context("allowedOrigins") or ["http://localhost:5173"]
+        allowed_countries: list[str] = self.node.try_get_context("allowedCountries") or []
         model_id: str = self.node.try_get_context("bedrockModelId") or "us.anthropic.claude-haiku-4-5-20251001-v1:0"
         bedrock_api: str = self.node.try_get_context("bedrockApi") or "runtime"
         if bedrock_api not in ("runtime", "mantle"):
@@ -275,6 +276,8 @@ class PortfolioTrackerStack(Stack):
             ),
             default_root_object="index.html",
             price_class=cloudfront.PriceClass.PRICE_CLASS_100,  # North America and Europe edges: cheapest
+            # Only these countries can load the dashboard (CloudFront geo restriction, free). [] = everywhere.
+            geo_restriction=cloudfront.GeoRestriction.allowlist(*allowed_countries) if allowed_countries else None,
             http_version=cloudfront.HttpVersion.HTTP2_AND_3,
             comment="Portfolio Tracker dashboard",
         )
@@ -379,7 +382,9 @@ class PortfolioTrackerStack(Stack):
             "PARTNER_NAME": partner_name,
         }
 
-        def make_function(name: str, handler: str, timeout: int, memory: int = 256) -> lambda_.Function:
+        def make_function(
+            name: str, handler: str, timeout: int, memory: int = 256, max_concurrency: int | None = None
+        ) -> lambda_.Function:
             log_group = logs.LogGroup(
                 self,
                 f"{name}Logs",
@@ -403,6 +408,7 @@ class PortfolioTrackerStack(Stack):
                 log_group=log_group,
                 logging_format=lambda_.LoggingFormat.JSON,
                 recursive_loop=lambda_.RecursiveLoop.TERMINATE,
+                reserved_concurrent_executions=max_concurrency,
             )
 
         def ssm_param_arn(name: str) -> str:
@@ -460,7 +466,8 @@ class PortfolioTrackerStack(Stack):
         for statement in bedrock_statements(bedrock_api, checkup_model):
             monthly.add_to_role_policy(statement)
 
-        api_fn = make_function("Api", "api", timeout=15, memory=512)
+        # At most 10 copies at once: a flood of requests can't scale up cost or database load (two people use it).
+        api_fn = make_function("Api", "api", timeout=15, memory=512, max_concurrency=10)
         api_fn.add_environment("PRICE_SYNC_FUNCTION_NAME", price_sync.function_name)
         table.grant_read_write_data(api_fn)
         price_sync.grant_invoke(api_fn)
