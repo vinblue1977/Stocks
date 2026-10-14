@@ -133,10 +133,8 @@ def put_holding(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     if kind_of(group) == "stocks" and repo.list_txns(user_id, group, ticker):
         raise ApiError(409, f"{ticker} has recorded transactions here; record a buy or sale instead of setting totals")
     body = _body(event)
-    if body.get("cost_basis") is not None:  # the field's old name, still accepted
-        if body.get("avg_cost") is not None:
-            raise ApiError(400, "Send avg_cost only (cost_basis is its old name)")
-        body["avg_cost"] = body["cost_basis"]
+    if body.get("cost_basis") is not None:
+        raise ApiError(400, "cost_basis was renamed: send avg_cost (per share) or total_cost")
     shares = _number(body, "shares", 0.000001, 1_000_000_000)
     holding: dict[str, Any] = {
         "ticker": ticker,
