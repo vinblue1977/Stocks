@@ -378,25 +378,29 @@ function savedOverview() {
   return null;
 }
 
-/** Draws the saved Overview with an "Updating…" note while the fresh data loads. Returns false if there is none. */
-export function renderSavedOverview(main) {
+/** Draws the saved Overview, marked with its age, while fresh data loads (or after loading failed).
+ *  Returns false if there is none. */
+export function renderSavedOverview(main, failed = false) {
   const saved = savedOverview();
   if (!saved) return false;
-  if (!returnsAt) {
+  if (!returns.size) {
     returns = new Map((saved.returns || []).map((r) => [r.ticker, r]));
     earnings = saved.earnings || [];
   }
-  drawOverview(main, saved.data, saved.rules, true);
+  // Saved live prices are no longer live, and a saved holiday banner may be yesterday's: drop both.
+  const data = { ...saved.data, live_as_of: null, market: null };
+  drawOverview(main, data, saved.rules, `Saved ${fmt.ago(new Date(saved.at).toISOString())} · ${failed ? "couldn't update" : 'Updating…'}`);
   return true;
 }
 
 export async function renderOverview(main) {
   const [data, rulesRes] = await Promise.all([api('GET', '/portfolio'), api('GET', '/rules'), loadReturns()]);
   saveOverview(data, rulesRes.rules);
-  drawOverview(main, data, rulesRes.rules, false);
+  drawOverview(main, data, rulesRes.rules, null);
 }
 
-function drawOverview(main, data, rules, updating) {
+/** `savedNote` marks a saved copy shown instead of fresh data. */
+function drawOverview(main, data, rules, savedNote) {
   const { portfolios } = data;
   if (!hasPartner()) person = 'household';
   if (!portfolios.household.overall.positions.length) {
@@ -418,7 +422,7 @@ function drawOverview(main, data, rules, updating) {
         })))
       : null;
     fill(main,
-      liveMarker(pageHead('Overview', `${pricesNote(data)}${updating ? ' · Updating…' : ''}`, switcher), data.live_as_of),
+      liveMarker(pageHead('Overview', savedNote ? `${pricesNote(data)} · ${savedNote}` : pricesNote(data), switcher), data.live_as_of),
       marketBanner(data),
       summaryTable(portfolios[person], data.live_as_of ? 'Today' : 'Last day'),
       h('section', { class: 'tiles', 'aria-label': `Summary for ${viewLabel()}` },

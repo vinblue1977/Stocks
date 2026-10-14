@@ -85,7 +85,10 @@ async function route({ quiet = false } = {}) {
   } catch (e) {
     if (quiet) return; // retried on the next check
     if (showedSaved) {
-      if (seq === renderSeq) main.prepend(errorCard(`Couldn't update: ${e.message}. These are the last saved numbers.`));
+      if (seq === renderSeq) {
+        renderSavedOverview(page, true);
+        main.replaceChildren(errorCard(`Couldn't update: ${e.message}`), page);
+      }
       return;
     }
     page.replaceChildren(errorCard(`Something went wrong: ${e.message}`));

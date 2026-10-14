@@ -90,6 +90,7 @@ def evaluate(rule: Mapping[str, Any], signal: Mapping[str, Any], weight: float |
         level = float(p["price"])
         if price is None:
             return False, "No price yet"
+        price = round(price, 2)  # compare what the message shows, so it never reads "$200.00, below your $200.00"
         hit = price < level if t == "price_below" else price > level
         side = "below" if price < level else "above" if price > level else "at"
         return hit, f"{ticker} closed at ${price:,.2f}, {side} your ${level:,.2f} level"

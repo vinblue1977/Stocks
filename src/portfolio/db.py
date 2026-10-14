@@ -427,20 +427,40 @@ class Repository:
             Item={"pk": f"PRICEMETA#{ticker}", "sk": "BACKFILL", "oldest_date": oldest or "", "completed_at": _now_iso()}
         )
 
-    def price_history(self, ticker: str, since: str | None = None) -> list[tuple[str, float]]:
+    def price_history(self, ticker: str, since: str | None = None, query: Any = None) -> list[tuple[str, float]]:
         condition = Key("pk").eq(f"PRICE#{ticker}")
         if since:
             condition = condition & Key("sk").gte(since)
-        items = self._query_all(
-            KeyConditionExpression=condition, ProjectionExpression="sk, #c", ExpressionAttributeNames={"#c": "close"}
-        )
-        return [(i["sk"], float(i["close"])) for i in items]
+        kwargs: dict[str, Any] = {
+            "KeyConditionExpression": condition,
+            "ProjectionExpression": "sk, #c",
+            "ExpressionAttributeNames": {"#c": "close"},
+        }
+        items: list[dict[str, Any]] = []
+        while True:
+            response = (query or self.table.query)(**kwargs)
+            items.extend(response.get("Items", []))
+            if "LastEvaluatedKey" not in response:
+                return [(i["sk"], float(i["close"])) for i in items]
+            kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
 
     def price_histories(self, tickers: Iterable[str], since: str | None = None) -> dict[str, list[tuple[str, float]]]:
-        """price_history for many tickers at once, queried side by side (pages load faster)."""
+        """price_history for many tickers at once, queried side by side (pages load faster).
+
+        The threads share the Table's client, which is thread-safe (the Table resource is not). It is the
+        resource's own client, so it still takes and returns plain Python values.
+        """
+        client = self.table.meta.client
+        name = self.table.name
+
+        def one(ticker: str) -> list[tuple[str, float]]:
+            return self.price_history(ticker, since, query=lambda **kw: client.query(TableName=name, **kw))
+
         tickers = sorted(set(tickers))
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            return dict(zip(tickers, pool.map(lambda t: self.price_history(t, since), tickers), strict=True))
+        if len(tickers) <= 1:
+            return {t: self.price_history(t, since) for t in tickers}
+        with ThreadPoolExecutor(max_workers=min(8, len(tickers))) as pool:
+            return dict(zip(tickers, pool.map(one, tickers), strict=True))
 
     # ---------- news ----------
     def put_news(self, ticker: str, articles: Iterable[Mapping[str, Any]]) -> int:

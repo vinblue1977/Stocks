@@ -78,6 +78,7 @@ def test_needed_sma_windows():
         ("price_below", 205.0, False, "above"),
         ("price_above", 205.0, True, "above"),
         ("price_above", 200.0, False, "at"),
+        ("price_below", 199.996, False, "at"),  # rounds to the $200.00 shown
     ],
 )
 def test_price_level_rules(rule_type, close, hit, side):

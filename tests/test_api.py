@@ -775,3 +775,12 @@ def test_push_subscriptions(repo, monkeypatch):
     assert call(repo, "PUT /push", body=json.dumps(_sub()))[0] == 200  # same device at the cap: still fine
     assert call(repo, "PUT /push", body=json.dumps(_sub("https://web.push.apple.com/other")))[0] == 409
     assert call(repo, "DELETE /push", body=json.dumps({"endpoint": _sub()["endpoint"]}))[1] == {"devices": 0}
+
+
+def test_price_histories_match_one_at_a_time(repo):
+    for ticker, start in (("VTI", 100), ("AMZN", 200), ("NVDA", 50)):
+        repo.put_prices(ticker, price_series(start, 1, 5, "2026-01-01"))
+    for since in (None, "2026-01-03"):
+        assert repo.price_histories(["VTI", "AMZN", "NVDA", "VTI"], since) == {
+            t: repo.price_history(t, since) for t in ("AMZN", "NVDA", "VTI")
+        }
