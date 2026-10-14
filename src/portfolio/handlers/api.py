@@ -679,10 +679,11 @@ def get_insights(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     """Analyst ratings and insider trades for held and watched stocks (funds have none), with where each is held."""
     user_id = _user_id(event)
     held = {h["ticker"] for h in repo.list_holdings(user_id)}
-    watched = repo.watched_tickers(user_id) - held
+    watched = repo.watched_tickers(user_id)  # a ticker can be both: it then shows on both pages
+    stored = repo.get_insights_many(held | watched)
     insights = []
     for ticker in sorted(held | watched):
-        record = repo.get_insights(ticker)
+        record = stored.get(ticker)
         if record and (record.get("analysts") or record.get("insiders")):
             insights.append(
                 {

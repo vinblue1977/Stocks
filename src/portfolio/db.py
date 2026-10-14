@@ -495,8 +495,20 @@ class Repository:
         self.table.put_item(Item=to_dynamo(item))
 
     def get_insights(self, ticker: str) -> dict[str, Any] | None:
-        item = self.table.get_item(Key={"pk": f"INSIGHT#{ticker}", "sk": "LATEST"}).get("Item")
-        return _clean(item) if item else None
+        return self.get_insights_many([ticker]).get(ticker)
+
+    def get_insights_many(self, tickers: Iterable[str]) -> dict[str, dict[str, Any]]:
+        """Stored insights for many tickers in one or two batch reads (pages load faster than one read each)."""
+        keys = [{"pk": f"INSIGHT#{t}", "sk": "LATEST"} for t in sorted(set(tickers))]
+        client, name, found = self.table.meta.client, self.table.name, {}
+        for start in range(0, len(keys), 100):  # BatchGetItem's limit
+            request = {name: {"Keys": keys[start : start + 100]}}
+            while request:
+                response = client.batch_get_item(RequestItems=request)
+                for item in response["Responses"].get(name, []):
+                    found[item["pk"].removeprefix("INSIGHT#")] = _clean(item)
+                request = response.get("UnprocessedKeys") or None
+        return found
 
     # ---------- intraday quotes ----------
     def put_quotes(self, quotes: Mapping[str, Mapping[str, Any]]) -> None:

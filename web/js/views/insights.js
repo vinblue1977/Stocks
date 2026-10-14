@@ -29,30 +29,30 @@ function buyChange(analysts) {
   return diff ? `${diff > 0 ? '+' : '−'}${Math.abs(diff)} Buy vs. ${monthName(first.period)}` : `No change since ${monthName(first.period)}`;
 }
 
-const tradeCell = (value, count) => (count ? `${compact(value)} · ${count}` : '—');
+/** "$1M · 2"; when a trade has no price its dollars are unknown, so the total is marked as at least that. */
+const tradeCell = (value, count, unpriced) => (count ? `${unpriced ? '≥ ' : ''}${compact(value)} · ${count}` : '—');
 
 /** One row per stock; tapping a ticker opens its detail on News & signals. */
 export function insightsCard(items, { id, subtitle, footnote = '' }) {
   if (!items.length) return null;
-  const latest = items.find((i) => i.analysts?.length)?.analysts[0];
   const rows = items.map((item) => {
     const a = item.analysts?.[0];
     const ins = item.insiders || {};
     return h('tr', null,
       h('td', { class: 'text' }, h('a', { href: `#/news?ticker=${encodeURIComponent(item.ticker)}`, text: item.ticker })),
       h('td', { class: 'text' }, a
-        ? [ratingBar(a), h('div', { class: 'xsmall muted mono', text: `${a.buy} buy · ${a.hold} hold · ${a.sell} sell` })]
+        ? [ratingBar(a), h('div', { class: 'xsmall muted mono', text: `${monthName(a.period)}: ${a.buy} buy · ${a.hold} hold · ${a.sell} sell` })]
         : h('span', { class: 'muted', text: 'No ratings' })),
       h('td', { class: 'text small', text: buyChange(item.analysts) || '—' }),
-      h('td', { text: tradeCell(ins.bought, ins.buys) }),
-      h('td', { text: tradeCell(ins.sold, ins.sells) }),
+      h('td', { text: tradeCell(ins.bought, ins.buys, ins.unpriced) }),
+      h('td', { text: tradeCell(ins.sold, ins.sells, ins.unpriced) }),
       h('td', { class: 'text small muted', text: ins.routine ? `${ins.routine} other` : '—' }));
   });
   return h('section', { class: 'card', 'aria-labelledby': id },
     h('div', { class: 'card-head' }, h('h2', { id, text: 'Analysts & insiders' }), h('span', { class: 'muted small', text: subtitle })),
     legend(),
     h('div', { class: 'table-wrap', style: { marginTop: '12px' } }, h('table', null,
-      h('thead', null, h('tr', null, [`Stock`, `Analyst ratings${latest ? `, ${monthName(latest.period)}` : ''}`, 'Last 3 months', 'Insiders bought, 90d', 'Insiders sold, 90d', 'Other filings']
+      h('thead', null, h('tr', null, ['Stock', 'Latest analyst ratings', 'Change', 'Insiders bought, 90d', 'Insiders sold, 90d', 'Other filings']
         .map((t, i) => h('th', { scope: 'col', class: i < 3 || i === 5 ? 'text' : null, text: t })))),
       h('tbody', null, rows))),
     h('p', { class: 'xsmall muted', style: { margin: '12px 0 0' }, text: `${NOTE}${footnote}` }));

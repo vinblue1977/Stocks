@@ -115,12 +115,13 @@ def test_parse_insiders_counts_open_market_only():
         ]
     }
     out = parse_insiders(raw, "2026-07-16")
-    assert {k: out[k] for k in ("bought", "buys", "sold", "sells", "routine")} == {
+    assert {k: out[k] for k in ("bought", "buys", "sold", "sells", "routine", "unpriced")} == {
         "bought": 200000,
         "buys": 1,
         "sold": 1006651,
         "sells": 1,
         "routine": 1,
+        "unpriced": 0,
     }
     assert [t["name"] for t in out["trades"]] == ["C", "A", "B"]  # newest first
     assert out["trades"][0] == {"date": "2026-10-07", "name": "C", "code": "G", "shares": 500000, "price": None}

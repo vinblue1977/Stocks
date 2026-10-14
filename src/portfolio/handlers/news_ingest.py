@@ -210,7 +210,8 @@ INSIDER_DAYS = 90
 
 def refresh_insights(repo: Repository, provider: NewsProvider, now: datetime) -> int:
     """Analyst ratings and insider trades for every held or watched stock (two Finnhub calls each); returns how many stored."""
-    if not hasattr(provider, "recommendations"):
+    ratings, trades = getattr(provider, "recommendations", None), getattr(provider, "insider_trades", None)
+    if ratings is None or trades is None:
         return 0
     since = (now.date() - timedelta(days=INSIDER_DAYS)).isoformat()
     stored = 0
@@ -218,10 +219,11 @@ def refresh_insights(repo: Repository, provider: NewsProvider, now: datetime) ->
         if buckets.is_fund(ticker):
             continue  # funds have no analysts or insiders
         try:
-            record = {"analysts": provider.recommendations(ticker), "insiders": provider.insider_trades(ticker, since)}
-            repo.put_insights(ticker, record)
+            analysts = ratings(ticker)
+            time.sleep(EARNINGS_PAUSE_SECONDS)  # one call a second keeps under Finnhub's 60 a minute
+            repo.put_insights(ticker, {"analysts": analysts, "insiders": trades(ticker, since)})
             stored += 1
         except Exception:
-            logger.exception("insights refresh failed")  # keep yesterday's; try again tomorrow
-        time.sleep(EARNINGS_PAUSE_SECONDS * 2)  # two calls per ticker; stays under 60 a minute
+            logger.exception("insights refresh failed for %s", ticker)  # keep yesterday's; try again tomorrow
+        time.sleep(EARNINGS_PAUSE_SECONDS)
     return stored
