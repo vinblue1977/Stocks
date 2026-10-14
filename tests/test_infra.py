@@ -230,7 +230,7 @@ def test_secrets_scoped_to_named_parameters(any_template):
 
 def test_budget_and_alarms(any_template):
     any_template.resource_count_is("AWS::Budgets::Budget", 1)
-    assert len(any_template.find_resources("AWS::CloudWatch::Alarm")) == 8
+    assert len(any_template.find_resources("AWS::CloudWatch::Alarm")) == 9
 
 
 def test_person_names_reach_the_functions(tmp_path_factory):
@@ -487,7 +487,7 @@ def test_web_app_manifest_is_installable():
 
 def test_api_concurrency_is_capped(template):
     api = next(f for f in app_functions(template) if f["Properties"]["Handler"].endswith("api.handler"))
-    assert api["Properties"]["ReservedConcurrentExecutions"] == 10
+    assert api["Properties"]["ReservedConcurrentExecutions"] == 20
 
 
 def test_geo_restriction_is_opt_in(template, tmp_path_factory):
@@ -498,3 +498,5 @@ def test_geo_restriction_is_opt_in(template, tmp_path_factory):
     assert geo(template) is None  # default: open everywhere
     us = synth(tmp_path_factory, allowedCountries=["US"])
     assert geo(us) == {"GeoRestriction": {"Locations": ["US"], "RestrictionType": "whitelist"}}
+    cli = synth(tmp_path_factory, allowedCountries="us, ca")  # as `-c allowedCountries=us,ca` arrives
+    assert geo(cli)["GeoRestriction"]["Locations"] == ["US", "CA"]

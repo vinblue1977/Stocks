@@ -57,6 +57,7 @@ from constructs import Construct
 
 ROOT = Path(__file__).resolve().parent.parent
 PARAM_PREFIX = "/portfolio-tracker"
+API_MAX_CONCURRENCY = 20
 
 
 def bedrock_statements(api: str, model_id: str) -> list[iam.PolicyStatement]:
@@ -108,7 +109,11 @@ class PortfolioTrackerStack(Stack):
 
         alert_email: str | None = self.node.try_get_context("alertEmail")
         allowed_origins: list[str] = self.node.try_get_context("allowedOrigins") or ["http://localhost:5173"]
-        allowed_countries: list[str] = self.node.try_get_context("allowedCountries") or []
+        # A list in cdk.json, or "US,CA" from `-c allowedCountries=...` on the command line.
+        countries_setting = self.node.try_get_context("allowedCountries") or []
+        if isinstance(countries_setting, str):
+            countries_setting = countries_setting.split(",")
+        allowed_countries = [c.strip().upper() for c in countries_setting if c.strip()]
         model_id: str = self.node.try_get_context("bedrockModelId") or "us.anthropic.claude-haiku-4-5-20251001-v1:0"
         bedrock_api: str = self.node.try_get_context("bedrockApi") or "runtime"
         if bedrock_api not in ("runtime", "mantle"):
@@ -466,8 +471,9 @@ class PortfolioTrackerStack(Stack):
         for statement in bedrock_statements(bedrock_api, checkup_model):
             monthly.add_to_role_policy(statement)
 
-        # At most 10 copies at once: a flood of requests can't scale up cost or database load (two people use it).
-        api_fn = make_function("Api", "api", timeout=15, memory=512, max_concurrency=10)
+        # At most 20 copies at once (matches the API's burst limit): a flood of requests can't scale up cost or
+        # database load. Needs an account concurrency quota above the 10 AWS keeps unreserved (default 1,000).
+        api_fn = make_function("Api", "api", timeout=15, memory=512, max_concurrency=API_MAX_CONCURRENCY)
         api_fn.add_environment("PRICE_SYNC_FUNCTION_NAME", price_sync.function_name)
         table.grant_read_write_data(api_fn)
         price_sync.grant_invoke(api_fn)
@@ -731,6 +737,15 @@ class PortfolioTrackerStack(Stack):
                 treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
                 alarm_description=f"{fn.node.id} Lambda errors",
             ).add_alarm_action(alarm_action)
+        cloudwatch.Alarm(
+            self,
+            "ApiThrottlesAlarm",
+            metric=api_fn.metric_throttles(period=Duration.hours(1)),
+            threshold=5,
+            evaluation_periods=1,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+            alarm_description="The API hit its concurrency cap: requests were turned away",
+        ).add_alarm_action(alarm_action)
         cloudwatch.Alarm(
             self,
             "PriceSyncDlqAlarm",
