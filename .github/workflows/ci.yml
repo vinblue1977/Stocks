@@ -23,8 +23,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# A push to main is always a merged PR (branch protection), and PRs must be up to date with main, so the
+# merged files are what the PR's checks tested: checks and workflow-lint skip pushes. Dependency ranges
+# resolve again at deploy time, so the deploy job re-runs the tests and audit on what it installs.
 jobs:
   checks:
+    if: github.event_name != 'push'
     runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
     timeout-minutes: 20
     steps:
@@ -62,6 +66,7 @@ jobs:
 
   # Lints the workflow files: actionlint (syntax, expressions, shell) and zizmor (Actions security).
   workflow-lint:
+    if: github.event_name != 'push'
     runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
     timeout-minutes: 5
     steps:
@@ -124,13 +129,14 @@ jobs:
           BEFORE: ${{ github.event.before }}
 
   deploy:
-    needs: [checks, changes, workflow-lint]
+    needs: [checks, changes, workflow-lint]  # checks/workflow-lint gate manual dispatch only; they skip pushes
     # Auto on merges that change code or infra; manual dispatch stays as a fallback. Main only, and the
     # production environment and the AWS role trust both enforce that too.
     if: >-
-      always() && needs.checks.result == 'success' && needs.workflow-lint.result == 'success' && github.ref == 'refs/heads/main' &&
+      always() && github.ref == 'refs/heads/main' &&
       ((github.event_name == 'push' && needs.changes.outputs.deploy == 'true') ||
-       (github.event_name == 'workflow_dispatch' && inputs.deploy))
+       (github.event_name == 'workflow_dispatch' && inputs.deploy &&
+        needs.checks.result == 'success' && needs.workflow-lint.result == 'success'))
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -165,6 +171,7 @@ jobs:
         run: |
           uv venv --seed --python "$(which python)" .venv
           uv pip install --python .venv/bin/python -r requirements-dev.txt
+          make test audit  # the exact versions being shipped; a release or advisory since the PR stops the deploy
           make layer
           # A missing secret would silently drop the email subscriptions or names, so fail instead.
           : "${ALERT_EMAIL:?set the ALERT_EMAIL secret}" "${OWNER_NAME:?set the OWNER_NAME secret}"
