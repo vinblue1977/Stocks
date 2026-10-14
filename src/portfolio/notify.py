@@ -9,6 +9,9 @@ from typing import Any
 import boto3
 
 from portfolio.config import get_config
+from portfolio.logs import get_logger
+
+logger = get_logger(__name__)
 
 DISCLAIMER = (
     "\n\n--\nThis is an automated alert based on rules you set in Portfolio Tracker. "
@@ -45,3 +48,25 @@ def send_email_with_pdf(subject: str, body: str, filename: str, pdf: bytes) -> N
     message.set_content(body + DISCLAIMER.replace("an automated alert based on rules you set", "your automated monthly checkup"))
     message.add_attachment(pdf, maintype="application", subtype="pdf", filename=filename)
     _ses().send_email(Content={"Raw": {"Data": message.as_bytes()}})
+
+
+def push_to_user(repo: Any, user_id: str, title: str, body: str, url: str = "/#/alerts") -> int:
+    """Send a notification to every phone the user turned notifications on for; drops expired ones."""
+    from portfolio import webpush  # only loaded where notifications are sent
+    from portfolio.secrets import get_secret
+
+    subscriptions = repo.list_push(user_id)
+    if not subscriptions:
+        return 0
+    cfg = get_config()
+    key = get_secret(cfg.vapid_key_param)
+    sent = 0
+    for sub in subscriptions:
+        try:
+            webpush.send(sub, {"title": title, "body": body, "url": url}, key, cfg.vapid_subject)
+            sent += 1
+        except webpush.Gone:
+            repo.delete_push(user_id, sub["endpoint"])  # the phone turned it off or the app was removed
+        except Exception:  # one phone failing must not stop the others or the alert email
+            logger.exception("push failed")
+    return sent

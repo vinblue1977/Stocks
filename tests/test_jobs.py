@@ -98,7 +98,9 @@ def test_news_ingest_scores_and_briefs(repo):
 
 def test_evaluate_signals_alerts_once(repo, monkeypatch):
     sent = []
+    pushed = []
     monkeypatch.setattr(evaluate_signals.notify, "send_email", lambda s, b: sent.append(s))
+    monkeypatch.setattr(evaluate_signals.notify, "push_to_user", lambda repo, user, title, body: pushed.append((user, title)))
     start = (datetime.now(UTC).date() - timedelta(days=300)).isoformat()
     repo.put_holding("u1", {"ticker": "VTI", "shares": 10, "avg_cost": 100})
     repo.put_holding("u1", {"ticker": "BND", "shares": 1, "avg_cost": 70})
@@ -110,6 +112,7 @@ def test_evaluate_signals_alerts_once(repo, monkeypatch):
 
     first = evaluate_signals.handler({}, None, repo=repo)
     assert first["alerts_sent"] == 1 and len(sent) == 1
+    assert pushed == [("u1", "Alert: VTI")]  # the same alert goes to phones with notifications on
     assert repo.get_signal("VTI")["rsi14"] == 100.0
     second = evaluate_signals.handler({}, None, repo=repo)
     assert second["alerts_sent"] == 0  # still true, but no repeat email

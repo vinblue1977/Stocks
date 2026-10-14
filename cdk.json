@@ -36,6 +36,7 @@
     "bedrockApi": "runtime",
     "checkupModelId": "us.anthropic.claude-opus-4-6-v1",
     "allowedCountries": ["US"],
+    "vapidPublicKey": "BFqoLQrRgeTw9vKYkqwi2loQrz_qdfQbBz0vze27GH0ogTL9taS-M5R6lTrc-FKgPeNe0AooszH0Cp7tyuBCUrg",
     "monthlyBudgetUsd": 0,
     "useCustomerManagedKey": false,
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,

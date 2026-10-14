@@ -1,4 +1,5 @@
 import { api, setApiBase } from './api.js';
+import { setConfig } from './config.js';
 import { addPasskeyUrl, currentEmail, hasSession, initAuth, logout } from './auth.js';
 import { KINDS, hasPartner, portfolioTitle, setProfile } from './groups.js';
 import { errorCard, h } from './ui.js';
@@ -129,6 +130,7 @@ function setupAccountMenu() {
 async function start() {
   try {
     const config = await (await fetch('config.json', { cache: 'no-store' })).json();
+    setConfig(config);
     setApiBase(config.apiUrl);
     const signedIn = await initAuth(config);
     if (!signedIn) return; // redirecting to the sign-in page

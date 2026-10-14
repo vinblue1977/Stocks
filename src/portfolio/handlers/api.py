@@ -16,13 +16,14 @@ from typing import Any
 
 import boto3
 
-from portfolio import analytics, buckets, checkup, ledger, rules, signals
+from portfolio import analytics, buckets, checkup, ledger, rules, signals, webpush
 from portfolio.config import get_config
 from portfolio.db import GROUPS, KINDS, PEOPLE, ConcurrentUpdateError, Repository, kind_of, person_of
 from portfolio.llm import sentiment_label
 from portfolio.logs import get_logger, log
 from portfolio.market import market_status, trading_day
 from portfolio.news_policy import news_off
+from portfolio.secrets import get_secret
 
 logger = get_logger(__name__)
 
@@ -30,6 +31,7 @@ MAX_BODY_BYTES = 10_000
 MAX_HOLDINGS = 40  # unique tickers across all groups; keeps the price sync under Tiingo's free 50 requests/hour
 MAX_RULES = 50
 MAX_WATCHLIST = 10
+MAX_PUSH_DEVICES = 10
 MAX_TRACKED = 48  # unique tickers across holdings and the watchlist; stays under Tiingo's free 50 requests/hour
 HISTORY_DAYS = 400  # calendar days of history for the performance chart (about 1 trading year + margin)
 
@@ -582,6 +584,60 @@ def get_news(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     return _response(200, {"brief": brief, "articles": articles[:60], "news_excluded": sorted(excluded)})
 
 
+# ---------------------------------------------------------------- phone notifications (Web Push)
+def _subscription(body: dict[str, Any]) -> dict[str, Any]:
+    endpoint = str(body.get("endpoint") or "")
+    keys = body.get("keys") or {}
+    if not webpush.allowed_endpoint(endpoint) or len(endpoint) > 1000:
+        raise ApiError(400, "endpoint must be a known push service URL")
+    try:
+        p256dh, auth = webpush.unb64url(str(keys["p256dh"])), webpush.unb64url(str(keys["auth"]))
+    except (KeyError, ValueError) as exc:
+        raise ApiError(400, "keys.p256dh and keys.auth are required") from exc
+    if len(p256dh) != 65 or len(auth) != 16:
+        raise ApiError(400, "keys don't look like a push subscription")
+    return {"endpoint": endpoint, "keys": {"p256dh": str(keys["p256dh"]), "auth": str(keys["auth"])}}
+
+
+def get_push(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    return _response(200, {"devices": len(repo.list_push(_user_id(event)))})
+
+
+def put_push(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    user_id = _user_id(event)
+    if len(repo.list_push(user_id)) >= MAX_PUSH_DEVICES:
+        raise ApiError(409, f"Notifications can be on for up to {MAX_PUSH_DEVICES} devices")
+    repo.put_push(user_id, _subscription(_body(event)))
+    return _response(200, {"devices": len(repo.list_push(user_id))})
+
+
+def delete_push(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    user_id = _user_id(event)
+    repo.delete_push(user_id, str(_body(event).get("endpoint") or ""))
+    return _response(200, {"devices": len(repo.list_push(user_id))})
+
+
+def test_push(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """Send a test to this device only (it must be one of the user's)."""
+    user_id = _user_id(event)
+    endpoint = str(_body(event).get("endpoint") or "")
+    sub = next((s for s in repo.list_push(user_id) if s["endpoint"] == endpoint), None)
+    if sub is None:
+        raise ApiError(404, "Notifications aren't on for this device")
+    cfg = get_config()
+    try:
+        webpush.send(
+            sub,
+            {"title": "Portfolio Tracker", "body": "Test notification: notifications are working.", "url": "/#/alerts"},
+            get_secret(cfg.vapid_key_param),
+            cfg.vapid_subject,
+        )
+    except webpush.Gone as exc:
+        repo.delete_push(user_id, endpoint)
+        raise ApiError(410, "This device's notification subscription expired; turn notifications on again") from exc
+    return _response(200, {"sent": True})
+
+
 # ---------------------------------------------------------------- earnings
 EARNINGS_WINDOW_DAYS = 60
 
@@ -766,6 +822,10 @@ ROUTES: dict[str, Route] = {
     "DELETE /groups/{group}/holdings/{ticker}/transactions/{txnId}": delete_transaction,
     "GET /realized": get_realized,
     "GET /earnings": get_earnings,
+    "GET /push": get_push,
+    "PUT /push": put_push,
+    "DELETE /push": delete_push,
+    "POST /push/test": test_push,
     "GET /checkup": get_checkup,
     "GET /targets": get_targets,
     "PUT /targets": put_targets,

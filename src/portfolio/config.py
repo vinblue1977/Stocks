@@ -25,6 +25,8 @@ class Config:
     partner_name: str
     site_url: str
     report_email: str
+    vapid_key_param: str
+    vapid_subject: str
 
 
 @lru_cache(maxsize=1)
@@ -47,4 +49,6 @@ def get_config() -> Config:
         partner_name=os.environ.get("PARTNER_NAME") or "Partner",
         site_url=os.environ.get("SITE_URL", ""),
         report_email=os.environ.get("REPORT_EMAIL", ""),
+        vapid_key_param=os.environ.get("VAPID_KEY_PARAM", "/portfolio-tracker/vapid-private-key"),
+        vapid_subject=os.environ.get("VAPID_SUBJECT", ""),
     )
