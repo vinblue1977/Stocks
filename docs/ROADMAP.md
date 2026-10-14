@@ -105,7 +105,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 4 | Target mix, Checkup page and monthly PDF email | #42, #44 |
 | 7 | Watchlist | #34 |
 | 12 | Install on your phone | #30 |
-| 14 | Push notifications for rule alerts (installed app) | this PR |
+| 14 | Push notifications for rule alerts (installed app) | #55 |
 | 19 | Today's movers | #38 |
 | 40 | NYSE holidays and early closes, closed-market banner | #48, #54 |
 | — | Earnings calendar | #50 |
