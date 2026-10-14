@@ -300,7 +300,7 @@ input.upper { text-transform: uppercase; }
 .insights-fact { margin: 0 0 14px; font-size: 14px; color: var(--text-2); line-height: 1.5; }
 .months { display: grid; grid-template-columns: 40px 1fr auto; gap: 10px 14px; align-items: center; font-size: 13px; }
 /* On a phone the Analysts & insiders table becomes stacked blocks (no sideways scrolling). */
-.ai-stack { display: none; flex-direction: column; margin-top: 8px; }
+.ai-stack { display: none; flex-direction: column; margin-top: 12px; }
 .ai-item { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 12px; padding: 14px 0; border-bottom: 1px solid var(--divider); }
 .ai-item:last-child { border-bottom: 0; }
 .ai-item .abar, .ai-line { grid-column: 1 / -1; }

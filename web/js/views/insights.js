@@ -32,6 +32,14 @@ function buyChange(analysts) {
 /** "$1M · 2"; when a trade has no price its dollars are unknown, so the total is marked as at least that. */
 const tradeCell = (value, count, unpriced) => (count ? `${unpriced ? '≥ ' : ''}${compact(value)} · ${count}` : '—');
 
+/** "Sep: 65 buy · 3 hold · 1 sell", or null when the month has no ratings. */
+function ratingText(a) {
+  return a && a.buy + a.hold + a.sell ? `${monthName(a.period)}: ${a.buy} buy · ${a.hold} hold · ${a.sell} sell` : null;
+}
+// Older stored records have one combined count of trades without a price.
+const unpricedBuys = (ins) => ins.unpriced_buys ?? ins.unpriced;
+const unpricedSells = (ins) => ins.unpriced_sells ?? ins.unpriced;
+
 const tickerLink = (ticker, cls) => h('a', { class: cls, href: `#/news?ticker=${encodeURIComponent(ticker)}`, text: ticker });
 
 /** iPhone layout: one stacked block per stock, so nothing scrolls sideways. */
@@ -39,14 +47,15 @@ function stackedItem(item) {
   const a = item.analysts?.[0];
   const ins = item.insiders || {};
   const trades = [
-    ins.sells ? `sold ${tradeCell(ins.sold, ins.sells, ins.unpriced)}` : null,
-    ins.buys ? `bought ${tradeCell(ins.bought, ins.buys, ins.unpriced)}` : null,
+    ins.buys ? `bought ${tradeCell(ins.bought, ins.buys, unpricedBuys(ins))}` : null,
+    ins.sells ? `sold ${tradeCell(ins.sold, ins.sells, unpricedSells(ins))}` : null,
   ].filter(Boolean);
+  const rating = ratingText(a);
   return h('div', { class: 'ai-item' },
     tickerLink(item.ticker, 'ai-ticker'),
-    h('span', { class: 'xsmall muted', text: buyChange(item.analysts) || '' }),
-    a ? ratingBar(a, true) : null,
-    h('div', { class: 'ai-line', text: a ? `${monthName(a.period)}: ${a.buy} buy · ${a.hold} hold · ${a.sell} sell` : 'No analyst ratings' }),
+    buyChange(item.analysts) ? h('span', { class: 'xsmall muted', text: buyChange(item.analysts) }) : null,
+    rating ? ratingBar(a, true) : null,
+    h('div', { class: 'ai-line', text: rating || 'No analyst ratings' }),
     h('div', { class: 'ai-line' }, 'Insiders, 90d: ', h('b', { text: trades.length ? trades.join(' · ') : 'no open-market trades' }),
       ins.routine ? ` · ${ins.routine} other` : ''));
 }
@@ -59,12 +68,12 @@ export function insightsCard(items, { id, subtitle, footnote = '' }) {
     const ins = item.insiders || {};
     return h('tr', null,
       h('td', { class: 'text' }, tickerLink(item.ticker)),
-      h('td', { class: 'text' }, a
-        ? [ratingBar(a), h('div', { class: 'xsmall muted mono', text: `${monthName(a.period)}: ${a.buy} buy · ${a.hold} hold · ${a.sell} sell` })]
-        : h('span', { class: 'muted', text: 'No ratings' })),
+      h('td', { class: 'text' }, ratingText(a)
+        ? [ratingBar(a), h('div', { class: 'xsmall muted mono', text: ratingText(a) })]
+        : h('span', { class: 'muted', text: 'No analyst ratings' })),
       h('td', { class: 'text small', text: buyChange(item.analysts) || '—' }),
-      h('td', { text: tradeCell(ins.bought, ins.buys, ins.unpriced) }),
-      h('td', { text: tradeCell(ins.sold, ins.sells, ins.unpriced) }),
+      h('td', { text: tradeCell(ins.bought, ins.buys, unpricedBuys(ins)) }),
+      h('td', { text: tradeCell(ins.sold, ins.sells, unpricedSells(ins)) }),
       h('td', { class: 'text small muted', text: ins.routine ? `${ins.routine} other` : '—' }));
   });
   return h('section', { class: 'card', 'aria-labelledby': id },

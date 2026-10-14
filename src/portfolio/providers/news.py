@@ -81,12 +81,12 @@ def parse_insiders(raw: Any, from_date: str) -> dict[str, Any]:
         if not r.get("isDerivative") and str(r.get("transactionDate") or "") >= from_date and r.get("change")
     ]
     rows.sort(key=lambda r: (r["transactionDate"], r.get("filingDate") or ""), reverse=True)
-    summary = {"bought": 0.0, "buys": 0, "sold": 0.0, "sells": 0, "routine": 0, "unpriced": 0}
+    summary = {"bought": 0.0, "buys": 0, "sold": 0.0, "sells": 0, "routine": 0, "unpriced_buys": 0, "unpriced_sells": 0}
     trades = []
     for r in rows:
         code, shares, price = r.get("transactionCode") or "", abs(int(r["change"])), float(r.get("transactionPrice") or 0)
         if code in ("P", "S") and not price:
-            summary["unpriced"] += 1  # counted, but its dollars are unknown
+            summary["unpriced_buys" if code == "P" else "unpriced_sells"] += 1  # counted, but its dollars are unknown
         if code == "P":
             summary["bought"] += shares * price
             summary["buys"] += 1
