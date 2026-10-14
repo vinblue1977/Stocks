@@ -107,7 +107,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 8 | Earnings calendar | #50 |
 | — | Overview redesign: performance by holding, donut, sortable Holdings; SPY removed | #39, #49 |
 | — | CI: smoke test, weekly audit, dependency review, workflow lint, ESLint | #33, #51, #64 |
-| — | Lambda layer lockfile with hashes (`make lock`) | #65 |
+| — | Lambda layer lockfile with hashes (`make lock`) | #67 |
 | — | `cost_basis` → `avg_cost` rename finished (old name removed from stored holdings) | #59, #60 |
 
 Finished items move here with their PR; numbers don't change.
