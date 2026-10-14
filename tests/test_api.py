@@ -480,7 +480,7 @@ def test_old_cost_basis_input_rejected(repo, no_backfill):
     for body in ({"shares": 4, "cost_basis": 25}, {"shares": 4, "cost_basis": 25, "avg_cost": 25}):
         status, res = call(repo, route, path=path, body=json.dumps(body))
         assert status == 400 and "renamed" in res["message"]
-    status, res = call(repo, route, path=path, body=json.dumps({"shares": 4, "avg_cost": 30}))
+    status, res = call(repo, route, path=path, body=json.dumps({"shares": 4, "cost_basis": None, "avg_cost": 30}))
     assert status == 200 and res["avg_cost"] == 30 and "cost_basis" not in _stored(repo, "VTI")
 
 

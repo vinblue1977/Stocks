@@ -168,7 +168,7 @@ class Repository:
             condition: Any = Attr("pk").not_exists()
         else:
             avg_cost = to_dynamo(float(previous["avg_cost"]))
-            # Items written before the rename have only the old attribute name.
+            # Items written before the rename have only the old name, until scripts/drop_cost_basis.py has run (then remove).
             condition = Attr("shares").eq(to_dynamo(float(previous["shares"]))) & (
                 Attr("avg_cost").eq(avg_cost) | (Attr("avg_cost").not_exists() & Attr("cost_basis").eq(avg_cost))
             )
