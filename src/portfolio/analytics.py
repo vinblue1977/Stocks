@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import date
 from typing import Any
 
 from portfolio import indicators
@@ -89,12 +90,12 @@ def value_history(
     return [(d, round(sum(shares[t] * by_ticker[t][d] for t in tickers), 2)) for d in common_dates]
 
 
-def trailing_return(series: Sequence[tuple[str, float]], days: int = 252) -> float | None:
-    """Return of the value series over its last `days` trading days; None when the series is shorter than that."""
-    if len(series) <= days:
+def trailing_return(series: Sequence[tuple[str, float]]) -> float | None:
+    """1-year return of a dated value series, from the same calendar date a year earlier; None if shorter."""
+    if not series:
         return None
-    window = series[-(days + 1) :]
-    change = indicators.pct_change(window[-1][1], window[0][1])
+    start = indicators.months_before(date.fromisoformat(series[-1][0]), 12).isoformat()
+    change = indicators.return_since(series, start)
     return None if change is None else round(change, 4)
 
 
