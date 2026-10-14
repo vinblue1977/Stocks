@@ -54,6 +54,22 @@ function pricesNote(data) {
   return data.as_of ? `Prices as of ${fmt.date(data.as_of)} close` : 'Waiting for the first price sync';
 }
 
+/** Holiday or early-close notice for today's US market, or nothing on a normal day. */
+function marketBanner(data) {
+  const m = data.market;
+  if (!m) return null;
+  const lastClose = data.as_of ? new Date(`${data.as_of}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : null;
+  if (m.holiday) {
+    return h('div', { class: 'market-banner', role: 'status' }, h('strong', { text: `Markets are closed today for ${m.holiday}.` }),
+      lastClose ? ` Prices are from the last close (${lastClose}).` : '');
+  }
+  if (m.early_close) {
+    return h('div', { class: 'market-banner', role: 'status' }, h('strong', { text: 'Markets close early today at 1:00 PM ET.' }),
+      ' Live prices stop then; the evening update stores the close.');
+  }
+  return null;
+}
+
 /** Marks a live-prices view so the app keeps refreshing it until the evening close is stored. */
 function liveMarker(el, live) {
   if (live) el.dataset.live = '';
@@ -359,6 +375,7 @@ export async function renderOverview(main) {
       : null;
     fill(main,
       liveMarker(pageHead('Overview', pricesNote(data), switcher), data.live_as_of),
+      marketBanner(data),
       summaryTable(portfolios[person], data.live_as_of ? 'Today' : 'Last day'),
       h('section', { class: 'tiles', 'aria-label': `Summary for ${viewLabel()}` },
         tile(`Total value · ${viewLabel()}`, fmt.money(s.total_value), `Cost basis ${fmt.money(s.total_cost)}`),
