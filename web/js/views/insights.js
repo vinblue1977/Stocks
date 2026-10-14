@@ -32,14 +32,33 @@ function buyChange(analysts) {
 /** "$1M · 2"; when a trade has no price its dollars are unknown, so the total is marked as at least that. */
 const tradeCell = (value, count, unpriced) => (count ? `${unpriced ? '≥ ' : ''}${compact(value)} · ${count}` : '—');
 
-/** One row per stock; tapping a ticker opens its detail on News & signals. */
+const tickerLink = (ticker, cls) => h('a', { class: cls, href: `#/news?ticker=${encodeURIComponent(ticker)}`, text: ticker });
+
+/** iPhone layout: one stacked block per stock, so nothing scrolls sideways. */
+function stackedItem(item) {
+  const a = item.analysts?.[0];
+  const ins = item.insiders || {};
+  const trades = [
+    ins.sells ? `sold ${tradeCell(ins.sold, ins.sells, ins.unpriced)}` : null,
+    ins.buys ? `bought ${tradeCell(ins.bought, ins.buys, ins.unpriced)}` : null,
+  ].filter(Boolean);
+  return h('div', { class: 'ai-item' },
+    tickerLink(item.ticker, 'ai-ticker'),
+    h('span', { class: 'xsmall muted', text: buyChange(item.analysts) || '' }),
+    a ? ratingBar(a, true) : null,
+    h('div', { class: 'ai-line', text: a ? `${monthName(a.period)}: ${a.buy} buy · ${a.hold} hold · ${a.sell} sell` : 'No analyst ratings' }),
+    h('div', { class: 'ai-line' }, 'Insiders, 90d: ', h('b', { text: trades.length ? trades.join(' · ') : 'no open-market trades' }),
+      ins.routine ? ` · ${ins.routine} other` : ''));
+}
+
+/** One row per stock (a table on wider screens, stacked blocks on a phone); a ticker opens its detail on News & signals. */
 export function insightsCard(items, { id, subtitle, footnote = '' }) {
   if (!items.length) return null;
   const rows = items.map((item) => {
     const a = item.analysts?.[0];
     const ins = item.insiders || {};
     return h('tr', null,
-      h('td', { class: 'text' }, h('a', { href: `#/news?ticker=${encodeURIComponent(item.ticker)}`, text: item.ticker })),
+      h('td', { class: 'text' }, tickerLink(item.ticker)),
       h('td', { class: 'text' }, a
         ? [ratingBar(a), h('div', { class: 'xsmall muted mono', text: `${monthName(a.period)}: ${a.buy} buy · ${a.hold} hold · ${a.sell} sell` })]
         : h('span', { class: 'muted', text: 'No ratings' })),
@@ -51,7 +70,8 @@ export function insightsCard(items, { id, subtitle, footnote = '' }) {
   return h('section', { class: 'card', 'aria-labelledby': id },
     h('div', { class: 'card-head' }, h('h2', { id, text: 'Analysts & insiders' }), h('span', { class: 'muted small', text: subtitle })),
     legend(),
-    h('div', { class: 'table-wrap', style: { marginTop: '12px' } }, h('table', null,
+    h('div', { class: 'ai-stack' }, items.map(stackedItem)),
+    h('div', { class: 'table-wrap ai-table', style: { marginTop: '12px' } }, h('table', null,
       h('thead', null, h('tr', null, ['Stock', 'Latest analyst ratings', 'Change', 'Insiders bought, 90d', 'Insiders sold, 90d', 'Other filings']
         .map((t, i) => h('th', { scope: 'col', class: i < 3 || i === 5 ? 'text' : null, text: t })))),
       h('tbody', null, rows))),
