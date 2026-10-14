@@ -1,9 +1,10 @@
-"""One-time migration: copy the stored holding attribute cost_basis into avg_cost (cost_basis is kept).
+"""One-time cleanup: finish the cost_basis -> avg_cost rename on stored holdings (sets avg_cost if missing,
+removes cost_basis).
 
 Usage (from the project root, with AWS credentials for the account):
-    PYTHONPATH=src .venv/bin/python scripts/migrate_avg_cost.py <TableName> [--region us-east-2] [--dry-run]
+    PYTHONPATH=src .venv/bin/python scripts/drop_cost_basis.py <TableName> [--region us-east-2] [--dry-run]
 
-Run after deploying the code that reads both names. Safe to run more than once.
+Run after deploying the code that no longer writes cost_basis. Safe to run more than once.
 """
 
 from __future__ import annotations
@@ -23,9 +24,9 @@ def main() -> None:
     args = parser.parse_args()
 
     repo = Repository(boto3.resource("dynamodb", region_name=args.region).Table(args.table))
-    needed = repo.migrate_avg_cost(dry_run=args.dry_run)
-    action = "Would add" if args.dry_run else "Added"
-    print(f"{action} avg_cost to {len(needed)} holdings")
+    changed = repo.drop_cost_basis(dry_run=args.dry_run)
+    action = "Would clean" if args.dry_run else "Cleaned"
+    print(f"{action} {len(changed)} holdings")
 
 
 if __name__ == "__main__":

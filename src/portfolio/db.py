@@ -126,10 +126,7 @@ class Repository:
 
     def _holding_item(self, user_id: str, holding: Mapping[str, Any]) -> dict[str, Any]:
         group = holding.get("group", DEFAULT_GROUP)
-        item = {**self._holding_keys(user_id, group, holding["ticker"]), "updated_at": _now_iso(), **holding, "group": group}
-        # Also stored under the old name for one release, so a rollback still reads it (ROADMAP: drop later).
-        item["cost_basis"] = item["avg_cost"]
-        return item
+        return {**self._holding_keys(user_id, group, holding["ticker"]), "updated_at": _now_iso(), **holding, "group": group}
 
     def _all_holding_items(self) -> list[dict[str, Any]]:
         return self._query_all(IndexName="gsi1", KeyConditionExpression=Key("gsi1pk").eq("HOLDINGS"))
@@ -138,7 +135,7 @@ class Repository:
     def _holding_out(item: Mapping[str, Any]) -> dict[str, Any]:
         clean = _clean(item)
         clean.setdefault("group", DEFAULT_GROUP)  # items written before groups existed
-        if "cost_basis" in clean:  # old name; items written before the rename have only this one
+        if "cost_basis" in clean:  # old name, until scripts/drop_cost_basis.py has run (then remove this)
             clean.setdefault("avg_cost", clean["cost_basis"])
             del clean["cost_basis"]
         return clean
@@ -206,24 +203,24 @@ class Repository:
             moved.append(f"{user_id}:{ticker}")
         return moved
 
-    def migrate_avg_cost(self, dry_run: bool = False) -> list[str]:
-        """Copy cost_basis into avg_cost on holdings written before the rename. The old attribute is kept.
+    def drop_cost_basis(self, dry_run: bool = False) -> list[str]:
+        """Finish the cost_basis -> avg_cost rename on stored holdings: set avg_cost if missing, remove cost_basis.
 
-        Idempotent: items that already have avg_cost are skipped. Returns the sort key of each item needing it.
+        Idempotent. Returns the sort key of each item that still had the old name.
         """
         changed = []
         for item in self._all_holding_items():
-            if "avg_cost" in item or "cost_basis" not in item:
+            if "cost_basis" not in item:
                 continue
             if not dry_run:
                 try:
                     self.table.update_item(
                         Key={"pk": item["pk"], "sk": item["sk"]},
-                        UpdateExpression="SET avg_cost = cost_basis",
-                        ConditionExpression=Attr("avg_cost").not_exists() & Attr("cost_basis").exists(),
+                        UpdateExpression="SET avg_cost = if_not_exists(avg_cost, cost_basis) REMOVE cost_basis",
+                        ConditionExpression=Attr("cost_basis").exists(),
                     )
                 except self.table.meta.client.exceptions.ConditionalCheckFailedException:
-                    continue  # rewritten by the app in the meantime
+                    continue  # rewritten by the app in the meantime (without the old name)
             changed.append(f"{item['pk']}:{item['sk']}")
         return changed
 
