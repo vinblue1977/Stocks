@@ -156,6 +156,7 @@ def handler(
         )
     earnings = refresh_earnings(repo, provider, now)
     insights = refresh_insights(repo, provider, now)
+    repo.put_job_run("news_ingest")  # the Overview warns when this is older than the last trading day
     claude_calls = len(summarized) + (1 if briefs and not portfolio_reused else 0)
     log(
         logger,

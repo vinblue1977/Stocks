@@ -677,3 +677,27 @@ def test_market_closed_on_holidays_and_status():
     assert market_status(datetime(2026, 10, 14, 20, 0, tzinfo=UTC))["open"] is True  # 4:00 PM EDT, the last quote
     assert market_status(datetime(2026, 10, 14, 20, 35, tzinfo=UTC))["open"] is False
     assert market_status(datetime(2027, 12, 24, 15, 0, tzinfo=UTC))["holiday"] == "Christmas Day"  # observed, not a half day
+
+
+@pytest.mark.parametrize(
+    "now_utc, expected",
+    [
+        ("2026-10-14T22:00:00", "2026-10-13"),  # Wed 6:00 PM EDT: tonight's run isn't due yet
+        ("2026-10-14T23:45:00", "2026-10-14"),  # Wed 7:45 PM EDT: tonight's close is due
+        ("2026-10-17T15:00:00", "2026-10-16"),  # Saturday: Friday's close
+        ("2026-10-19T13:00:00", "2026-10-16"),  # Monday morning: still Friday's
+        ("2026-11-27T14:00:00", "2026-11-25"),  # Friday after Thanksgiving, morning: Wednesday's
+        ("2026-12-01T01:00:00", "2026-11-30"),  # Monday 8:00 PM EST (Tuesday in UTC): Monday's
+    ],
+)
+def test_expected_close(now_utc, expected):
+    from portfolio.market import expected_close
+
+    assert expected_close(datetime.fromisoformat(now_utc).replace(tzinfo=UTC)).isoformat() == expected
+
+
+def test_news_ingest_records_its_run(repo):
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
+    assert repo.get_job_run("news_ingest") is None
+    news_ingest.handler({}, None, repo=repo, provider=FakeNews(), summarizer=FakeSummarizer)
+    assert repo.get_job_run("news_ingest") is not None

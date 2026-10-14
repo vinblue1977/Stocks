@@ -19,6 +19,7 @@ Key design (pk / sk):
     EARNINGS#<ticker> NEXT                       next earnings date, from Finnhub (stocks only)
     INSIGHT#<ticker> LATEST                      analyst ratings and insider trades, from Finnhub (stocks only)
     QUOTES          LATEST                       intraday prices for all tickers (market hours only)
+    JOB#<name>      LAST                         when a nightly job last finished (late-update warning)
 """
 
 from __future__ import annotations
@@ -457,6 +458,30 @@ class Repository:
         )
         return [_clean(i) for i in response.get("Items", [])]
 
+    def count_news_since(self, tickers: Iterable[str], since_iso: str) -> int:
+        """Headlines stored since a time, across tickers (counted side by side; the Table's client is thread-safe)."""
+        client, name = self.table.meta.client, self.table.name
+
+        def one(ticker: str) -> int:
+            kwargs: dict[str, Any] = {
+                "TableName": name,
+                "KeyConditionExpression": Key("pk").eq(f"NEWS#{ticker}") & Key("sk").gte(since_iso),
+                "Select": "COUNT",
+            }
+            total = 0
+            while True:
+                response = client.query(**kwargs)
+                total += response["Count"]
+                if "LastEvaluatedKey" not in response:
+                    return total
+                kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
+
+        tickers = sorted(set(tickers))
+        if not tickers:
+            return 0
+        with ThreadPoolExecutor(max_workers=min(8, len(tickers))) as pool:
+            return sum(pool.map(one, tickers))
+
     def put_brief(self, scope: str, day: str, brief: Mapping[str, Any]) -> None:
         self.table.put_item(Item=to_dynamo({"pk": f"BRIEF#{scope}", "sk": day, **brief}))
 
@@ -509,6 +534,14 @@ class Repository:
                     found[item["pk"].removeprefix("INSIGHT#")] = _clean(item)
                 request = response.get("UnprocessedKeys") or None
         return found
+
+    # ---------- job runs ----------
+    def put_job_run(self, name: str) -> None:
+        self.table.put_item(Item={"pk": f"JOB#{name}", "sk": "LAST", "finished_at": _now_iso()})
+
+    def get_job_run(self, name: str) -> str | None:
+        item = self.table.get_item(Key={"pk": f"JOB#{name}", "sk": "LAST"}).get("Item")
+        return item["finished_at"] if item else None
 
     # ---------- intraday quotes ----------
     def put_quotes(self, quotes: Mapping[str, Mapping[str, Any]]) -> None:

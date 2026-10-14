@@ -39,6 +39,7 @@ All routes need `Authorization: Bearer <Cognito token>`.
 | `GET/POST/DELETE /rules[/{ruleId}]`, `GET /rule-types` | Alert rules, e.g. `{"type": "drawdown_below", "ticker": "VTI", "params": {"pct": 10}}` or a price level, `{"type": "price_below", "ticker": "NVDA", "params": {"price": 200}}` |
 | `GET /alerts` | Alert history |
 | `GET /insights` | Analyst rating counts (last 4 months) and insider trades (90 days, open-market totals) for held and watched stocks, from Finnhub each evening |
+| `GET /changes?since=<iso>` | Alerts fired and new headlines since a time, for the Overview's "Since your last visit" strip. `/portfolio` also reports `freshness` (prices or news late) |
 | `GET/PUT/DELETE /push`, `POST /push/test` | Phone notifications (Web Push) for rule alerts: subscribe this device, test, unsubscribe. VAPID private key in SSM (`/portfolio-tracker/vapid-private-key`), public key in cdk.json |
 | `GET/POST /groups/{group}/holdings/{ticker}/transactions`, `PUT/DELETE …/{txnId}`, `GET /realized` | Stock Holdings: each buy and sale (first-in, first-out); the holding is the replayed total; realized gains by year, long vs. short term |
 | `GET /checkup`, `GET/PUT /targets` | Mix by area vs. your own target mix, risk vs. the market (VTI); the first Saturday of each month a short email with a PDF report goes out through SES (`checkupModelId` writes the summary; the alert address must be a verified SES identity, otherwise it falls back to plain text) |

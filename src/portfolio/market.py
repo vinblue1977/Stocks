@@ -88,3 +88,22 @@ def market_status(now: datetime) -> dict[str, object]:
     """Today's session for the dashboard: a holiday's name, whether it closes early, and whether it's open now."""
     day = trading_day(now)
     return {"date": day.isoformat(), "holiday": holiday(day), "early_close": early_close(day), "open": market_open(now)}
+
+
+# The evening pipeline starts at 22:30 UTC (6:30 PM EDT, 5:30 PM EST); by 7:30 PM ET its results are expected.
+EVENING_DONE = time(19, 30)
+
+
+def is_trading_day(day: date) -> bool:
+    return day.weekday() < 5 and not holiday(day)
+
+
+def expected_close(now: datetime) -> date:
+    """The latest trading day whose close (and evening news run) should be stored by now."""
+    local = now.astimezone(NEW_YORK)
+    day = local.date()
+    if not (is_trading_day(day) and local.time() >= EVENING_DONE):
+        day -= timedelta(days=1)
+        while not is_trading_day(day):
+            day -= timedelta(days=1)
+    return day

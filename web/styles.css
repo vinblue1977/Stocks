@@ -308,3 +308,22 @@ input.upper { text-transform: uppercase; }
 .ai-line { font-size: 12px; color: var(--muted); font-family: var(--mono); }
 .ai-line b { color: var(--text-2); font-weight: 500; }
 @media (max-width: 640px) { .ai-stack { display: flex; } .ai-table { display: none; } }
+
+/* Overview: "Since your last visit" strip (blue, so it doesn't read as a card) */
+.since { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 12px 16px; border-radius: 10px; background: var(--accent-bg); border: 1px solid #2B5A85; }
+.since-when { flex: 1 0 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; color: #A9C7E3; }
+.since-when strong { color: var(--accent-strong); font-weight: 600; }
+.since-items { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border-radius: 999px; background: #0B1A2B; color: var(--text-2); font-size: 13px; text-decoration: none; white-space: nowrap; }
+.pill .mono { font-size: 13px; }
+a.pill:hover { background: #102640; color: var(--text); }
+.pill.alerting { background: var(--warn-bg); color: var(--warn); }
+.dismiss { background: transparent; border: 0; color: #A9C7E3; font-size: 13px; cursor: pointer; padding: 6px 4px; min-height: 32px; }
+.dismiss:hover { color: var(--text); }
+.since-alerts { flex: 1 0 100%; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-2); }
+.since-alerts li { display: flex; gap: 8px; }
+.since-alerts time { color: #A9C7E3; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+/* Overview: an evening update didn't arrive */
+.late { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-radius: 10px; background: var(--warn-bg); color: #F5C38F; font-size: 14px; line-height: 1.45; }
+.late svg { flex: none; margin-top: 2px; color: var(--warn); }
+.late strong { color: var(--warn); }

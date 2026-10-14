@@ -21,7 +21,7 @@ from portfolio.config import get_config
 from portfolio.db import GROUPS, KINDS, PEOPLE, ConcurrentUpdateError, Repository, kind_of, person_of
 from portfolio.llm import sentiment_label
 from portfolio.logs import get_logger, log
-from portfolio.market import market_status, trading_day
+from portfolio.market import NEW_YORK, expected_close, market_status, trading_day
 from portfolio.news_policy import news_off
 from portfolio.secrets import get_secret
 
@@ -528,15 +528,30 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         ]
 
     portfolios = {p: {k: build(pick(p, k)) for k in ("overall", *KINDS)} for p in ("household", *PEOPLE)}
+    as_of = max((h[-1][0] for h in histories.values() if h), default=None)
     return _response(
         200,
         {
-            "as_of": max((h[-1][0] for h in histories.values() if h), default=None),
+            "as_of": as_of,
+            "freshness": _freshness(repo, as_of, now),
             "live_as_of": max((q["timestamp"] for q in live.values()), default=None),
             "market": market_status(now),
             "portfolios": portfolios,
         },
     )
+
+
+def _freshness(repo: Repository, as_of: str | None, now: datetime) -> dict[str, Any]:
+    """Whether the evening price sync and news run are late (older than the last trading day's close)."""
+    expected = expected_close(now).isoformat()
+    news_at = repo.get_job_run("news_ingest")
+    news_day = datetime.fromisoformat(news_at).astimezone(NEW_YORK).date().isoformat() if news_at else None
+    return {
+        "expected": expected,
+        "prices_late": bool(as_of) and as_of < expected,
+        "news_at": news_at,
+        "news_late": bool(news_day) and news_day < expected,  # unknown until the first run records itself
+    }
 
 
 def get_profile(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
@@ -672,6 +687,32 @@ def get_earnings(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
                 {"ticker": ticker, "where": sorted(set(places)), **{k: record.get(k) for k in ("date", "hour", "eps_estimate")}}
             )
     return _response(200, {"earnings": sorted(upcoming, key=lambda e: (e["date"], e["ticker"]))})
+
+
+# ---------------------------------------------------------------- since your last visit
+CHANGES_MAX_DAYS = 30
+
+
+def get_changes(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """Alerts fired and headlines stored since a time (the app's last visit), for the Overview."""
+    user_id = _user_id(event)
+    raw = (event.get("queryStringParameters") or {}).get("since") or ""
+    try:
+        since = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        raise ApiError(400, "since must be an ISO date and time") from None
+    if since.tzinfo is None:
+        raise ApiError(400, "since must include a time zone")
+    now = datetime.now(UTC)
+    since = max(since.astimezone(UTC), now - timedelta(days=CHANGES_MAX_DAYS))
+    since_iso = since.isoformat(timespec="seconds")
+    alerts = [
+        {"message": a["message"], "created_at": a["created_at"]}
+        for a in repo.list_alerts(user_id)
+        if a.get("created_at", "") >= since_iso
+    ]
+    tickers = {h["ticker"] for h in repo.list_holdings(user_id)}
+    return _response(200, {"since": since_iso, "alerts": alerts, "headlines": repo.count_news_since(tickers, since_iso)})
 
 
 # ---------------------------------------------------------------- analysts and insiders
@@ -851,6 +892,7 @@ ROUTES: dict[str, Route] = {
     "GET /realized": get_realized,
     "GET /earnings": get_earnings,
     "GET /insights": get_insights,
+    "GET /changes": get_changes,
     "GET /push": get_push,
     "PUT /push": put_push,
     "DELETE /push": delete_push,

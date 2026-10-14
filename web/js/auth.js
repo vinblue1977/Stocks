@@ -9,6 +9,7 @@ const PKCE_TTL = 10 * 60 * 1000;
 const RETRY = 'pt.retry';
 const RETRY_WINDOW = 2 * 60 * 1000;
 export const SAVED_OVERVIEW = 'pt.overview'; // last Overview data (views/overview.js), removed on sign-out
+export const LAST_VISIT = 'pt.lastVisit'; // when the Overview was last seen and the total then; removed on sign-out
 let cfg;
 
 function b64url(bytes) {
@@ -104,7 +105,7 @@ export function addPasskeyUrl() {
 
 export function logout() {
   sessionStorage.removeItem(STORE);
-  local((ls) => ls.removeItem(SAVED_OVERVIEW));
+  local((ls) => { ls.removeItem(SAVED_OVERVIEW); ls.removeItem(LAST_VISIT); });
   location.assign(authUrl('/logout', { logout_uri: redirectUri() }));
 }
 

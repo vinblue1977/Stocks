@@ -550,6 +550,7 @@ class PortfolioTrackerStack(Stack):
             "/realized": [apigw.HttpMethod.GET],
             "/earnings": [apigw.HttpMethod.GET],
             "/insights": [apigw.HttpMethod.GET],
+            "/changes": [apigw.HttpMethod.GET],
             "/push": [apigw.HttpMethod.GET, apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
             "/push/test": [apigw.HttpMethod.POST],
             "/checkup": [apigw.HttpMethod.GET],
