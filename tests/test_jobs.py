@@ -572,3 +572,46 @@ def test_dividend_day_reloads_full_history(repo):
     price_sync.handler({}, None, repo=repo, provider=provider)  # backfill
     price_sync.handler({}, None, repo=repo, provider=provider)  # new days include a dividend -> full reload
     assert len(provider.starts) == 3 and provider.starts[2] == provider.starts[0]
+
+
+@pytest.mark.parametrize(
+    "day, early",
+    [
+        ("2026-11-27", True),
+        ("2026-11-26", False),
+        ("2027-11-26", True),
+        ("2026-12-24", True),
+        ("2027-12-24", False),
+        ("2025-07-03", True),
+        ("2026-07-03", False),
+        ("2026-10-13", False),
+    ],
+)
+def test_early_close_days(day, early):
+    from datetime import date
+
+    from portfolio.market import early_close
+
+    assert early_close(date.fromisoformat(day)) is early
+
+
+def test_half_day_stops_quotes_at_one():
+    assert market_open(datetime(2026, 11, 27, 18, 0, tzinfo=UTC)) is True  # 1:00 PM EST, the last run
+    assert market_open(datetime(2026, 11, 27, 18, 15, tzinfo=UTC)) is False  # 1:15 PM EST: closed
+
+
+def test_nightly_earnings_refresh(repo):
+    class Earnings(FakeNews):
+        def next_earnings(self, ticker, start, end):
+            if ticker == "BAD":
+                raise RuntimeError("finnhub down")
+            return {"date": "2026-11-17", "hour": "amc", "eps_estimate": 2.53} if ticker == "NVDA" else None
+
+    news_ingest.EARNINGS_PAUSE_SECONDS = 0
+    for ticker in ("NVDA", "AMZN", "BAD", "SMH"):
+        repo.put_holding("u1", {"ticker": ticker, "shares": 1, "avg_cost": 1})
+    repo.put_earnings("BAD", {"date": "2026-11-01", "hour": None, "eps_estimate": None})
+    result = news_ingest.handler({}, None, repo=repo, provider=Earnings(), summarizer=FakeSummarizer)
+    assert repo.get_earnings("NVDA")["date"] == "2026-11-17" and repo.get_earnings("AMZN") is None
+    assert repo.get_earnings("BAD")["date"] == "2026-11-01"  # a failed lookup keeps yesterday's date
+    assert result is not None

@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from portfolio import llm
+from portfolio import buckets, llm
 from portfolio.config import get_config
 from portfolio.db import Repository
 from portfolio.logs import get_logger, log
@@ -153,6 +154,7 @@ def handler(
                 "reused": portfolio_reused,
             },
         )
+    earnings = refresh_earnings(repo, provider, now)
     claude_calls = len(summarized) + (1 if briefs and not portfolio_reused else 0)
     log(
         logger,
@@ -162,6 +164,7 @@ def handler(
         reused=reused,
         failed=failed,
         claude_calls=claude_calls,
+        earnings=earnings,
     )
     return {"tickers": tickers, "summarized": summarized, "reused": reused, "failed": failed, "claude_calls": claude_calls}
 
@@ -173,3 +176,28 @@ def _active_rule_details(repo: Repository) -> list[dict[str, Any]]:
         if state and state.get("triggered"):
             active.append(state)
     return active
+
+
+EARNINGS_DAYS = 90
+EARNINGS_PAUSE_SECONDS = 1.0
+
+
+def refresh_earnings(repo: Repository, provider: NewsProvider, now: datetime) -> int:
+    """Next earnings date for every held or watched ticker (one Finnhub call each); returns how many have one."""
+    lookup = getattr(provider, "next_earnings", None)
+    if lookup is None:
+        return 0
+    start, end = now.date().isoformat(), (now.date() + timedelta(days=EARNINGS_DAYS)).isoformat()
+    found = 0
+    for ticker in repo.tracked_tickers():
+        if buckets.is_fund(ticker):
+            continue  # funds don't report earnings: no call needed
+        try:
+            record = lookup(ticker, start, end)
+            repo.put_earnings(ticker, record)
+        except Exception:
+            logger.exception("earnings refresh failed")  # keep the stored date; try again tomorrow
+            continue
+        found += record is not None
+        time.sleep(EARNINGS_PAUSE_SECONDS)  # spread the calls: Finnhub's free tier allows 60 a minute
+    return found

@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { fill, fmt, h, pageHead, sentimentTag, toast, tone } from '../ui.js';
+import { EARNINGS_HOUR, fill, fmt, h, pageHead, sentimentTag, toast, tone } from '../ui.js';
 
 let confirming = null; // ticker whose Remove is waiting for confirmation
 
@@ -21,7 +21,7 @@ function row(item, rules, main) {
     // The backfill takes about a minute; after a while with no prices, the ticker is probably mistyped.
     const stuck = Date.now() - new Date(item.added_at).getTime() > 15 * 60 * 1000;
     return h('tr', { class: 'pending' }, name,
-      h('td', { colspan: 8, class: 'text', text: stuck
+      h('td', { colspan: 9, class: 'text', text: stuck
         ? `No prices found for ${item.ticker}. Check the ticker, then remove it.`
         : 'Loading price history, usually under a minute. News arrives after the evening run.' }),
       h('td', null, remove));
@@ -38,6 +38,9 @@ function row(item, rules, main) {
     h('td', { text: fmt.num(sg.rsi14, 0) }),
     h('td', { class: tone(sg.vs_sma200), text: fmt.signedPct(sg.vs_sma200, 1) }),
     h('td', { class: tone(news), text: fmt.score(news) }),
+    h('td', { class: 'text' }, item.earnings
+      ? [fmt.shortDate(item.earnings.date), h('div', { class: 'xsmall muted', text: (EARNINGS_HOUR[item.earnings.hour] || '').toLowerCase() })]
+      : h('span', { class: 'muted', text: '—' })),
     h('td', { class: 'text' }, rulesCell(rules)),
     h('td', null, remove));
 }
@@ -56,7 +59,7 @@ function confirmRow(item, rules, main) {
       renderWatchlist(main);
     } catch (e) { toast(e.message, true); remove.disabled = false; }
   });
-  return h('tr', { class: 'confirm-row' }, h('td', { colspan: 10 },
+  return h('tr', { class: 'confirm-row' }, h('td', { colspan: 11 },
     h('strong', { text: what }),
     item.held ? h('span', { class: 'muted', text: ' You still hold it, so its prices, news and rules stay.' }) : null,
     h('div', { class: 'actions' }, remove,
@@ -115,10 +118,10 @@ export async function renderWatchlist(main) {
       h('div', { class: 'card-head' }, h('h2', { id: 'wl-h', text: 'Watching' }),
         h('span', { class: 'muted small', text: `${items.length} of ${res.max} · prices live during market hours` })),
       h('div', { class: 'table-wrap' }, h('table', null,
-        h('thead', null, h('tr', null, ['Ticker', 'Price', '1 day', '1 year', 'From 1Y high', 'RSI (14)', 'vs 200-day', 'News, 7d', 'Your rules', '']
-          .map((t, i) => h('th', { scope: 'col', class: i === 0 || i === 8 ? 'text' : null, text: t })))),
+        h('thead', null, h('tr', null, ['Ticker', 'Price', '1 day', '1 year', 'From 1Y high', 'RSI (14)', 'vs 200-day', 'News, 7d', 'Next earnings', 'Your rules', '']
+          .map((t, i) => h('th', { scope: 'col', class: i === 0 || i === 8 || i === 9 ? 'text' : null, text: t })))),
         h('tbody', null, rows.length ? rows
-          : h('tr', null, h('td', { colspan: 10, class: 'text muted', text: 'Nothing on your watchlist yet. Add a ticker above.' }))))),
+          : h('tr', null, h('td', { colspan: 11, class: 'text muted', text: 'Nothing on your watchlist yet. Add a ticker above.' }))))),
       h('p', { class: 'muted small', style: { marginBottom: 0 }, text: 'Watched tickers are not part of your holdings or totals. Set alerts for them on the Alerts page.' })),
     items.length ? h('section', { class: 'card', 'aria-labelledby': 'wn-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'wn-h', text: 'News this week' }),

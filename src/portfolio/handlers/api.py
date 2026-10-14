@@ -580,6 +580,35 @@ def get_news(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     return _response(200, {"brief": brief, "articles": articles[:60], "news_excluded": sorted(excluded)})
 
 
+# ---------------------------------------------------------------- earnings
+EARNINGS_WINDOW_DAYS = 60
+
+
+def _upcoming(record: dict[str, Any] | None, today: str) -> dict[str, Any] | None:
+    """A stored report date only while it's today or later (a failed nightly refresh keeps the old one)."""
+    return record if record and record.get("date", "") >= today else None
+
+
+def get_earnings(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
+    """Upcoming earnings for held and watched tickers (funds have none), soonest first, with where each is held."""
+    user_id = _user_id(event)
+    where: dict[str, list[str]] = {}
+    for h in repo.list_holdings(user_id):
+        where.setdefault(h["ticker"], []).append(h["group"])
+    for ticker in repo.watched_tickers(user_id):
+        where.setdefault(ticker, []).append("watchlist")
+    today = trading_day(datetime.now(UTC))
+    end = (today + timedelta(days=EARNINGS_WINDOW_DAYS)).isoformat()
+    upcoming = []
+    for ticker, places in where.items():
+        record = repo.get_earnings(ticker)
+        if record and today.isoformat() <= record["date"] <= end:
+            upcoming.append(
+                {"ticker": ticker, "where": sorted(set(places)), **{k: record.get(k) for k in ("date", "hour", "eps_estimate")}}
+            )
+    return _response(200, {"earnings": sorted(upcoming, key=lambda e: (e["date"], e["ticker"]))})
+
+
 # ---------------------------------------------------------------- watchlist
 def list_watchlist(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     """Watched tickers with everything the page shows: signals, today's live price and the news summary."""
@@ -615,6 +644,7 @@ def list_watchlist(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
                 if brief
                 else None,
                 "news_off": ticker in no_news,
+                "earnings": _upcoming(repo.get_earnings(ticker), today),
             }
         )
     return _response(200, {"watchlist": items, "max": MAX_WATCHLIST})
@@ -733,6 +763,7 @@ ROUTES: dict[str, Route] = {
     "PUT /groups/{group}/holdings/{ticker}/transactions/{txnId}": update_transaction,
     "DELETE /groups/{group}/holdings/{ticker}/transactions/{txnId}": delete_transaction,
     "GET /realized": get_realized,
+    "GET /earnings": get_earnings,
     "GET /checkup": get_checkup,
     "GET /targets": get_targets,
     "PUT /targets": put_targets,

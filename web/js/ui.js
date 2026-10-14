@@ -55,6 +55,7 @@ export const fmt = {
   signedPct: (v, digits = 2) => (v == null ? '—' : `${v >= 0 ? '+' : '−'}${Math.abs(v * 100).toFixed(digits)}%`),
   num: (v, digits = 2) => (v == null ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: digits })),
   score: (v) => (v == null ? '—' : `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}`),
+  shortDate: (iso) => (iso ? new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'),
   date: (iso) => (iso ? new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'),
   time: (iso) => (iso ? new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : '—'),
   ago(iso) {
@@ -66,6 +67,9 @@ export const fmt = {
     return `${days} day${days === 1 ? '' : 's'} ago`;
   },
 };
+
+/** When a company reports, from Finnhub's hour code. */
+export const EARNINGS_HOUR = { bmo: 'Before the open', amc: 'After the close', dmh: 'During market hours' };
 
 export const tone = (v) => (v == null ? '' : v >= 0 ? 'pos' : 'neg');
 

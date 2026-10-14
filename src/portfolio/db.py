@@ -15,6 +15,7 @@ Key design (pk / sk):
     NEWS#<ticker>   <iso_ts>#<article_id>        scored headline (expires after 30 days)
     BRIEF#<ticker>  <yyyy-mm-dd>                 AI news summary; BRIEF#ALL is the portfolio brief
     SIGNAL#<ticker> LATEST                       latest signal snapshot
+    EARNINGS#<ticker> NEXT                       next earnings date, from Finnhub (stocks only)
     QUOTES          LATEST                       intraday prices for all tickers (market hours only)
 """
 
@@ -454,6 +455,20 @@ class Repository:
 
     def get_signal(self, ticker: str) -> dict[str, Any] | None:
         item = self.table.get_item(Key={"pk": f"SIGNAL#{ticker}", "sk": "LATEST"}).get("Item")
+        return _clean(item) if item else None
+
+    # ---------- earnings ----------
+    def put_earnings(self, ticker: str, record: Mapping[str, Any] | None) -> None:
+        key = {"pk": f"EARNINGS#{ticker}", "sk": "NEXT"}
+        if record is None:
+            self.table.delete_item(Key=key)
+        else:
+            # Expires a week after the report date, so a ticker no longer tracked doesn't leave a row forever.
+            expires = int(datetime.fromisoformat(f"{record['date']}T00:00:00+00:00").timestamp()) + 7 * 86400
+            self.table.put_item(Item=to_dynamo({**key, **record, "fetched_at": _now_iso(), "expires_at": expires}))
+
+    def get_earnings(self, ticker: str) -> dict[str, Any] | None:
+        item = self.table.get_item(Key={"pk": f"EARNINGS#{ticker}", "sk": "NEXT"}).get("Item")
         return _clean(item) if item else None
 
     # ---------- intraday quotes ----------

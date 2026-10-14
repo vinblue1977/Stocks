@@ -266,3 +266,12 @@ input.upper { text-transform: uppercase; }
   .card-tools { width: 100%; }
 }
 .chip-mixed { color: var(--text-2); background: var(--neutral-bg); } /* held in both groups */
+
+/* Upcoming earnings */
+.er-banner { margin-bottom: 10px; padding: 12px 16px; border-radius: 10px; background: var(--accent-bg); color: var(--accent-strong); font-size: 14px; }
+.er { display: grid; grid-template-columns: 76px 60px 1fr auto; gap: 14px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--divider); font-size: 14px; }
+.er:last-child { border-bottom: 0; }
+.er-day { font-family: var(--mono); }
+.er-day small { display: block; color: var(--muted); font-size: 11px; font-family: var(--sans); }
+.er-day small.soon { color: var(--warn); font-weight: 500; }
+@media (max-width: 640px) { .er { grid-template-columns: 70px 52px 1fr; } .er-est { grid-column: 2 / -1; } }

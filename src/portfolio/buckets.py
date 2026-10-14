@@ -47,3 +47,12 @@ def area_of(ticker: str, overrides: Mapping[str, str] | None = None) -> str:
     if overrides and overrides.get(ticker) in AREAS:
         return overrides[ticker]
     return KNOWN.get(ticker, UNASSIGNED)
+
+
+# Single stocks among KNOWN (everything else there is a fund or ETF).
+_STOCKS = {"NVDA", "AVGO", "AMD", "TSM"}
+
+
+def is_fund(ticker: str) -> bool:
+    """A known fund or ETF (no earnings reports); unknown tickers are treated as stocks."""
+    return ticker in KNOWN and ticker not in _STOCKS

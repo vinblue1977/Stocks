@@ -41,3 +41,21 @@ def test_parse_iex_keeps_priced_quotes_with_new_york_trading_day():
     # 7:59 PM New York is already the next day in UTC; the trading day stays the New York date.
     assert quotes["SPY"]["date"] == "2026-10-12" and quotes["SPY"]["timestamp"].startswith("2026-10-12T23:59")
     assert set(quotes) == {"VTI", "SPY"} and parse_iex(None) == {}
+
+
+def test_parse_earnings_picks_the_next_report():
+    from portfolio.providers.news import parse_earnings
+
+    raw = {
+        "earningsCalendar": [
+            {"date": "2027-02-20", "hour": "bmo", "epsEstimate": 2.9},
+            {"date": "2026-11-17", "hour": "amc", "epsEstimate": 2.5253},
+            {"date": "2026-10-01", "hour": "amc", "epsEstimate": 2.0},  # already past
+        ]
+    }
+    assert parse_earnings(raw, "2026-10-13") == {"date": "2026-11-17", "hour": "amc", "eps_estimate": 2.53}
+    assert parse_earnings({"earningsCalendar": []}, "2026-10-13") is None
+    assert (
+        parse_earnings({"earningsCalendar": [{"date": "2026-11-17", "hour": "", "epsEstimate": None}]}, "2026-10-13")["hour"]
+        is None
+    )
