@@ -147,8 +147,8 @@ export function sentimentBars(values, labels, ariaLabel) {
   values.forEach((v, i) => {
     const x = i * (bw + gap);
     if (v != null && v !== 0) {
-      const h = Math.max(2, Math.abs(v) * (mid - 6));
-      svg.append(s('rect', { x, y: v > 0 ? mid - h : mid, width: bw, height: h, rx: 2, fill: v > 0 ? '#7CC4FA' : '#F5A35C' }));
+      const barHeight = Math.max(2, Math.abs(v) * (mid - 6));
+      svg.append(s('rect', { x, y: v > 0 ? mid - barHeight : mid, width: bw, height: barHeight, rx: 2, fill: v > 0 ? '#7CC4FA' : '#F5A35C' }));
     }
     svg.append(s('text', { x: x + bw / 2, y: height - 4, 'text-anchor': 'middle', 'font-size': 10, fill: '#8392AB', 'font-family': 'IBM Plex Mono, monospace', text: labels[i] }));
   });

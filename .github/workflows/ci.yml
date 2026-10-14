@@ -41,6 +41,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: "22"
+          cache: npm  # ESLint packages, keyed on package-lock.json
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           version: "0.12.19"
@@ -53,7 +54,9 @@ jobs:
         run: |
           uv venv --seed --python "$(which python)" .venv
           uv pip install --python .venv/bin/python -r requirements-dev.txt
-      - name: Lint (includes Bandit security rules)
+      - name: Install ESLint (exact versions from package-lock.json; no install scripts)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Lint (Python with Bandit security rules, and the dashboard's JavaScript)
         run: make lint
       - name: Unit and infrastructure tests
         run: make test
@@ -100,8 +103,8 @@ jobs:
         with:
           fail-on-severity: high
 
-  # Decides whether a push to main deploys: anything outside docs, Markdown, tests and CI config
-  # (except this workflow, which holds the deploy step).
+  # Decides whether a push to main deploys: anything outside docs, Markdown, tests, CI config and the
+  # dev-only ESLint files (except this workflow, which holds the deploy step).
   changes:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
@@ -122,7 +125,7 @@ jobs:
             changed="unknown-base"
           fi
           echo "$changed"
-          deployable="$(grep -Ev '^(docs/|\.github/|tests/|LICENSE$)|\.md$' <<<"$changed" || true)"
+          deployable="$(grep -Ev '^(docs/|\.github/|tests/|LICENSE$|package(-lock)?\.json$|eslint\.config\.js$)|\.md$' <<<"$changed" || true)"
           if grep -qx '.github/workflows/ci.yml' <<<"$changed"; then deployable=yes; fi
           echo "deploy=$([ -n "$deployable" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
         env:
