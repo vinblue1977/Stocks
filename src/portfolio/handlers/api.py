@@ -488,7 +488,7 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
     user_id = _user_id(event)
     holdings = repo.list_holdings(user_id)
     since = (datetime.now(UTC).date() - timedelta(days=HISTORY_DAYS)).isoformat()
-    histories = {t: repo.price_history(t, since) for t in {h["ticker"] for h in holdings}}
+    histories = repo.price_histories({h["ticker"] for h in holdings}, since)
     latest = {t: h[-1][1] for t, h in histories.items() if h}
     previous = {t: h[-2][1] for t, h in histories.items() if len(h) > 1}
     # During market hours today's intraday quote replaces the last close, and "today" is measured against

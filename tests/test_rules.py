@@ -69,3 +69,25 @@ def test_drawdown_rsi_weight_sentiment():
 def test_needed_sma_windows():
     found = rules.needed_sma_windows([rule("price_below_sma", window=20), rule("price_above_sma", window=50)])
     assert found == {20}
+
+
+@pytest.mark.parametrize(
+    "rule_type, close, hit, side",
+    [
+        ("price_below", 198.4, True, "below"),
+        ("price_below", 205.0, False, "above"),
+        ("price_above", 205.0, True, "above"),
+        ("price_above", 200.0, False, "at"),
+        ("price_below", 199.996, False, "at"),  # rounds to the $200.00 shown
+    ],
+)
+def test_price_level_rules(rule_type, close, hit, side):
+    rule = rules.validate_rule({"type": rule_type, "ticker": "nvda", "params": {"price": 200}})
+    met, detail = rules.evaluate(rule, {"price": close}, None)
+    assert met is hit and f"{side} your $200.00 level" in detail and detail.startswith(f"NVDA closed at ${close:,.2f}")
+
+
+def test_price_level_validation():
+    with pytest.raises(rules.RuleValidationError):
+        rules.validate_rule({"type": "price_below", "ticker": "NVDA", "params": {"price": 0}})
+    assert rules.evaluate({"type": "price_above", "ticker": "X", "params": {"price": 1}}, {}, None) == (False, "No price yet")

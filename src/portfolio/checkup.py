@@ -9,7 +9,6 @@ from __future__ import annotations
 import math
 import statistics
 from collections.abc import Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from typing import Any
 
@@ -174,8 +173,7 @@ def build(repo: Any, holdings: Sequence[Mapping[str, Any]], targets: Mapping[str
     from portfolio.db import PEOPLE, person_of  # local import keeps this module free of AWS clients
 
     tickers = sorted({h["ticker"] for h in holdings})
-    with ThreadPoolExecutor(max_workers=8) as pool:  # one query per ticker; run them side by side
-        histories = dict(zip(tickers, pool.map(repo.price_history, tickers), strict=True))
+    histories = repo.price_histories(tickers)
     as_of = max((h[-1][0] for h in histories.values() if h), default=None)
     market = histories.get(MARKET_TICKER) or repo.price_history(MARKET_TICKER) or None
     if market and as_of and market[-1][0] < (date.fromisoformat(as_of) - timedelta(days=7)).isoformat():

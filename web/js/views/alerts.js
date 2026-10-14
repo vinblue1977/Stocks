@@ -2,7 +2,7 @@ import { api } from '../api.js';
 import { add, fill, h, icon, pageHead, toast } from '../ui.js';
 import { pushCard } from './push.js';
 
-const PARAM_LABELS = { window: 'Days in average', pct: 'Percent', threshold: 'Threshold' };
+const PARAM_LABELS = { window: 'Days in average', pct: 'Percent', threshold: 'Threshold', price: 'Price ($)' };
 
 function describe(rule, types) {
   const spec = types[rule.type];
