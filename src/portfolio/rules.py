@@ -25,6 +25,8 @@ class RuleSpec:
 
 
 RULE_TYPES: dict[str, RuleSpec] = {
+    "price_below": RuleSpec({"price": (0.01, 1_000_000)}, "Price closes below $N"),
+    "price_above": RuleSpec({"price": (0.01, 1_000_000)}, "Price closes above $N"),
     "price_below_sma": RuleSpec({"window": (5, 250)}, "Price closes below its N-day average"),
     "price_above_sma": RuleSpec({"window": (5, 250)}, "Price closes above its N-day average"),
     "golden_cross": RuleSpec({}, "50-day average crosses above the 200-day average"),
@@ -83,6 +85,14 @@ def evaluate(rule: Mapping[str, Any], signal: Mapping[str, Any], weight: float |
 
     def fmt_pct(x: float) -> str:
         return f"{x * 100:.1f}%"
+
+    if t in ("price_below", "price_above"):
+        level = float(p["price"])
+        if price is None:
+            return False, "No price yet"
+        hit = price < level if t == "price_below" else price > level
+        side = "below" if price < level else "above" if price > level else "at"
+        return hit, f"{ticker} closed at ${price:,.2f}, {side} your ${level:,.2f} level"
 
     if t in ("price_below_sma", "price_above_sma"):
         window = float(p["window"])

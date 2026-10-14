@@ -51,7 +51,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 ## Look and feel
 | # | Idea | Effort | Notes |
 |---|---|---|---|
-| 29 | Faster phone open | M | Cache the last view so the app opens instantly, then refresh after sign-in |
 | 30 | Light/dark switch | S | Manual override of the system theme |
 
 ## More ideas (Oct 14)
@@ -60,7 +59,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 31 | Your money-weighted return | S | Now possible for Stock Holdings from the trade history (#1): your actual return, timing included |
 | 32 | Tax-loss finder | S–M | Stock Holdings below cost, long vs. short term, and a 30-day wash-sale reminder. Facts only (pairs with #6) |
 | 33 | "What if" trade preview | M | Try a sale or buy and see the new mix vs. target, risk and concentration before doing it at the broker |
-| 34 | Price-level alerts | S | "Tell me if NVDA closes below $200" for holdings and watchlist (new rule type) |
 | 35 | Earnings reaction history | S | How each stock moved the day after its last few reports (Finnhub + stored prices) |
 | 36 | Analyst and insider activity | S | Analyst rating trends and insider buys/sells for held stocks (Finnhub free tier) |
 | 37 | Weekly email upgrade | S | Add this week's earnings and biggest movers to the Sunday email |
@@ -107,6 +105,8 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 12 | Install on your phone | #30 |
 | 14 | Push notifications for rule alerts (installed app) | #55 |
 | 19 | Today's movers | #38 |
+| 29 | Faster phone open (last Overview shown instantly, then refreshed) | #56 |
+| 34 | Price-level alerts (`price_below`, `price_above`) | #56 |
 | 40 | NYSE holidays and early closes, closed-market banner | #48, #54 |
 | — | Earnings calendar | #50 |
 | — | Overview redesign: performance by holding, donut, sortable Holdings; SPY removed | #39, #49 |

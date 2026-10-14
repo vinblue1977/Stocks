@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { SAVED_OVERVIEW, currentEmail } from '../auth.js';
 import { donut, valueChart } from '../charts.js';
 import { GROUPS, KINDS, groupChip, groupLabel, hasPartner, personName, portfolioTitle, possessive } from '../groups.js';
 import { EARNINGS_HOUR, add, fill, fmt, h, icon, pageHead, tone } from '../ui.js';
@@ -357,8 +358,45 @@ function holdingsCard(summary) {
   return card;
 }
 
+const SAVED_MAX_AGE = 3 * 24 * 60 * 60 * 1000;
+
+/** Keeps the last Overview data on this device so the next open can draw it straight away. */
+function saveOverview(data, rules) {
+  try {
+    localStorage.setItem(SAVED_OVERVIEW, JSON.stringify({
+      email: currentEmail(), at: Date.now(), data, rules, returns: [...returns.values()], earnings,
+    }));
+  } catch { /* storage full or blocked: just no instant view next time */ }
+}
+
+function savedOverview() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVED_OVERVIEW));
+    if (saved?.email && saved.email === currentEmail() && Date.now() - saved.at < SAVED_MAX_AGE) return saved;
+    localStorage.removeItem(SAVED_OVERVIEW); // another account's, or too old
+  } catch { /* unreadable: ignore */ }
+  return null;
+}
+
+/** Draws the saved Overview with an "Updating…" note while the fresh data loads. Returns false if there is none. */
+export function renderSavedOverview(main) {
+  const saved = savedOverview();
+  if (!saved) return false;
+  if (!returnsAt) {
+    returns = new Map((saved.returns || []).map((r) => [r.ticker, r]));
+    earnings = saved.earnings || [];
+  }
+  drawOverview(main, saved.data, saved.rules, true);
+  return true;
+}
+
 export async function renderOverview(main) {
   const [data, rulesRes] = await Promise.all([api('GET', '/portfolio'), api('GET', '/rules'), loadReturns()]);
+  saveOverview(data, rulesRes.rules);
+  drawOverview(main, data, rulesRes.rules, false);
+}
+
+function drawOverview(main, data, rules, updating) {
   const { portfolios } = data;
   if (!hasPartner()) person = 'household';
   if (!portfolios.household.overall.positions.length) {
@@ -380,7 +418,7 @@ export async function renderOverview(main) {
         })))
       : null;
     fill(main,
-      liveMarker(pageHead('Overview', pricesNote(data), switcher), data.live_as_of),
+      liveMarker(pageHead('Overview', `${pricesNote(data)}${updating ? ' · Updating…' : ''}`, switcher), data.live_as_of),
       marketBanner(data),
       summaryTable(portfolios[person], data.live_as_of ? 'Today' : 'Last day'),
       h('section', { class: 'tiles', 'aria-label': `Summary for ${viewLabel()}` },
@@ -393,7 +431,7 @@ export async function renderOverview(main) {
       earningsCard(),
       h('div', { class: 'row' }, performanceCard(s), allocationCard(s)),
       holdingsCard(s),
-      alertsCard(rulesRes.rules),
+      alertsCard(rules),
       h('div', { class: 'footer-note' },
         h('span', { text: 'Performance shows how current holdings moved; it ignores past buys and sells.' }),
         h('span', { text: 'Describes data only. Not investment advice.' })),

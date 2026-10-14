@@ -26,6 +26,7 @@ import hashlib
 import time
 import uuid
 from collections.abc import Iterable, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from decimal import Decimal
 from functools import lru_cache
@@ -434,6 +435,12 @@ class Repository:
             KeyConditionExpression=condition, ProjectionExpression="sk, #c", ExpressionAttributeNames={"#c": "close"}
         )
         return [(i["sk"], float(i["close"])) for i in items]
+
+    def price_histories(self, tickers: Iterable[str], since: str | None = None) -> dict[str, list[tuple[str, float]]]:
+        """price_history for many tickers at once, queried side by side (pages load faster)."""
+        tickers = sorted(set(tickers))
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            return dict(zip(tickers, pool.map(lambda t: self.price_history(t, since), tickers), strict=True))
 
     # ---------- news ----------
     def put_news(self, ticker: str, articles: Iterable[Mapping[str, Any]]) -> int:

@@ -7,7 +7,7 @@ import { renderAlerts } from './views/alerts.js';
 import { renderCheckup } from './views/checkup.js';
 import { renderPerson } from './views/holdings.js';
 import { renderNews } from './views/news.js';
-import { renderOverview } from './views/overview.js';
+import { renderOverview, renderSavedOverview } from './views/overview.js';
 import { renderWatchlist } from './views/watchlist.js';
 
 const ROUTES = {
@@ -63,28 +63,41 @@ async function route({ quiet = false } = {}) {
   if (legacy) { location.replace(`#/mine/${legacy[1]}`); return; }
   const [name, render] = currentRoute();
   const seq = ++renderSeq;
+  let showedSaved = false;
   if (!quiet) {
     document.querySelectorAll('.nav a').forEach((a) => {
       if (a.dataset.route === name) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
     });
-    main.replaceChildren(h('p', { class: 'loading', text: 'Loading…' }));
+    // The Overview first draws the copy saved on this device (marked "Updating…"), then swaps in fresh data quietly.
+    const saved = h('div', { class: 'page' });
+    showedSaved = render === renderOverview && renderSavedOverview(saved);
+    if (showedSaved) {
+      main.replaceChildren(saved);
+      main.focus({ preventScroll: true });
+    } else {
+      main.replaceChildren(h('p', { class: 'loading', text: 'Loading…' }));
+    }
   }
   const page = h('div', { class: 'page' });
   try {
     await render(page);
   } catch (e) {
     if (quiet) return; // retried on the next check
+    if (showedSaved) {
+      if (seq === renderSeq) main.prepend(errorCard(`Couldn't update: ${e.message}. These are the last saved numbers.`));
+      return;
+    }
     page.replaceChildren(errorCard(`Something went wrong: ${e.message}`));
   }
   if (seq !== renderSeq) return; // a newer navigation or refresh owns the page now
   renderedAt = Date.now();
   // A refresh rebuilds the same controls in the same order, so keep focus on the same one.
   const focusables = (root) => [...root.querySelectorAll('a[href], button, input, select, textarea')];
-  const focusedIndex = quiet ? focusables(main).indexOf(document.activeElement) : -1;
+  const focusedIndex = quiet || showedSaved ? focusables(main).indexOf(document.activeElement) : -1;
   main.replaceChildren(page);
   if (focusedIndex >= 0) focusables(main)[focusedIndex]?.focus({ preventScroll: true });
-  if (!quiet) main.focus({ preventScroll: true });
+  if (!quiet && !showedSaved) main.focus({ preventScroll: true });
 }
 
 /** Shows the page once sign-in is confirmed (or an error needs showing). */
