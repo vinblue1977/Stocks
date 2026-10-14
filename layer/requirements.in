@@ -1,0 +1,7 @@
+# Runtime dependencies packaged into the Lambda layer (boto3 is provided by the runtime).
+# Edit this file, then run `make lock` to regenerate requirements.txt (exact versions + hashes).
+anthropic[bedrock]>=1.13.0,<2
+pydantic>=2.14.0,<3
+tzdata>=2026.5  # zoneinfo data for market-hours checks (the Lambda image may not ship it)
+reportlab>=5.0.1,<6  # monthly checkup PDF (pure Python; brings in pillow)
+cryptography>=50.0.1,<51  # Web Push encryption and VAPID signing (phone notifications)

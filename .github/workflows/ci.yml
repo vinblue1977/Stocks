@@ -24,8 +24,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # A push to main is always a merged PR (branch protection), and PRs must be up to date with main, so the
-# merged files are what the PR's checks tested: checks and workflow-lint skip pushes. Dependency ranges
-# resolve again at deploy time, so the deploy job re-runs the tests and audit on what it installs.
+# merged files are what the PR's checks tested: checks and workflow-lint skip pushes. The Lambda layer is
+# locked (layer/requirements.txt); the CDK and dev tools still resolve ranges, so the deploy job re-runs the
+# tests and audit on what it installs (and catches advisories published since the PR).
 jobs:
   checks:
     if: github.event_name != 'push'
@@ -48,11 +49,12 @@ jobs:
           enable-cache: true
           cache-dependency-glob: |
             requirements*.txt
-            layer/requirements.txt
+            layer/requirements.*
       - name: Install dependencies
         # uv is much faster than pip; --seed keeps pip in the venv for the layer build.
         run: |
           uv venv --seed --python "$(which python)" .venv
+          uv pip install --python .venv/bin/python --require-hashes --no-deps -r layer/requirements.txt
           uv pip install --python .venv/bin/python -r requirements-dev.txt
       - name: Install ESLint (exact versions from package-lock.json; no install scripts)
         run: npm ci --ignore-scripts --no-audit --no-fund
@@ -165,7 +167,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: |
             requirements*.txt
-            layer/requirements.txt
+            layer/requirements.*
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
@@ -173,6 +175,7 @@ jobs:
       - name: Deploy
         run: |
           uv venv --seed --python "$(which python)" .venv
+          uv pip install --python .venv/bin/python --require-hashes --no-deps -r layer/requirements.txt
           uv pip install --python .venv/bin/python -r requirements-dev.txt
           make test audit  # the exact versions being shipped; a release or advisory since the PR stops the deploy
           make layer

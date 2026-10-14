@@ -14,7 +14,7 @@ updates:
     groups:
       actions:
         patterns: ["*"]
-  # Also covers layer/requirements.txt (pulled in by requirements-dev.txt).
+  # The CDK app and dev tools (requirements.txt, requirements-dev.txt).
   - package-ecosystem: pip
     directory: /
     schedule:
@@ -31,7 +31,22 @@ updates:
       # cdk-nag 3 replaces the suppression API (experimental, no grouped acknowledgments yet).
       - dependency-name: cdk-nag
         versions: [">=3.0.0"]
-      # anthropic is capped <2 in layer/requirements.txt; a new major needs a deliberate upgrade.
+  # The Lambda layer: requirements.in holds the ranges; Dependabot regenerates the hashed requirements.txt
+  # lockfile with pip-compile.
+  - package-ecosystem: pip
+    directory: /layer
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7  # skip releases younger than a week (time for a bad release to be caught and pulled)
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      layer:
+        patterns: ["*"]
+    ignore:
+      # anthropic is capped <2 in layer/requirements.in; a new major needs a deliberate upgrade.
       - dependency-name: anthropic
         versions: [">=2.0.0"]
   # ESLint and its config packages (package.json; dev only, nothing ships).
