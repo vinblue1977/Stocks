@@ -24,7 +24,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # A push to main is always a merged PR (branch protection), and PRs must be up to date with main, so the
-# merged code is exactly what the PR's checks tested: checks and workflow-lint don't run again on it.
+# merged files are what the PR's checks tested: checks and workflow-lint skip pushes. Dependency ranges
+# resolve again at deploy time, so the deploy job re-runs the tests and audit on what it installs.
 jobs:
   checks:
     if: github.event_name != 'push'
@@ -128,7 +129,7 @@ jobs:
           BEFORE: ${{ github.event.before }}
 
   deploy:
-    needs: [checks, changes, workflow-lint]
+    needs: [checks, changes, workflow-lint]  # checks/workflow-lint gate manual dispatch only; they skip pushes
     # Auto on merges that change code or infra; manual dispatch stays as a fallback. Main only, and the
     # production environment and the AWS role trust both enforce that too.
     if: >-
@@ -170,6 +171,7 @@ jobs:
         run: |
           uv venv --seed --python "$(which python)" .venv
           uv pip install --python .venv/bin/python -r requirements-dev.txt
+          make test audit  # the exact versions being shipped; a release or advisory since the PR stops the deploy
           make layer
           # A missing secret would silently drop the email subscriptions or names, so fail instead.
           : "${ALERT_EMAIL:?set the ALERT_EMAIL secret}" "${OWNER_NAME:?set the OWNER_NAME secret}"
