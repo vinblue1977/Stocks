@@ -1,7 +1,7 @@
 // A person's portfolio page: a switch between their Stock Holdings and Automatic Investment.
 import { api } from '../api.js';
 import { KINDS, MAX_TICKERS, groupFor, possessive, portfolioTitle } from '../groups.js';
-import { fill, fmt, h, toast, tone } from '../ui.js';
+import { fill, fmt, h, stackTable, toast, tone } from '../ui.js';
 import { renderStockHoldings } from './trades.js';
 
 const TICKER_PATTERN = '[A-Za-z][A-Za-z0-9.\\-]{0,9}';
@@ -196,9 +196,9 @@ export async function renderPerson(main, person, kind) {
     h('section', { class: 'card', 'aria-labelledby': 'list-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'list-h', text: `${possessive(person)} ${KINDS[kind].label.toLowerCase()}` })),
       mine.length
-        ? h('div', { class: 'table-wrap' }, h('table', null,
+        ? h('div', { class: 'table-wrap' }, stackTable(h('table', null,
           h('thead', null, h('tr', null, ['Ticker', 'Shares', totals ? 'Cost basis' : 'Avg cost', 'Price', 'Value', 'Gain / loss', ''].map((t, i) => h('th', { scope: 'col', class: i === 0 ? 'text' : null, text: t })))),
-          h('tbody', null, rows)))
+          h('tbody', null, rows))))
         : h('p', { class: 'muted', text: `Nothing in ${info.label} yet. Record the first purchase above.` })),
     h('section', { class: 'card', 'aria-labelledby': 'set-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'set-h', text: 'Set totals directly' }),

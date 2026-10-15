@@ -2,7 +2,7 @@ import { api } from '../api.js';
 import { LAST_VISIT, SAVED_OVERVIEW, currentEmail } from '../auth.js';
 import { donut, valueChart } from '../charts.js';
 import { GROUPS, KINDS, groupChip, groupLabel, hasPartner, personName, portfolioTitle, possessive } from '../groups.js';
-import { EARNINGS_HOUR, add, fill, fmt, h, icon, pageHead, tone } from '../ui.js';
+import { EARNINGS_HOUR, add, fill, fmt, h, icon, pageHead, stackTable, tone } from '../ui.js';
 
 const RANGES = { '1M': 22, '3M': 66, '1Y': 252, All: Infinity };
 /** A group's color, from the same CSS tokens as its chip (Stock Holdings blue, Automatic Investment sand). */
@@ -352,6 +352,13 @@ function holdingsCard(summary) {
         h('span', { class: 'weight-track', 'aria-hidden': 'true' },
           h('span', { class: 'weight-fill', style: { width: `${maxWeight ? ((p.weight || 0) / maxWeight) * 100 : 0}%` } })))),
       h('td', { class: tone(p.gain) }, `${fmt.signedMoney(p.gain)} `, h('span', { class: 'xsmall', text: fmt.signedPct(p.gain_pct, 1) })))));
+  // Phones have no column headers to tap (the table becomes blocks), so sorting is a menu there.
+  const sortPicker = rows.length ? h('label', { class: 'sort-pick phone-only' }, 'Sort',
+    h('select', { 'aria-label': 'Sort holdings', onChange: (e) => { const [key, dir] = e.target.value.split(':'); sorts[holdingsMode] = { key, dir: Number(dir) }; redraw(); } },
+      HOLDING_COLUMNS[holdingsMode].flatMap(([key, label, text]) => [text ? 1 : -1, text ? -1 : 1].map((dir) => h('option', {
+        value: `${key}:${dir}`, selected: sort.key === key && sort.dir === dir,
+        text: `${label} ${text ? (dir > 0 ? 'A–Z' : 'Z–A') : (dir < 0 ? 'high to low' : 'low to high')}`,
+      }))))) : null;
   const segmented = (label, options, current, choose) => h('div', { class: 'segmented', role: 'group', 'aria-label': label },
     options.map(([key, text]) => h('button', { type: 'button', 'aria-pressed': String(key === current), text, onClick: () => { choose(key); redraw(); } })));
   add(card,
@@ -359,13 +366,14 @@ function holdingsCard(summary) {
       h('div', { class: 'card-tools' },
         h('span', { class: 'muted small', text: `${rows.length} ${perf ? 'ticker' : 'position'}${rows.length === 1 ? '' : 's'}` }),
         segmented('Columns', [['value', 'Value'], ['perf', 'Performance']], holdingsMode, (key) => { holdingsMode = key; }),
-        segmented('Show group', [['both', 'Both'], ['stocks', 'Stocks'], ['auto', 'Auto']], kindFilter, (key) => { kindFilter = key; }))),
+        segmented('Show group', [['both', 'Both'], ['stocks', 'Stocks'], ['auto', 'Auto']], kindFilter, (key) => { kindFilter = key; }),
+        sortPicker)),
     rows.length
-      ? h('div', { class: 'table-wrap' }, h('table', null, h('thead', null, head), h('tbody', null, body)))
+      ? h('div', { class: 'table-wrap' }, stackTable(h('table', null, h('thead', null, head), h('tbody', null, body))))
       : h('p', { class: 'muted', text: 'Nothing in this group yet.' }),
     rows.length ? h('p', { class: 'xsmall muted', style: { marginBottom: 0 }, text: perf
-      ? 'Total return of each fund or stock (dividends included) as of the last close; not your own return, which depends on when you bought. 3Y is per year. Tap a column to sort.'
-      : 'Tap a column to sort. Weight is the share of this whole view.' }) : null);
+      ? 'Total return of each fund or stock (dividends included) as of the last close; not your own return, which depends on when you bought. 3Y is per year.'
+      : 'Weight is the share of this whole view.' }, h('span', { class: 'hide-narrow', text: ' Tap a column to sort.' })) : null);
   return card;
 }
 

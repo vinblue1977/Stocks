@@ -343,3 +343,21 @@ a.pill:hover { background: #102640; color: var(--text); }
 .sig-line b:not(.pos):not(.neg) { color: var(--text-2); } /* up/down values keep the site-wide .pos/.neg colors */
 .sig-horizon { flex: 0 0 40px; font-family: var(--sans); font-weight: 600; color: var(--accent); }
 @media (max-width: 640px) { .sig-stack { display: flex; } .sig-table { display: none; } }
+/* Tables marked with stackTable() become blocks on a phone: first cell on top, then labeled values in a grid. */
+.phone-only { display: none; }
+@media (max-width: 640px) {
+  .phone-only { display: revert; }
+  table.stack, table.stack > tbody { display: block; }
+  table.stack > thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } /* hidden, still read by screen readers */
+  table.stack > tbody > tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; padding: 12px 0; border-bottom: 1px solid var(--divider); }
+  table.stack > tbody > tr.stack-full { display: block; padding: 0; }
+  table.stack > tbody > tr > td:not(.hide-narrow) { display: block; padding: 0; border: 0; text-align: left; white-space: normal; min-width: 0; overflow-wrap: anywhere; }
+  table.stack > tbody > tr > td.stack-lead, table.stack > tbody > tr > td:not([data-label]) { grid-column: 1 / -1; }
+  table.stack > tbody > tr > td.stack-lead { order: -1; }
+  table.stack > tbody > tr > td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; font: 500 11px var(--sans); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  table.stack > tbody > tr.stack-full > td { padding: 0 0 12px; }
+  table.stack .weight { white-space: nowrap; }
+  table.stack .actions { justify-content: flex-start; flex-wrap: wrap; }
+  .sort-pick { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .sort-pick select { height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid #2A3A57; background: var(--inset); color: var(--text); font: inherit; }
+}

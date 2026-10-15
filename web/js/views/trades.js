@@ -1,7 +1,7 @@
 // Stock Holdings page body: buys and sales (first-in, first-out), each holding's history, and realized gains.
 import { api } from '../api.js';
 import { possessive } from '../groups.js';
-import { add, fill, fmt, h, toast, tone } from '../ui.js';
+import { add, fill, fmt, h, stackTable, toast, tone } from '../ui.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const TYPE_LABEL = { opening: 'Opening position', buy: 'Buy', sell: 'Sale' };
@@ -176,9 +176,9 @@ export async function renderStockHoldings(main, { person, group, head, rerender,
         },
       });
       fill(cell,
-        h('div', { class: 'table-wrap' }, h('table', null,
+        h('div', { class: 'table-wrap' }, stackTable(h('table', null,
           h('thead', null, h('tr', null, ['Date', 'Type', 'Shares', 'Price', 'Total', ''].map((t, i) => h('th', { scope: 'col', class: i < 2 ? 'text' : null, text: t })))),
-          h('tbody', null, rows))),
+          h('tbody', null, rows)))),
         h('div', { class: 'history-foot' },
           h('span', { class: 'xsmall muted', text: implicit
             ? 'This opening position comes from your saved totals. Set its date for correct long/short term, or record trades to start the history.'
@@ -214,14 +214,14 @@ export async function renderStockHoldings(main, { person, group, head, rerender,
       h('span', { class: 'muted small', text: 'From sales in these Stock Holdings · first-in, first-out' })),
     h('div', { class: 'realized-grid' }, box(`${year} total`, realizedYear), box('Long term (held over a year)', sum(true)), box('Short term', sum(false))),
     sales.length
-      ? h('div', { class: 'table-wrap' }, h('table', null,
+      ? h('div', { class: 'table-wrap' }, stackTable(h('table', null,
         h('thead', null, h('tr', null, ['Sold', 'Ticker', 'Shares', 'Bought', 'Proceeds', 'Cost', 'Gain', 'Term']
           .map((t, i) => h('th', { scope: 'col', class: i < 2 || i === 7 ? 'text' : null, text: t })))),
         h('tbody', null, sales.map((s) => h('tr', null,
           h('td', { class: 'text', text: fmt.date(s.sold) }), h('td', { class: 'text' }, h('strong', { text: s.ticker })),
           h('td', { text: fmt.num(s.shares, 6) }), h('td', { text: s.bought ? fmt.date(s.bought) : '—' }),
           h('td', { text: fmt.money(s.proceeds) }), h('td', { text: fmt.money(s.cost) }),
-          h('td', { class: tone(s.gain), text: fmt.signedMoney(s.gain) }), h('td', { class: 'text' }, termTag(s.long_term)))))))
+          h('td', { class: tone(s.gain), text: fmt.signedMoney(s.gain) }), h('td', { class: 'text' }, termTag(s.long_term)))))), { lead: 1 }))
       : h('p', { class: 'muted', text: 'No sales yet.' }),
     realizedRes.unreadable.length ? h('p', { class: 'small neg', style: { margin: '10px 0 0' }, text: `Couldn't read the trades for ${realizedRes.unreadable.join(', ')}: a sale is larger than the shares held then. Check its History.` }) : null,
     h('p', { class: 'xsmall muted', style: { margin: '10px 0 0' }, text: "For your own tracking; your broker's tax forms are the official numbers." }));
@@ -238,9 +238,9 @@ export async function renderStockHoldings(main, { person, group, head, rerender,
     add(h('section', { class: 'card', 'aria-labelledby': 'list-h' }),
       h('div', { class: 'card-head' }, h('h2', { id: 'list-h', text: `${possessive(person)} stock holdings` })),
       mine.length
-        ? h('div', { class: 'table-wrap' }, h('table', null,
+        ? h('div', { class: 'table-wrap' }, stackTable(h('table', null,
           h('thead', null, h('tr', null, ['Ticker', 'Shares', 'Avg cost', 'Price', 'Value', 'Gain / loss', ''].map((t, i) => h('th', { scope: 'col', class: i === 0 ? 'text' : null, text: t })))),
-          h('tbody', null, rows)))
+          h('tbody', null, rows))))
         : h('p', { class: 'muted', text: 'Nothing here yet. Record the first purchase above.' }),
       h('p', { class: 'xsmall muted', style: { margin: '10px 0 0' }, text: 'Each holding starts with one opening position from your saved totals. Set its date in History for correct long/short term.' })),
     realizedCard);
