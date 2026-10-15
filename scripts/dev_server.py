@@ -32,6 +32,9 @@ from urllib.parse import parse_qsl, unquote
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 USER = "local-user"
+MAX_HOLD_MS = 15000
+# A 1x1 transparent GIF, so the hidden hold image loads cleanly.
+PIXEL = bytes.fromhex("47494638396101000100800000000000ffffff21f90401000000002c00000000010001000002024401003b")
 
 # Sample tickers: (ticker, last price, how far below today it started a year+ ago, wobble)
 PRICES = [
@@ -269,15 +272,20 @@ def make_handler(repo: Any, slow: bool) -> type[SimpleHTTPRequestHandler]:
 
         def do_GET(self) -> None:  # noqa: N802 - http.server naming
             path, _, query = self.path.partition("?")
-            hold = dict(parse_qsl(query)).get("hold", "")
-            if path in ("/", "/index.html") and hold.isdigit():
+            params = dict(parse_qsl(query))
+            hold = params.get("hold" if path != "/__hold" else "ms", "")
+            hold_ms = min(int(hold), MAX_HOLD_MS) if hold.isdigit() else None
+            if path in ("/", "/index.html") and hold_ms is not None:
                 # A hidden image that loads slowly keeps the load event (and the screenshot) waiting.
                 page = (WEB / "index.html").read_text()
-                img = f'<img src="/__hold?ms={min(int(hold), 15000)}" alt="" hidden>'
+                img = f'<img src="/__hold?ms={hold_ms}" alt="" hidden>'
                 self._text(page.replace("</body>", f"{img}</body>"), "text/html")
             elif path == "/__hold":
-                time.sleep(min(int(dict(parse_qsl(query)).get("ms", "0") or 0), 15000) / 1000)
-                self._text("", "image/gif")
+                time.sleep((hold_ms or 0) / 1000)
+                self.send_response(200)
+                self.send_header("Content-Type", "image/gif")
+                self.end_headers()
+                self.wfile.write(PIXEL)
             elif path.startswith("/api/"):
                 self._api("GET")
             elif path == "/config.json":
