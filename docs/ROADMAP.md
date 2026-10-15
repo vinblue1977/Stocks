@@ -73,7 +73,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 51 | Telegram bot | M | Instant mobile alerts and /overview or /news commands without Web Push quirks |
 | 52 | 60-second audio summary | S | Amazon Polly audio clip of the weekly report or monthly checkup |
 | 53 | Free secondary price fallback | S–M | Fail over to a secondary free price source if Tiingo has downtime or hits limits |
-| 54 | Local dev mock server | S | Mock server for local UI testing and styling without deploying or calling AWS APIs |
 
 
 - Rule backtesting: how an alert rule would have fired historically.
@@ -121,6 +120,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | — | CI: smoke test, weekly audit, dependency review, workflow lint, ESLint | #33, #51, #64 |
 | — | Lambda layer lockfile with hashes (`make lock`); Lambda on Python 3.14 | #67 |
 | — | Python type checking (pyright) | #69 |
+| 54 | Local preview server (`make dev`) | #73 |
 | — | `cost_basis` → `avg_cost` rename finished (old name removed from stored holdings) | #59, #60 |
 
 Finished items move here with their PR; numbers don't change.
