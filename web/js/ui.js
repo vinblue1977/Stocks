@@ -109,12 +109,17 @@ export function stackTable(table, { lead = 0 } = {}) {
   }
   for (const row of table.tBodies[0]?.rows || []) {
     row.setAttribute('role', 'row');
-    if (row.cells.length === 1 && row.cells[0].colSpan > 1) { row.classList.add('stack-full'); continue; }
+    if (row.cells.length === 1 && row.cells[0].colSpan > 1) {
+      row.classList.add('stacked-full');
+      row.cells[0].setAttribute('role', 'cell');
+      continue;
+    }
     let col = 0;
     for (const cell of row.cells) {
       cell.setAttribute('role', 'cell');
-      if (col === lead) cell.classList.add('stack-lead');
-      else if (cell.colSpan === 1 && labels[col] && !cell.dataset.label) cell.dataset.label = labels[col]; // a wide message cell spans the row
+      if (col === lead) cell.classList.add('stacked-lead');
+      else if (cell.colSpan > 1) cell.classList.add('stacked-span'); // a wide message cell spans the row, unlabeled
+      else if (labels[col] && !cell.dataset.label) cell.dataset.label = labels[col];
       col += cell.colSpan;
     }
   }
