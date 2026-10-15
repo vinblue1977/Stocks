@@ -58,7 +58,7 @@ make shot ROUTE='#/news' PHONE=1   # screenshot of the running preview (headless
 read -rs K && aws ssm put-parameter --name /portfolio-tracker/tiingo-api-key --type SecureString --value "$K"
 read -rs K && aws ssm put-parameter --name /portfolio-tracker/finnhub-api-key --type SecureString --value "$K"; unset K
 
-npx aws-cdk@2 bootstrap                      # once per account/region
+npx --no-install cdk bootstrap                      # once per account/region
 make deploy ALERT_EMAIL=you@example.com      # then confirm the SNS emails
 ```
 
