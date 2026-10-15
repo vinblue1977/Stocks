@@ -110,10 +110,10 @@ function summaryTable(views, dayLabel) {
   };
   return h('section', { class: 'card', 'aria-labelledby': 'sum-h' },
     h('div', { class: 'card-head' }, h('h2', { id: 'sum-h', text: `By group · ${viewLabel()}` })),
-    h('div', { class: 'table-wrap' }, h('table', null,
+    h('div', { class: 'table-wrap' }, stackTable(h('table', null,
       h('thead', null, h('tr', null, ['Group', 'Value', 'Cost basis', 'Gain / loss', dayLabel, '1Y return', 'Share of total']
         .map((t, i) => h('th', { scope: 'col', class: i === 0 ? 'text' : null, text: t })))),
-      h('tbody', null, row('stocks', KINDS.stocks.label), row('auto', KINDS.auto.label), row('overall', 'Total')))));
+      h('tbody', null, row('stocks', KINDS.stocks.label), row('auto', KINDS.auto.label), row('overall', 'Total'))))));
 }
 
 /** Value of the current holdings over the chosen range, with the range's return above the chart. */

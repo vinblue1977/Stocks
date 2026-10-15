@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { EARNINGS_HOUR, fill, fmt, h, pageHead, sentimentTag, toast, tone } from '../ui.js';
+import { EARNINGS_HOUR, fill, fmt, h, pageHead, sentimentTag, stackTable, toast, tone } from '../ui.js';
 import { insightsCard } from './insights.js';
 
 let confirming = null; // ticker whose Remove is waiting for confirmation
@@ -119,11 +119,11 @@ export async function renderWatchlist(main) {
     h('section', { class: 'card', 'aria-labelledby': 'wl-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'wl-h', text: 'Watching' }),
         h('span', { class: 'muted small', text: `${items.length} of ${res.max} · prices live during market hours` })),
-      h('div', { class: 'table-wrap' }, h('table', null,
+      h('div', { class: 'table-wrap' }, stackTable(h('table', null,
         h('thead', null, h('tr', null, ['Ticker', 'Price', '1 day', '1 year', 'From 1Y high', 'RSI (14)', 'vs 200-day', 'News, 7d', 'Next earnings', 'Your rules', '']
           .map((t, i) => h('th', { scope: 'col', class: i === 0 || i === 8 || i === 9 ? 'text' : null, text: t })))),
         h('tbody', null, rows.length ? rows
-          : h('tr', null, h('td', { colspan: 11, class: 'text muted', text: 'Nothing on your watchlist yet. Add a ticker above.' }))))),
+          : h('tr', null, h('td', { colspan: 11, class: 'text muted', text: 'Nothing on your watchlist yet. Add a ticker above.' })))))),
       h('p', { class: 'muted small', style: { marginBottom: 0 }, text: 'Watched tickers are not part of your holdings or totals. Set alerts for them on the Alerts page.' })),
     insightsCard(insightsRes.insights.filter((i) => i.watched),
       { id: 'wi-h', subtitle: 'Watched stocks · refreshed each evening', footnote: ' Tap a stock for its monthly ratings and each trade.' }),
