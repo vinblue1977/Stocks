@@ -348,14 +348,14 @@ a.pill:hover { background: #102640; color: var(--text); }
 @media (max-width: 640px) {
   .phone-only { display: revert; }
   table.stack, table.stack > tbody { display: block; }
-  table.stack > thead { display: none; }
+  table.stack > thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } /* hidden, still read by screen readers */
   table.stack > tbody > tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; padding: 12px 0; border-bottom: 1px solid var(--divider); }
   table.stack > tbody > tr.stack-full { display: block; padding: 0; }
-  table.stack > tbody > tr > td { display: block; padding: 0; border: 0; text-align: left; white-space: normal; min-width: 0; overflow-wrap: anywhere; }
-  table.stack > tbody > tr > td:first-child, table.stack > tbody > tr > td:not([data-label]) { grid-column: 1 / -1; }
-  table.stack > tbody > tr > td[data-label]:not(:first-child)::before { content: attr(data-label); display: block; margin-bottom: 2px; font: 500 11px var(--sans); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  table.stack > tbody > tr > td:not(.hide-narrow) { display: block; padding: 0; border: 0; text-align: left; white-space: normal; min-width: 0; overflow-wrap: anywhere; }
+  table.stack > tbody > tr > td.stack-lead, table.stack > tbody > tr > td:not([data-label]) { grid-column: 1 / -1; }
+  table.stack > tbody > tr > td.stack-lead { order: -1; }
+  table.stack > tbody > tr > td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; font: 500 11px var(--sans); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
   table.stack > tbody > tr.stack-full > td { padding: 0 0 12px; }
-  table.stack > tbody > tr > td.hide-narrow { display: none; }
   table.stack .weight { white-space: nowrap; }
   table.stack .actions { justify-content: flex-start; flex-wrap: wrap; }
   .sort-pick { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }

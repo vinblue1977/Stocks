@@ -221,7 +221,7 @@ export async function renderStockHoldings(main, { person, group, head, rerender,
           h('td', { class: 'text', text: fmt.date(s.sold) }), h('td', { class: 'text' }, h('strong', { text: s.ticker })),
           h('td', { text: fmt.num(s.shares, 6) }), h('td', { text: s.bought ? fmt.date(s.bought) : '—' }),
           h('td', { text: fmt.money(s.proceeds) }), h('td', { text: fmt.money(s.cost) }),
-          h('td', { class: tone(s.gain), text: fmt.signedMoney(s.gain) }), h('td', { class: 'text' }, termTag(s.long_term))))))))
+          h('td', { class: tone(s.gain), text: fmt.signedMoney(s.gain) }), h('td', { class: 'text' }, termTag(s.long_term)))))), { lead: 1 }))
       : h('p', { class: 'muted', text: 'No sales yet.' }),
     realizedRes.unreadable.length ? h('p', { class: 'small neg', style: { margin: '10px 0 0' }, text: `Couldn't read the trades for ${realizedRes.unreadable.join(', ')}: a sale is larger than the shares held then. Check its History.` }) : null,
     h('p', { class: 'xsmall muted', style: { margin: '10px 0 0' }, text: "For your own tracking; your broker's tax forms are the official numbers." }));
