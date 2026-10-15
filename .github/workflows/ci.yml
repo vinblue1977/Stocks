@@ -28,8 +28,33 @@ concurrency:
 # locked (layer/requirements.txt); the CDK and dev tools still resolve ranges, so the deploy job re-runs the
 # tests and audit on what it installs (and catches advisories published since the PR).
 jobs:
+  # On a PR, decides whether anything besides docs changed. A docs-only PR skips checks and workflow-lint;
+  # GitHub counts a skipped required job as passed, so it can still merge.
+  scope:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.diff.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: diff
+        run: |
+          changed="$(git diff --name-only "$BASE...$HEAD")"
+          echo "$changed"
+          code="$(grep -Ev '^docs/|\.md$|^LICENSE$' <<<"$changed" || true)"
+          echo "docs_only=$([ -n "$changed" ] && [ -z "$code" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+
   checks:
-    if: github.event_name != 'push'
+    needs: scope
+    # Not on pushes (the PR already ran it) or docs-only PRs; on schedule and dispatch `scope` is skipped.
+    if: always() && github.event_name != 'push' && needs.scope.result != 'failure' && needs.scope.outputs.docs_only != 'true'
     runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
     timeout-minutes: 20
     steps:
@@ -74,7 +99,8 @@ jobs:
 
   # Lints the workflow files: actionlint (syntax, expressions, shell) and zizmor (Actions security).
   workflow-lint:
-    if: github.event_name != 'push'
+    needs: scope
+    if: always() && github.event_name != 'push' && needs.scope.result != 'failure' && needs.scope.outputs.docs_only != 'true'
     runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
     timeout-minutes: 5
     steps:
