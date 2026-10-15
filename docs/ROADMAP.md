@@ -85,6 +85,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 - Restore drill: point-in-time restore of the table to a test copy.
 
 ## CI ideas
+- Faster deploy (about 3 min to under 2): drop the test re-run from the deploy job (the layer is locked and the PR tested it; keep the audit), and pin the CDK CLI in `package.json` so CI caches it instead of downloading `aws-cdk@2` each time.
 - Accessibility check of the dashboard pages (axe) on PRs.
 - Yearly reminder to rotate the Tiingo and Finnhub API keys.
 
