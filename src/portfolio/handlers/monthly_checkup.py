@@ -75,7 +75,7 @@ def email(built: dict[str, Any], targets: dict[str, Any] | None, summary: str, n
                 where = "over" if d["gap"] > 0 else "under"
                 now_target = f"{_pct(d['now'], False):>4}  target {_pct(d['target'], False):>4}"
                 lines.append(f"  {d['label']:<24} {now_target}   {where} by ${abs(d['gap']):,.0f}")
-        areas = (targets or {}).get("areas", {})  # drift exists only when targets are set
+        areas = (targets or {}).get("areas") or {}  # drift exists only when targets are set
         targets_pct = {k: v["pct"] / 100 for k, v in areas.items()}
         parts = checkup.split(home["by_area"], home["total_value"], targets_pct, SPLIT_EXAMPLE)
         if parts:

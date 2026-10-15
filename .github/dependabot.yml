@@ -60,7 +60,7 @@ updates:
       prefix: build
       include: scope
     groups:
-      eslint:
+      dev-tools:
         patterns: ["*"]
     ignore:
       # A new ESLint major can change the recommended rules: upgrade deliberately.
