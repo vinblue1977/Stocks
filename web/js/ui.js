@@ -88,6 +88,29 @@ export function toast(message, isError = false) {
   toastTimer = setTimeout(() => { el.hidden = true; }, 4000);
 }
 
+/**
+ * Marks a table to become stacked blocks on phones (CSS `table.stack`): each body cell gets its column's header
+ * as `data-label`, shown above the value. The first cell (e.g. the ticker) and unlabeled cells (buttons) span the
+ * row; a single wide cell (e.g. an expanded history row) is left as it is. Desktop keeps the normal table.
+ */
+export function stackTable(table) {
+  table.classList.add('stack');
+  const labels = [];
+  for (const th of table.tHead?.rows[table.tHead.rows.length - 1]?.cells || []) {
+    const text = (th.dataset.label || th.textContent).replace(/[▲▼]/g, '').trim();
+    for (let i = 0; i < th.colSpan; i += 1) labels.push(text);
+  }
+  for (const row of table.tBodies[0]?.rows || []) {
+    if (row.cells.length === 1 && row.cells[0].colSpan > 1) { row.classList.add('stack-full'); continue; }
+    let col = 0;
+    for (const cell of row.cells) {
+      if (labels[col] && !cell.dataset.label) cell.dataset.label = labels[col];
+      col += cell.colSpan;
+    }
+  }
+  return table;
+}
+
 export function pageHead(title, subtitle, ...extra) {
   return h('div', { class: 'page-head' },
     h('div', null, h('h1', { text: title }), subtitle ? h('p', { class: 'muted small', text: subtitle }) : null),
