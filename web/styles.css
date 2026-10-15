@@ -331,10 +331,10 @@ a.pill:hover { background: #102640; color: var(--text); }
 .sig-stack { display: none; flex-direction: column; }
 .sig-item { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 12px; padding: 12px 0; border-bottom: 1px solid var(--divider); }
 .sig-item:last-child { border-bottom: 0; }
-.sig-item.highlight { background: var(--chip-bg); margin: 0 -8px; padding: 12px 8px; border-radius: 8px; }
+.sig-item.highlight { background: var(--chip-bg); padding: 12px 8px; border-radius: 8px; border-bottom-color: transparent; }
 .sig-ticker { font-size: 15px; }
 .sig-line { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; font-size: 12px; color: var(--muted); font-family: var(--mono); }
-.sig-line b { font-weight: 500; color: var(--text-2); }
-.sig-line b.pos { color: var(--accent); } .sig-line b.neg { color: var(--warn); }
+.sig-line b { font-weight: 500; }
+.sig-line b:not(.pos):not(.neg) { color: var(--text-2); } /* up/down values keep the site-wide .pos/.neg colors */
 .sig-horizon { flex: 0 0 40px; font-family: var(--sans); font-weight: 600; color: var(--accent); }
 @media (max-width: 640px) { .sig-stack { display: flex; } .sig-table { display: none; } }

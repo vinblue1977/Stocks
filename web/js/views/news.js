@@ -85,22 +85,23 @@ function signalsCard(signals, rules) {
   const fact = (label, value, cls) => h('span', null, `${label} `, h('b', { class: cls, text: value }));
   const blocks = signals.map((sg) => h('div', { class: `sig-item${sg.ticker === selected ? ' highlight' : ''}` },
     h('strong', { class: 'sig-ticker', text: sg.ticker }),
-    ruleText(sg.ticker),
+    h('span', { class: 'xsmall muted' }, 'Rules ', ruleText(sg.ticker)),
     h('div', { class: 'sig-line' }, h('span', { class: 'sig-horizon', text: 'Short' }),
-      fact('RSI', fmt.num(sg.rsi14, 0)), fact('vs 50d', fmt.signedPct(sg.vs_sma50, 1), tone(sg.vs_sma50)),
-      fact('News', fmt.score(sg.sentiment_7d), tone(sg.sentiment_7d))),
+      fact('RSI 14', fmt.num(sg.rsi14, 0)), fact('vs 50d', fmt.signedPct(sg.vs_sma50, 1), tone(sg.vs_sma50)),
+      fact('News 7d', fmt.score(sg.sentiment_7d), tone(sg.sentiment_7d))),
     h('div', { class: 'sig-line' }, h('span', { class: 'sig-horizon', text: 'Long' }),
       fact('vs 200d', fmt.signedPct(sg.vs_sma200, 1), tone(sg.vs_sma200)), fact('From 1Y high', fmt.signedPct(sg.drawdown_from_high, 1)))));
   return h('section', { class: 'card', 'aria-labelledby': 'sig-h' },
     h('div', { class: 'card-head' }, h('h2', { id: 'sig-h', text: 'Signals' }), h('span', { class: 'muted small', text: 'Facts by time horizon. The decision is yours.' })),
-    h('div', { class: 'sig-stack' }, blocks.length ? blocks : h('p', { class: 'muted', text: 'Signals appear after the evening pipeline runs.' })),
-    h('div', { class: 'table-wrap sig-table' }, h('table', null,
+    blocks.length ? null : h('p', { class: 'muted', text: 'Signals appear after the evening pipeline runs.' }),
+    blocks.length ? h('div', { class: 'sig-stack' }, blocks) : null,
+    blocks.length ? h('div', { class: 'table-wrap sig-table' }, h('table', null,
       h('thead', null,
         h('tr', null, h('th'), h('th', { colspan: 3, class: 'text', style: { color: '#7CC4FA' }, text: 'Short term' }),
           h('th', { colspan: 2, class: 'text', style: { color: '#7CC4FA' }, text: 'Long term' }), h('th')),
         h('tr', null, ['Ticker', 'RSI (14)', 'vs 50-day', 'News, 7d', 'vs 200-day', 'From 1Y high', 'Your rules']
           .map((t, i) => h('th', { scope: 'col', class: i === 0 || i === 6 ? 'text' : null, text: t })))),
-      h('tbody', null, rows.length ? rows : h('tr', null, h('td', { colspan: 7, class: 'text muted', text: 'Signals appear after the evening pipeline runs.' }))))),
+      h('tbody', null, rows))) : null,
     h('p', { class: 'muted small', style: { marginBottom: 0 }, text: 'RSI above 70 is commonly read as overbought, below 30 as oversold. News score runs from −1 (negative) to +1 (positive).' }));
 }
 
