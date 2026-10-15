@@ -369,9 +369,9 @@ class PortfolioTrackerStack(Stack):
             self,
             "DepsLayer",
             code=lambda_.Code.from_asset(str(layer_path)),
-            compatible_runtimes=[lambda_.Runtime.PYTHON_3_13],
+            compatible_runtimes=[lambda_.Runtime.PYTHON_3_14],
             compatible_architectures=[lambda_.Architecture.ARM_64],
-            description="anthropic SDK + pydantic",
+            description="Locked runtime dependencies (layer/requirements.txt)",
         )
         code = lambda_.Code.from_asset(str(ROOT / "src"), exclude=["**/__pycache__", "**/*.pyc"])
         common_env = {
@@ -402,7 +402,7 @@ class PortfolioTrackerStack(Stack):
             return lambda_.Function(
                 self,
                 name,
-                runtime=lambda_.Runtime.PYTHON_3_13,
+                runtime=lambda_.Runtime.PYTHON_3_14,
                 architecture=lambda_.Architecture.ARM_64,
                 handler=f"portfolio.handlers.{handler}.handler",
                 code=code,

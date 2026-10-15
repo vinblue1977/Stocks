@@ -68,10 +68,19 @@ def apply_suppressions(stack: Stack) -> None:
                 id="AwsSolutions-SQS3",
                 reason="This queue is itself the dead-letter queue for failed price backfills.",
             ),
-            NagPackSuppression(
-                id="AwsSolutions-L1",
-                reason="Python 3.13 is pinned deliberately for the layer's compiled wheels; "
-                "upgrade the runtime and rebuild the layer together.",
-            ),
         ],
     )
+    # Our functions use the latest Python runtime; only CDK's own file-upload helper (BucketDeployment)
+    # has its runtime chosen by CDK, so the latest-runtime rule is waived for that one construct.
+    for child in stack.node.children:
+        if child.node.id.startswith("Custom::CDKBucketDeployment"):
+            NagSuppressions.add_resource_suppressions(
+                child,
+                [
+                    NagPackSuppression(
+                        id="AwsSolutions-L1",
+                        reason="CDK's BucketDeployment helper; CDK sets its runtime and updates it with aws-cdk-lib.",
+                    )
+                ],
+                apply_to_children=True,
+            )

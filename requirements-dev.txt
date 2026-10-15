@@ -1,8 +1,9 @@
+# The Lambda layer's locked packages (layer/requirements.txt) are installed after these, hash-checked: see `make install`.
 -r requirements.txt
--r layer/requirements.txt
 boto3>=1.43.110
 moto[dynamodb,sns,ssm]>=5.2.3
 pytest>=9.1.1
 pytest-cov>=7.1.0
 ruff>=0.16.10
 pip-audit>=2.10.1
+pip-tools>=7.6.1  # `make lock`: regenerates layer/requirements.txt

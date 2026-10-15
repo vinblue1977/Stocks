@@ -82,7 +82,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 ## Security and ops
 - CloudTrail trail to S3 for a long-term audit log (free history is 90 days).
 - Passwordless sign-in: drop the password factor, or require TOTP with it.
-- Lockfile with hashes for the Lambda layer.
 - Restore drill: point-in-time restore of the table to a test copy.
 
 ## CI ideas
@@ -108,6 +107,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 8 | Earnings calendar | #50 |
 | — | Overview redesign: performance by holding, donut, sortable Holdings; SPY removed | #39, #49 |
 | — | CI: smoke test, weekly audit, dependency review, workflow lint, ESLint | #33, #51, #64 |
+| — | Lambda layer lockfile with hashes (`make lock`) | #67 |
 | — | `cost_basis` → `avg_cost` rename finished (old name removed from stored holdings) | #59, #60 |
 
 Finished items move here with their PR; numbers don't change.

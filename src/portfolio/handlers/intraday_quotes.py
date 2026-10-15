@@ -52,5 +52,5 @@ def handler(
 def _scheduled_time(event: dict[str, Any] | None) -> datetime | None:
     try:
         return datetime.fromisoformat(str((event or {})["time"]).replace("Z", "+00:00"))
-    except (KeyError, ValueError):
+    except KeyError, ValueError:
         return None
