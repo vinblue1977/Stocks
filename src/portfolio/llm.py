@@ -135,10 +135,10 @@ def sentiment_label(score: float | None) -> Literal["Positive", "Negative", "Neu
 def _client() -> Any:
     cfg = get_config()
     if cfg.bedrock_api == "mantle":
-        from anthropic import AnthropicBedrockMantle
+        from anthropic import AnthropicBedrockMantle  # pyright: ignore[reportPrivateImportUsage]  (documented export)
 
         return AnthropicBedrockMantle(aws_region=cfg.bedrock_region, max_retries=3, timeout=60.0)
-    from anthropic import AnthropicBedrock
+    from anthropic import AnthropicBedrock  # pyright: ignore[reportPrivateImportUsage]  (documented export)
 
     return AnthropicBedrock(aws_region=cfg.bedrock_region, max_retries=3, timeout=60.0)
 

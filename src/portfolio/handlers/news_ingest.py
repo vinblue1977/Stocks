@@ -56,8 +56,8 @@ def ingest_ticker(
     previous = repo.latest_brief(ticker)
     fresh = [a for a in articles if a["article_id"] not in already_scored]
 
-    current = previous and previous.get("prompt_version") == llm.PROMPT_VERSION
-    if not fresh and current and previous.get("summary") and previous["summary"] != llm.UNAVAILABLE:
+    current = previous is not None and previous.get("prompt_version") == llm.PROMPT_VERSION
+    if not fresh and previous is not None and current and previous.get("summary") and previous["summary"] != llm.UNAVAILABLE:
         # Nothing new: keep the summary, refresh only the 7-day score (older headlines age out).
         sentiment, count = _sentiment_7d(repo, ticker, now)
         record = {

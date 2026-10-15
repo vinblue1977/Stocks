@@ -21,9 +21,10 @@ lock:               ## Regenerate layer/requirements.txt (exact versions + hashe
 layer:              ## Build the Lambda dependency layer (arm64, Python 3.14)
 	PYTHON=$(PYTHON) scripts/build_layer.sh
 
-lint:               ## Python (ruff) and the dashboard's JavaScript (ESLint)
+lint:               ## Python (ruff, pyright types) and the dashboard's JavaScript (ESLint)
 	$(PYTHON) -m ruff check .
 	$(PYTHON) -m ruff format --check .
+	npx --no-install pyright
 	npx --no-install eslint web
 
 test:

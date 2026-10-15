@@ -763,14 +763,14 @@ def list_watchlist(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         if latest_date and (signal is None or signal["as_of"] < latest_date):
             signal = signals.compute_signals(ticker, repo.price_history(ticker, since))
         quote = quotes.get(ticker)
-        live = quote and signal and quote.get("date") == today and signal["as_of"] < today
+        live = quote is not None and signal is not None and quote.get("date") == today and signal["as_of"] < today
         brief = None if ticker in no_news else repo.latest_brief(ticker)
         items.append(
             {
                 **watch,
                 "held": ticker in held,
                 "signal": signal,
-                "live": {"last": quote["last"], "timestamp": quote.get("timestamp")} if live else None,
+                "live": {"last": quote["last"], "timestamp": quote.get("timestamp")} if live and quote else None,
                 "brief": {k: brief.get(k) for k in ("summary", "sentiment_7d", "label", "headline_count", "generated_at")}
                 if brief
                 else None,

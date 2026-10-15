@@ -9,6 +9,7 @@ Safe to run more than once: already-migrated holdings are left alone.
 from __future__ import annotations
 
 import argparse
+from typing import Any
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -23,7 +24,8 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    table = boto3.resource("dynamodb", region_name=args.region).Table(args.table)
+    resource: Any = boto3.resource("dynamodb", region_name=args.region)  # boto3 has no type stubs for resources
+    table = resource.Table(args.table)
     items = table.query(IndexName="gsi1", KeyConditionExpression=Key("gsi1pk").eq("HOLDINGS"))["Items"]
     legacy = [i for i in items if i["sk"].count("#") == 1]
     print(f"Holdings: {len(items)} total, {len(legacy)} in the old format")

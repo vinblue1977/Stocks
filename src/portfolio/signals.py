@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 from portfolio import indicators
@@ -19,7 +19,7 @@ def compute_signals(
     ticker: str,
     history: Sequence[tuple[str, float]],
     sentiment_7d: float | None = None,
-    extra_sma_windows: Sequence[int] = (),
+    extra_sma_windows: Iterable[int] = (),
 ) -> dict[str, Any] | None:
     """`history` is [(iso_date, close), ...] sorted oldest first."""
     if not history:

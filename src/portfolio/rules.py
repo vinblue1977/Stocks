@@ -7,7 +7,7 @@ an alert only says "the condition you set is now true".
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -108,7 +108,7 @@ def evaluate(rule: Mapping[str, Any], signal: Mapping[str, Any], weight: float |
     if t in ("golden_cross", "death_cross"):
         f, s = signal.get("sma50"), signal.get("sma200")
         fp, sp = signal.get("sma50_prev"), signal.get("sma200_prev")
-        if None in (f, s, fp, sp):
+        if f is None or s is None or fp is None or sp is None:
             return False, "Not enough history for 50/200-day averages"
         if t == "golden_cross":
             return (fp <= sp and f > s), f"{ticker} 50-day average {f:.2f} vs 200-day {s:.2f}"
@@ -144,7 +144,7 @@ def evaluate(rule: Mapping[str, Any], signal: Mapping[str, Any], weight: float |
     raise RuleValidationError(f"Unknown rule type {t}")
 
 
-def needed_sma_windows(rules: list[Mapping[str, Any]]) -> set[int]:
+def needed_sma_windows(rules: Iterable[Mapping[str, Any]]) -> set[int]:
     windows = set()
     for rule in rules:
         if rule["type"] in ("price_below_sma", "price_above_sma"):

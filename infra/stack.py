@@ -9,6 +9,9 @@ Security posture (see docs/SECURITY.md for the full list):
 - API keys for the data providers live in SSM Parameter Store as SecureStrings, never in code.
 """
 
+# Type checking: the reportArgumentType ignores below mark CDK calls that pass a concrete class (e.g. Function)
+# for its interface (IFunction), since CDK's Python classes don't declare the interfaces they implement.
+
 from __future__ import annotations
 
 import base64
@@ -146,7 +149,7 @@ class PortfolioTrackerStack(Stack):
             # CloudWatch Logs, CloudWatch alarms and EventBridge (publishing to the encrypted topic) need it too.
             key.add_to_resource_policy(
                 iam.PolicyStatement(
-                    principals=[iam.ServicePrincipal(f"logs.{Aws.REGION}.amazonaws.com")],
+                    principals=[iam.ServicePrincipal(f"logs.{Aws.REGION}.amazonaws.com")],  # pyright: ignore[reportArgumentType]
                     actions=["kms:Encrypt*", "kms:Decrypt*", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:Describe*"],
                     resources=["*"],
                     conditions={
@@ -158,7 +161,7 @@ class PortfolioTrackerStack(Stack):
             )
             key.add_to_resource_policy(
                 iam.PolicyStatement(
-                    principals=[iam.ServicePrincipal("cloudwatch.amazonaws.com"), iam.ServicePrincipal("events.amazonaws.com")],
+                    principals=[iam.ServicePrincipal("cloudwatch.amazonaws.com"), iam.ServicePrincipal("events.amazonaws.com")],  # pyright: ignore[reportArgumentType]
                     actions=["kms:Decrypt", "kms:GenerateDataKey*"],
                     resources=["*"],
                     conditions={"StringEquals": {"aws:SourceAccount": Aws.ACCOUNT_ID}},
@@ -173,7 +176,7 @@ class PortfolioTrackerStack(Stack):
             sort_key=dynamodb.Attribute(name="sk", type=dynamodb.AttributeType.STRING),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             encryption=dynamodb.TableEncryption.CUSTOMER_MANAGED if key else dynamodb.TableEncryption.DEFAULT,
-            encryption_key=key,
+            encryption_key=key,  # pyright: ignore[reportArgumentType]
             point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(point_in_time_recovery_enabled=True),
             deletion_protection=True,
             time_to_live_attribute="expires_at",
@@ -189,7 +192,7 @@ class PortfolioTrackerStack(Stack):
         # Alerts and reports carry portfolio details, so the topic is always encrypted: with the
         # customer key when enabled, otherwise with the free AWS-managed SNS key.
         topic_key = key or kms.Alias.from_alias_name(self, "SnsManagedKey", "alias/aws/sns")
-        topic = sns.Topic(self, "AlertsTopic", display_name="Portfolio Tracker", master_key=topic_key, enforce_ssl=True)
+        topic = sns.Topic(self, "AlertsTopic", display_name="Portfolio Tracker", master_key=topic_key, enforce_ssl=True)  # pyright: ignore[reportArgumentType]
         if key:
             ops_topic = topic
         else:
@@ -208,9 +211,9 @@ class PortfolioTrackerStack(Stack):
                 ],
             )
         if alert_email:
-            topic.add_subscription(subscriptions.EmailSubscription(alert_email))
+            topic.add_subscription(subscriptions.EmailSubscription(alert_email))  # pyright: ignore[reportArgumentType]
             if ops_topic is not topic:
-                ops_topic.add_subscription(subscriptions.EmailSubscription(alert_email))
+                ops_topic.add_subscription(subscriptions.EmailSubscription(alert_email))  # pyright: ignore[reportArgumentType]
 
         # ------------------------------------------------------------------ web dashboard hosting
         # Private bucket, served only through CloudFront (Origin Access Control). Strict security
@@ -426,12 +429,12 @@ class PortfolioTrackerStack(Stack):
             self,
             "PriceSyncDlq",
             encryption=sqs.QueueEncryption.KMS if key else sqs.QueueEncryption.SQS_MANAGED,
-            encryption_master_key=key,
+            encryption_master_key=key,  # pyright: ignore[reportArgumentType]
             enforce_ssl=True,
             retention_period=Duration.days(14),
         )
         price_sync = make_function("PriceSync", "price_sync", timeout=300)
-        price_sync.configure_async_invoke(on_failure=destinations.SqsDestination(price_sync_dlq), retry_attempts=1)
+        price_sync.configure_async_invoke(on_failure=destinations.SqsDestination(price_sync_dlq), retry_attempts=1)  # pyright: ignore[reportArgumentType]
         intraday = make_function("IntradayQuotes", "intraday_quotes", timeout=60)
         for fn in (price_sync, intraday):
             table.grant_read_write_data(fn)
@@ -530,7 +533,7 @@ class PortfolioTrackerStack(Stack):
                 '"user":"$context.authorizer.claims.sub","error":"$context.error.message"}'
             ),
         )
-        integration = integrations.HttpLambdaIntegration("ApiIntegration", api_fn)
+        integration = integrations.HttpLambdaIntegration("ApiIntegration", api_fn)  # pyright: ignore[reportArgumentType]
         routes = {
             "/holdings": [apigw.HttpMethod.GET],
             "/groups/{group}/holdings/{ticker}": [apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
@@ -566,14 +569,20 @@ class PortfolioTrackerStack(Stack):
             "max_attempts": 2,
             "backoff_rate": 2.0,
         }
-        sync_step = tasks.LambdaInvoke(self, "Sync prices", lambda_function=price_sync, result_path=sfn.JsonPath.DISCARD)
+        sync_step = tasks.LambdaInvoke(self, "Sync prices", lambda_function=price_sync, result_path=sfn.JsonPath.DISCARD)  # pyright: ignore[reportArgumentType]
         sync_step.add_retry(**retry)
         news_step = tasks.LambdaInvoke(
-            self, "Ingest and summarize news", lambda_function=news_ingest, result_path=sfn.JsonPath.DISCARD
+            self,
+            "Ingest and summarize news",
+            lambda_function=news_ingest,  # pyright: ignore[reportArgumentType]
+            result_path=sfn.JsonPath.DISCARD,
         )
         news_step.add_retry(**retry)
         signals_step = tasks.LambdaInvoke(
-            self, "Evaluate signals and alerts", lambda_function=evaluate, result_path=sfn.JsonPath.DISCARD
+            self,
+            "Evaluate signals and alerts",
+            lambda_function=evaluate,  # pyright: ignore[reportArgumentType]
+            result_path=sfn.JsonPath.DISCARD,
         )
         signals_step.add_retry(**retry)
         # News is useful but optional: if it fails, signals still run on prices alone.
@@ -600,7 +609,7 @@ class PortfolioTrackerStack(Stack):
             self,
             "WeekdaySchedule",
             schedule=events.Schedule.cron(minute="30", hour="22", week_day="MON-FRI"),
-            targets=[targets.SfnStateMachine(pipeline)],
+            targets=[targets.SfnStateMachine(pipeline)],  # pyright: ignore[reportArgumentType]
         )
         # Every 15 min across 9:30-16:00 New York time in both EDT and EST (13:00-21:45 UTC);
         # the function returns without calling Tiingo outside market hours. One request per run.
@@ -609,19 +618,19 @@ class PortfolioTrackerStack(Stack):
                 self,
                 "IntradaySchedule",
                 schedule=events.Schedule.cron(minute="0/15", hour="13-21", week_day="MON-FRI"),
-                targets=[targets.LambdaFunction(intraday, retry_attempts=0)],
+                targets=[targets.LambdaFunction(intraday, retry_attempts=0)],  # pyright: ignore[reportArgumentType]
             )
         events.Rule(
             self,
             "WeeklyReportSchedule",
             schedule=events.Schedule.cron(minute="0", hour="14", week_day="SUN"),
-            targets=[targets.LambdaFunction(weekly, retry_attempts=2)],
+            targets=[targets.LambdaFunction(weekly, retry_attempts=2)],  # pyright: ignore[reportArgumentType]
         )
         events.Rule(
             self,
             "MonthlyCheckupSchedule",
             schedule=events.Schedule.expression("cron(0 14 ? * SAT#1 *)"),  # first Saturday, 14:00 UTC
-            targets=[targets.LambdaFunction(monthly, retry_attempts=2)],
+            targets=[targets.LambdaFunction(monthly, retry_attempts=2)],  # pyright: ignore[reportArgumentType]
         )
 
         # ------------------------------------------------------------------ GitHub Actions deploy role
@@ -648,7 +657,7 @@ class PortfolioTrackerStack(Stack):
                 "GitHubDeployRole",
                 description=f"GitHub Actions deploys from {github_repo} (production environment only)",
                 max_session_duration=Duration.hours(1),
-                assumed_by=iam.WebIdentityPrincipal(
+                assumed_by=iam.WebIdentityPrincipal(  # pyright: ignore[reportArgumentType]
                     provider.oidc_provider_arn,
                     conditions={
                         "StringEquals": {
@@ -673,7 +682,7 @@ class PortfolioTrackerStack(Stack):
                 self,
                 rule_id,
                 event_pattern=pattern,
-                targets=[targets.SnsTopic(ops_topic, message=events.RuleTargetInput.from_text(text))],
+                targets=[targets.SnsTopic(ops_topic, message=events.RuleTargetInput.from_text(text))],  # pyright: ignore[reportArgumentType]
             )
 
         # ------------------------------------------------------------------ external-access findings
@@ -729,7 +738,7 @@ class PortfolioTrackerStack(Stack):
             )
 
         # ------------------------------------------------------------------ monitoring
-        alarm_action = cw_actions.SnsAction(ops_topic)
+        alarm_action = cw_actions.SnsAction(ops_topic)  # pyright: ignore[reportArgumentType]
         cloudwatch.Alarm(
             self,
             "PipelineFailedAlarm",
@@ -738,7 +747,7 @@ class PortfolioTrackerStack(Stack):
             evaluation_periods=1,
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
             alarm_description="The weekday price/news/signals pipeline failed",
-        ).add_alarm_action(alarm_action)
+        ).add_alarm_action(alarm_action)  # pyright: ignore[reportArgumentType]
         for fn in (api_fn, price_sync, news_ingest, evaluate, weekly, monthly):
             cloudwatch.Alarm(
                 self,
@@ -748,7 +757,7 @@ class PortfolioTrackerStack(Stack):
                 evaluation_periods=1,
                 treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
                 alarm_description=f"{fn.node.id} Lambda errors",
-            ).add_alarm_action(alarm_action)
+            ).add_alarm_action(alarm_action)  # pyright: ignore[reportArgumentType]
         cloudwatch.Alarm(
             self,
             "ApiThrottlesAlarm",
@@ -757,7 +766,7 @@ class PortfolioTrackerStack(Stack):
             evaluation_periods=1,
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
             alarm_description="The API hit its concurrency cap: requests were turned away",
-        ).add_alarm_action(alarm_action)
+        ).add_alarm_action(alarm_action)  # pyright: ignore[reportArgumentType]
         cloudwatch.Alarm(
             self,
             "PriceSyncDlqAlarm",
@@ -765,7 +774,7 @@ class PortfolioTrackerStack(Stack):
             threshold=1,
             evaluation_periods=1,
             alarm_description="A price backfill failed and landed in the dead-letter queue",
-        ).add_alarm_action(alarm_action)
+        ).add_alarm_action(alarm_action)  # pyright: ignore[reportArgumentType]
 
         if alert_email and monthly_budget > 0:
             budgets.CfnBudget(
