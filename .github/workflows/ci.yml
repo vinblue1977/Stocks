@@ -28,8 +28,36 @@ concurrency:
 # locked (layer/requirements.txt); the CDK and dev tools still resolve ranges, so the deploy job re-runs the
 # tests and audit on what it installs (and catches advisories published since the PR).
 jobs:
-  checks:
+  # Decides whether checks and workflow-lint run: always on schedule and manual runs; on a PR only if something
+  # besides docs (docs/ or top-level Markdown) changed. GitHub counts a skipped required job as passed.
+  scope:
     if: github.event_name != 'push'
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 5
+    outputs:
+      run_checks: ${{ steps.diff.outputs.run_checks }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: diff
+        run: |
+          if [ "$EVENT" != pull_request ]; then echo "run_checks=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          # --no-renames: a code file moved into docs/ shows as deleted from its old path, so it counts as code.
+          changed="$(git diff --name-only --no-renames "$BASE...$HEAD")"
+          echo "$changed"
+          code="$(grep -Ev '^(docs/|[^/]+\.md$)' <<<"$changed" || true)"
+          echo "run_checks=$([ -z "$changed" ] || [ -n "$code" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+
+  checks:
+    needs: scope
+    if: needs.scope.outputs.run_checks == 'true'
     runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
     timeout-minutes: 20
     steps:
@@ -74,7 +102,8 @@ jobs:
 
   # Lints the workflow files: actionlint (syntax, expressions, shell) and zizmor (Actions security).
   workflow-lint:
-    if: github.event_name != 'push'
+    needs: scope
+    if: needs.scope.outputs.run_checks == 'true'
     runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
     timeout-minutes: 5
     steps:
