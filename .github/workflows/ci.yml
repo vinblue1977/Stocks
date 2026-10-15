@@ -24,9 +24,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # A push to main is always a merged PR (branch protection), and PRs must be up to date with main, so the
-# merged files are what the PR's checks tested: checks and workflow-lint skip pushes. The Lambda layer is
-# locked (layer/requirements.txt); the CDK and dev tools still resolve ranges, so the deploy job re-runs the
-# tests and audit on what it installs (and catches advisories published since the PR).
+# merged files are what the PR's checks tested: checks and workflow-lint skip pushes. What the deploy builds
+# with is pinned: the Lambda layer (layer/requirements.txt, hashed), the CDK libraries (requirements.txt) and the
+# CDK CLI (package-lock.json). So the deploy doesn't re-run the tests; it re-runs the audit, which catches
+# advisories published since the PR. (Dev tools such as pytest still float; they don't ship.)
 jobs:
   # Decides whether checks and workflow-lint run: always on schedule and manual runs; on a PR only if something
   # besides docs (docs/ or top-level Markdown) changed. GitHub counts a skipped required job as passed.
@@ -193,6 +194,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: "22"
+          cache: npm  # the pinned CDK CLI, keyed on package-lock.json
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           version: "0.12.19"
@@ -208,16 +210,16 @@ jobs:
         run: |
           uv venv --seed --python "$(which python)" .venv
           uv pip install --python .venv/bin/python -r requirements-dev.txt
-          # Then the layer's locked versions (hash-checked), so tests run on exactly what ships, and a check
-          # that the lockfile isn't missing anything and doesn't conflict with the dev tools.
+          # Then the layer's locked versions (hash-checked): exactly what the PR tested and what ships.
           uv pip install --python .venv/bin/python --require-hashes --no-deps --reinstall -r layer/requirements.txt
           uv pip check --python .venv/bin/python
-          make test audit  # the exact versions being shipped; a release or advisory since the PR stops the deploy
+          make audit  # an advisory published since the PR stops the deploy (the PR already ran the tests)
+          npm ci --ignore-scripts --no-audit --no-fund  # the pinned CDK CLI (package-lock.json)
           make layer
           # A missing secret would silently drop the email subscriptions or names, so fail instead.
           : "${ALERT_EMAIL:?set the ALERT_EMAIL secret}" "${OWNER_NAME:?set the OWNER_NAME secret}"
           . .venv/bin/activate
-          npx --yes aws-cdk@2 deploy --require-approval never \
+          npx --no-install cdk deploy --require-approval never \
             -c alertEmail="${ALERT_EMAIL}" -c ownerName="${OWNER_NAME}" -c partnerName="${PARTNER_NAME}" \
             --outputs-file cdk-outputs.json
         env:

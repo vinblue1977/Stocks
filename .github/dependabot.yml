@@ -49,7 +49,7 @@ updates:
       # anthropic is capped <2 in layer/requirements.in; a new major needs a deliberate upgrade.
       - dependency-name: anthropic
         versions: [">=2.0.0"]
-  # ESLint and pyright (package.json; dev only, nothing ships).
+  # The CDK CLI that deploys, plus ESLint and pyright (package.json). A CLI update PR runs the full synth.
   - package-ecosystem: npm
     directory: /
     schedule:

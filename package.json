@@ -1,7 +1,7 @@
 {
   "name": "portfolio-tracker-dev",
   "private": true,
-  "description": "Dev tools only (ESLint for web/js, pyright for Python types); nothing here ships to AWS.",
+  "description": "Dev tools only (ESLint, pyright, the CDK CLI that deploys); nothing here ships to AWS.",
   "type": "module",
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24"
@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "aws-cdk": "2.1143.0",
     "eslint": "10.12.0",
     "globals": "17.13.0",
     "pyright": "1.1.414"

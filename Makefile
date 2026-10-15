@@ -1,5 +1,6 @@
 PYTHON ?= .venv/bin/python
-CDK ?= npx --yes aws-cdk@2
+# The CDK CLI pinned in package-lock.json (`make install` runs npm ci).
+CDK ?= npx --no-install cdk
 
 .PHONY: install lock layer lint test audit dev shot synth deploy diff clean
 
@@ -9,7 +10,7 @@ install:            ## Create the virtualenv and install everything
 	$(PYTHON) -m pip install -r requirements-dev.txt
 	$(PYTHON) -m pip install --require-hashes --no-deps --force-reinstall -r layer/requirements.txt  # exactly what ships
 	$(PYTHON) -m pip check
-	npm ci --ignore-scripts --no-audit --no-fund  # ESLint for the dashboard (dev only)
+	npm ci --ignore-scripts --no-audit --no-fund  # the CDK CLI, ESLint and pyright
 
 lock:               ## Regenerate layer/requirements.txt (exact versions + hashes) from layer/requirements.in
 	# Run from layer/, so the header's file paths match Dependabot's /layer directory.
