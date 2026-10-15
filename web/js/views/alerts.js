@@ -75,7 +75,7 @@ export async function renderAlerts(main) {
   });
 
   const history = alertsRes.alerts.map((a) => h('tr', null,
-    h('td', { class: 'text', text: new Date(a.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) }),
+    h('td', { class: 'text wrap', text: new Date(a.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) }),
     h('td', { class: 'text wrap', text: a.message })));
 
   fill(main,
