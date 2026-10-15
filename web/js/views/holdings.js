@@ -94,7 +94,7 @@ export async function renderPerson(main, person, kind) {
   updatePreview();
 
   const purchaseForm = h('form', { class: 'form', novalidate: true },
-    field('Ticker', pTicker), field('Shares bought', pShares), field(totals ? 'Amount invested this buy ($)' : 'Price per share ($)', pPrice),
+    field('Ticker', pTicker), field('Shares bought', pShares), field(totals ? 'Amount ($)' : 'Price per share ($)', pPrice),
     field('Date (optional)', pDate), pSubmit);
   purchaseForm.addEventListener('submit', async (event) => {
     event.preventDefault();
