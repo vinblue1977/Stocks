@@ -49,7 +49,7 @@ updates:
       # anthropic is capped <2 in layer/requirements.in; a new major needs a deliberate upgrade.
       - dependency-name: anthropic
         versions: [">=2.0.0"]
-  # ESLint and its config packages (package.json; dev only, nothing ships).
+  # ESLint and pyright (package.json; dev only, nothing ships).
   - package-ecosystem: npm
     directory: /
     schedule:

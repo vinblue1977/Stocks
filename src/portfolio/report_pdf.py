@@ -97,12 +97,12 @@ def _mix_chart(view: Mapping[str, Any], targets: Mapping[str, Any]) -> Drawing:
         fund = (targets["areas"].get(d["area"]) or {}).get("fund") or "—"
         drawing.add(String(0, y + 11, d["label"], fontName="Helvetica-Bold", fontSize=9.5, fillColor=INK))
         drawing.add(String(0, y + 1, f"Your fund: {fund}", fontName="Helvetica", fontSize=7.5, fillColor=MUTED))
-        drawing.add(Rect(label_w, y + 6, bar_w, 10, rx=5, ry=5, fillColor=SOFT, strokeColor=None))
+        drawing.add(Rect(label_w, y + 6, bar_w, 10, rx=5, ry=5, fillColor=SOFT, strokeColor=None))  # pyright: ignore[reportArgumentType]  (reportlab's stubs omit None)
         fill_w = bar_w * min(1.0, d["now"])
         if fill_w >= 1:  # nothing drawn for an empty area
             radius = min(5, fill_w / 2)
             drawing.add(
-                Rect(label_w, y + 6, fill_w, 10, rx=radius, ry=radius, fillColor=ORANGE if over else BLUE, strokeColor=None)
+                Rect(label_w, y + 6, fill_w, 10, rx=radius, ry=radius, fillColor=ORANGE if over else BLUE, strokeColor=None)  # pyright: ignore[reportArgumentType]
             )
         target_x = label_w + bar_w * d["target"]
         drawing.add(Line(target_x, y + 2, target_x, y + 20, strokeColor=INK, strokeWidth=1.6))

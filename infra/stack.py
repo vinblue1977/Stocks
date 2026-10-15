@@ -1,3 +1,6 @@
+# pyright: reportArgumentType=false
+# (CDK's Python classes don't declare the interfaces they implement, e.g. Function vs IFunction, so pyright
+# flags valid arguments; the CDK synth and cdk-nag check this file instead.)
 """Portfolio Tracker infrastructure.
 
 Security posture (see docs/SECURITY.md for the full list):

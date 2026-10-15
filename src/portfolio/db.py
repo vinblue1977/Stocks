@@ -561,4 +561,5 @@ def _now_iso() -> str:
 
 @lru_cache(maxsize=1)
 def _table() -> Any:
-    return boto3.resource("dynamodb").Table(get_config().table_name)
+    resource: Any = boto3.resource("dynamodb")  # boto3 has no type stubs for resources
+    return resource.Table(get_config().table_name)

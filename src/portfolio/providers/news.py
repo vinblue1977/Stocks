@@ -47,7 +47,7 @@ class FinnhubNewsProvider:
         raw = get_json(self.RECOMMENDATION_URL, params={"symbol": ticker}, headers={"X-Finnhub-Token": self._api_key})
         return parse_recommendations(raw)
 
-    def insider_trades(self, ticker: str, from_date: str) -> list[dict[str, Any]]:
+    def insider_trades(self, ticker: str, from_date: str) -> dict[str, Any]:
         """Insider trades (SEC Form 4) since from_date, newest first."""
         raw = get_json(self.INSIDER_URL, params={"symbol": ticker, "from": from_date}, headers={"X-Finnhub-Token": self._api_key})
         return parse_insiders(raw, from_date)

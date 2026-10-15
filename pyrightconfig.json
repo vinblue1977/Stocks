@@ -1,0 +1,7 @@
+{
+  "include": ["src", "infra", "app.py", "scripts"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.14",
+  "typeCheckingMode": "standard"
+}

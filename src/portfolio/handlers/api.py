@@ -770,7 +770,7 @@ def list_watchlist(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
                 **watch,
                 "held": ticker in held,
                 "signal": signal,
-                "live": {"last": quote["last"], "timestamp": quote.get("timestamp")} if live else None,
+                "live": {"last": quote["last"], "timestamp": quote.get("timestamp")} if live and quote else None,
                 "brief": {k: brief.get(k) for k in ("summary", "sentiment_7d", "label", "headline_count", "generated_at")}
                 if brief
                 else None,

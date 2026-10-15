@@ -75,12 +75,13 @@ def email(built: dict[str, Any], targets: dict[str, Any] | None, summary: str, n
                 where = "over" if d["gap"] > 0 else "under"
                 now_target = f"{_pct(d['now'], False):>4}  target {_pct(d['target'], False):>4}"
                 lines.append(f"  {d['label']:<24} {now_target}   {where} by ${abs(d['gap']):,.0f}")
-        targets_pct = {k: v["pct"] / 100 for k, v in targets["areas"].items()}
+        areas = (targets or {}).get("areas", {})  # drift exists only when targets are set
+        targets_pct = {k: v["pct"] / 100 for k, v in areas.items()}
         parts = checkup.split(home["by_area"], home["total_value"], targets_pct, SPLIT_EXAMPLE)
         if parts:
             lines += ["", f"NEXT ${SPLIT_EXAMPLE:,.0f}, BY YOUR TARGETS"]
             for area, amount in parts:
-                fund = targets["areas"].get(area, {}).get("fund") or ""
+                fund = areas.get(area, {}).get("fund") or ""
                 lines.append(f"  {AREAS[area]:<24} ${amount:,.0f}  {f'({fund})' if fund else ''}".rstrip())
     else:
         lines += ["", "Set your target mix on the Checkup page to see how far the portfolio is from it."]

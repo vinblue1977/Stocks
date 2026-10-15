@@ -59,9 +59,9 @@ jobs:
           # that the lockfile isn't missing anything and doesn't conflict with the dev tools.
           uv pip install --python .venv/bin/python --require-hashes --no-deps --reinstall -r layer/requirements.txt
           uv pip check --python .venv/bin/python
-      - name: Install ESLint (exact versions from package-lock.json; no install scripts)
+      - name: Install ESLint and pyright (exact versions from package-lock.json; no install scripts)
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Lint (Python with Bandit security rules, and the dashboard's JavaScript)
+      - name: Lint (Python with Bandit security rules and pyright types, and the dashboard's JavaScript)
         run: make lint
       - name: Unit and infrastructure tests
         run: make test
@@ -130,7 +130,7 @@ jobs:
             changed="unknown-base"
           fi
           echo "$changed"
-          deployable="$(grep -Ev '^(docs/|\.github/|tests/|LICENSE$|package(-lock)?\.json$|eslint\.config\.js$)|\.md$' <<<"$changed" || true)"
+          deployable="$(grep -Ev '^(docs/|\.github/|tests/|LICENSE$|package(-lock)?\.json$|eslint\.config\.js$|pyrightconfig\.json$)|\.md$' <<<"$changed" || true)"
           if grep -qx '.github/workflows/ci.yml' <<<"$changed"; then deployable=yes; fi
           echo "deploy=$([ -n "$deployable" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
         env:
