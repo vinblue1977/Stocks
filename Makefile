@@ -1,5 +1,5 @@
 PYTHON ?= .venv/bin/python
-CDK ?= npx --yes aws-cdk@2
+CDK ?= npx --no-install cdk  # pinned in package-lock.json (`make install` runs npm ci)
 
 .PHONY: install lock layer lint test audit dev shot synth deploy diff clean
 

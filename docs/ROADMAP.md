@@ -96,7 +96,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 - Restore drill: point-in-time restore of the table to a test copy.
 
 ## CI ideas
-- Faster deploy (about 3 min to under 2): drop the test re-run from the deploy job (the layer is locked and the PR tested it; keep the audit), and pin the CDK CLI in `package.json` so CI caches it instead of downloading `aws-cdk@2` each time.
 - Accessibility check of the dashboard pages (axe) on PRs.
 - Yearly reminder to rotate the Tiingo and Finnhub API keys.
 
@@ -121,6 +120,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | — | Lambda layer lockfile with hashes (`make lock`); Lambda on Python 3.14 | #67 |
 | — | Python type checking (pyright) | #69 |
 | 54 | Local preview server (`make dev`) | #73 |
+| — | Faster deploy: no test re-run, pinned and cached CDK CLI | #79 |
 | — | `cost_basis` → `avg_cost` rename finished (old name removed from stored holdings) | #59, #60 |
 
 Finished items move here with their PR; numbers don't change.
