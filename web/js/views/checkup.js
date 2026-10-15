@@ -150,7 +150,7 @@ function editor(data, rerender) {
   const tickers = Object.entries(data.assigned)
     .sort(([a, x], [b, y]) => (x !== 'unassigned') - (y !== 'unassigned') || a.localeCompare(b));
   const unassigned = tickers.filter(([, area]) => area === 'unassigned').length;
-  const assignRows = tickers.map(([ticker, area]) => h('div', { class: 'ed-row' }, h('strong', { text: ticker }),
+  const assignRows = tickers.map(([ticker, area]) => h('div', { class: 'ed-row assign-row' }, h('strong', { text: ticker }),
     h('select', { 'aria-label': `Area for ${ticker}`, onChange: (e) => { overrides[ticker] = e.target.value; } },
       area === 'unassigned' && !overrides[ticker] ? h('option', { value: '', text: 'Choose an area', selected: true }) : null,
       Object.entries(data.areas).map(([key, label]) => h('option', { value: key, text: label, selected: (overrides[ticker] || area) === key })))));

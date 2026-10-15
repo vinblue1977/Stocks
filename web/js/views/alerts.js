@@ -37,7 +37,7 @@ export async function renderAlerts(main) {
   drawParams();
 
   const form = h('form', { class: 'form', novalidate: true },
-    h('div', { class: 'field', style: { gridColumn: 'span 2' } }, h('label', { for: 'r-type', text: 'Condition' }), typeSelect),
+    h('div', { class: 'field field-wide' }, h('label', { for: 'r-type', text: 'Condition' }), typeSelect),
     h('div', { class: 'field' }, h('label', { for: 'r-ticker', text: 'Ticker' }), tickerSelect),
     paramsHost, submit);
   form.addEventListener('submit', async (event) => {
@@ -76,7 +76,7 @@ export async function renderAlerts(main) {
 
   const history = alertsRes.alerts.map((a) => h('tr', null,
     h('td', { class: 'text', text: new Date(a.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) }),
-    h('td', { class: 'text', text: a.message })));
+    h('td', { class: 'text wrap', text: a.message })));
 
   fill(main,
     pageHead('Alerts', 'Email (and phone notifications, if on) when a rule changes from not met to met'),

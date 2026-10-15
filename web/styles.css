@@ -99,7 +99,9 @@ h2 { margin: 0; font-size: 17px; font-weight: 600; }
 .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; align-items: end; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { font-size: 13px; color: var(--muted); }
-.field input, .field select { height: 44px; padding: 0 12px; border-radius: 8px; border: 1px solid #2A3A57; background: var(--inset); color: var(--text); }
+.field { min-width: 0; } /* a long option or label can't push the form wider than its card */
+.field-wide { grid-column: span 2; }
+.field input, .field select { width: 100%; min-width: 0; height: 44px; padding: 0 12px; border-radius: 8px; border: 1px solid #2A3A57; background: var(--inset); color: var(--text); }
 .field input:focus, .field select:focus { border-color: var(--accent); outline: none; }
 .form-error { color: var(--warn); font-size: 13px; margin: 8px 0 0; min-height: 1em; }
 
@@ -246,7 +248,10 @@ th[aria-sort] { color: var(--text); }
   .mix-nums { text-align: left; }
   .ed-row { grid-template-columns: 1fr 80px; }
   .ed-row input.upper { grid-column: 1 / -1; }
+  .ed-row.assign-row { grid-template-columns: 1fr minmax(0, 60%); } /* room for the area's full name */
 }
+@media (max-width: 640px) { .field-wide { grid-column: 1 / -1; } }
+td.wrap { white-space: normal; min-width: 180px; }
 .summary-points { margin: 0; padding-left: 34px; display: flex; flex-direction: column; gap: 6px; }
 
 /* Stock Holdings trades */
