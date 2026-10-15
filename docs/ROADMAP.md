@@ -62,6 +62,18 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 38 | Data health page | S | When each job last ran, how fresh prices and news are, and month-to-date AWS spend (cached daily) |
 | 41 | Backup download | S | One-click JSON/CSV of holdings, trades and targets (pairs with #11) |
 | 42 | Wealthfront file import | M | Automatic Investment buys from a downloaded statement, so its history is exact too (#11) |
+| 43 | Macro calendar | S | Upcoming FOMC, CPI and jobs report dates from Finnhub; banner during Fed meetings |
+| 44 | Portfolio breadth index | S | Share of holdings trading above their 50d and 200d averages (regime indicator) |
+| 45 | Earnings beat/miss history | S | Historical consensus EPS vs. actuals from Finnhub (pairs with #8 and #35) |
+| 46 | Zero-cost correlation matrix | S–M | Holding-to-holding correlation computed from stored DynamoDB price histories (no paid data) |
+| 47 | Lifetime fee drag projection | S | 10/20/30-year compounded dollar cost of fund expense ratios vs. 0.03% baseline (pairs with #18) |
+| 48 | Drawdown duration chart | S | Days spent underwater and recovery tracking (pairs with #25) |
+| 49 | Pre-trade checklist & decision journal | S | Optional rationale checklist on trade entry; holding age milestones (pairs with #22) |
+| 50 | Automated S3 backup vault | S | Weekly scheduled JSON export of holdings, transactions and rules to versioned S3 (pairs with #41) |
+| 51 | Telegram bot | M | Instant mobile alerts and /overview or /news commands without Web Push quirks |
+| 52 | 60-second audio summary | S | Amazon Polly audio clip of the weekly report or monthly checkup |
+| 53 | Free secondary price fallback | S–M | Fail over to a secondary free price source if Tiingo has downtime or hits limits |
+| 54 | Local dev mock server | S | Mock server for local UI testing and styling without deploying or calling AWS APIs |
 
 
 - Rule backtesting: how an alert rule would have fired historically.
