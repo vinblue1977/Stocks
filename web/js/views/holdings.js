@@ -72,7 +72,7 @@ export async function renderPerson(main, person, kind) {
     const s = Number(pShares.value);
     const p = Number(pPrice.value);
     if (!symbol || !(s > 0) || !(p >= 0) || pPrice.value === '') {
-      pPreview.textContent = 'Enter a ticker, shares and price to see the new average before saving.';
+      pPreview.textContent = `Enter a ticker, shares and ${totals ? 'amount' : 'price'} to see the new average before saving.`;
       return;
     }
     const current = mine.find((x) => x.ticker === symbol);
@@ -94,12 +94,12 @@ export async function renderPerson(main, person, kind) {
   updatePreview();
 
   const purchaseForm = h('form', { class: 'form', novalidate: true },
-    field('Ticker', pTicker), field('Shares bought', pShares), field(totals ? 'Total invested ($)' : 'Price per share ($)', pPrice),
+    field('Ticker', pTicker), field('Shares bought', pShares), field(totals ? 'Amount invested this buy ($)' : 'Price per share ($)', pPrice),
     field('Date (optional)', pDate), pSubmit);
   purchaseForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     pError.textContent = '';
-    if (!purchaseForm.checkValidity()) { pError.textContent = 'Check the ticker, shares and price.'; return; }
+    if (!purchaseForm.checkValidity()) { pError.textContent = `Check the ticker, shares and ${totals ? 'amount' : 'price'}.`; return; }
     pSubmit.disabled = true;
     const symbol = pTicker.value.trim().toUpperCase();
     try {
@@ -191,7 +191,7 @@ export async function renderPerson(main, person, kind) {
         stat('Gain / loss', fmt.signedMoney(summary.total_gain), tone(summary.total_gain)))),
     h('section', { class: 'card', 'aria-labelledby': 'buy-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'buy-h', text: 'Record a purchase' }),
-        h('span', { class: 'muted small', text: totals ? 'Enter the shares and the total dollars of each automatic buy, as on your statement (not the price per share). The cost basis adds up.' : 'Adds to the shares in this group and recalculates the average cost.' })),
+        h('span', { class: 'muted small', text: totals ? 'Enter the shares and dollar amount of each automatic buy, as on your statement (not the price per share).' : 'Adds to the shares in this group and recalculates the average cost.' })),
       purchaseForm, pPreview, pError),
     h('section', { class: 'card', 'aria-labelledby': 'list-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'list-h', text: `${possessive(person)} ${KINDS[kind].label.toLowerCase()}` })),
