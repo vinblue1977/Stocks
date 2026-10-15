@@ -1,7 +1,7 @@
 PYTHON ?= .venv/bin/python
 CDK ?= npx --yes aws-cdk@2
 
-.PHONY: install lock layer lint test audit dev synth deploy diff clean
+.PHONY: install lock layer lint test audit dev shot synth deploy diff clean
 
 install:            ## Create the virtualenv and install everything
 	python3 -m venv .venv
@@ -36,6 +36,9 @@ audit:              ## Check dependencies for known vulnerabilities
 
 dev:                ## Local preview with sample data, no AWS (http://localhost:8765; ARGS="--slow" or "--late")
 	$(PYTHON) scripts/dev_server.py $(ARGS)
+
+shot:               ## Screenshot the running preview: make shot ROUTE='#/watchlist' [PHONE=1] -> build/screenshot.png
+	scripts/screenshot.sh '$(or $(ROUTE),#/overview)' build/screenshot.png $(if $(filter 1 yes true,$(PHONE)),390 844,1280 900)
 
 synth: layer        ## Synthesize CloudFormation and run cdk-nag security checks
 	. .venv/bin/activate && $(CDK) synth --quiet
