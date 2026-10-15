@@ -1,13 +1,13 @@
 """Local preview of the dashboard: `make dev`, then open http://localhost:8765.
 
-Serves web/ with sign-in stubbed out, and answers /api/* with the real API handler (src/portfolio/handlers/api.py)
-on an in-memory DynamoDB table (moto) filled with sample data. Nothing reaches AWS: fake credentials are set
-before boto3 loads, and every AWS call goes to moto.
+Serves web/ straight from the repo (edits show on reload) with sign-in stubbed out, and answers /api/* with
+the real API handler (src/portfolio/handlers/api.py) on an in-memory DynamoDB table (moto) with sample data.
+Nothing reaches AWS: fake credentials are set before boto3 loads, and every AWS call goes to moto.
 
 Options:
     --port N    listen on N (default 8765, or $PORT)
     --slow      delay /portfolio by 3 s, to see the saved Overview with "Updating…"
-    --late      leave out the last two closes and the news run, to see the late-update warning
+    --late      stop prices and the news run a trading day early, to see the late-update warning
 """
 
 from __future__ import annotations
@@ -17,16 +17,17 @@ import json
 import math
 import os
 import re
-import shutil
 import sys
+import threading
 import time
 from datetime import UTC, date, datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, unquote
 
 ROOT = Path(__file__).resolve().parent.parent
-SITE = ROOT / "build" / "devsite"
+WEB = ROOT / "web"
 USER = "local-user"
 
 # Sample tickers: (ticker, last price, how far below today it started a year+ ago, wobble)
@@ -92,9 +93,16 @@ def _series(end_price: float, drift: float, wobble: float, end: date) -> list[di
 def seed(repo: Any, *, late: bool = False, today: date | None = None) -> None:
     """Sample holdings, prices, signals, news, rules, alerts, earnings and analyst data."""
     from portfolio import signals
+    from portfolio.market import expected_close, is_trading_day
 
+    now = datetime.now(UTC)
     today = today or date.today()
-    last_close = today - timedelta(days=3 if late else 0)
+    # --late: the newest close is one trading day before the one the evening run should have stored by now.
+    last_close = today
+    if late:
+        last_close = expected_close(now) - timedelta(days=1)
+        while not is_trading_day(last_close):
+            last_close -= timedelta(days=1)
     for ticker, price, drift, wobble in PRICES:
         repo.put_prices(ticker, _series(price, drift, wobble, last_close))
     for group, ticker, shares, cost in HOLDINGS:
@@ -106,7 +114,6 @@ def seed(repo: Any, *, late: bool = False, today: date | None = None) -> None:
         if signal:
             repo.put_signal(ticker, signal)
 
-    now = datetime.now(UTC)
     stamp = now.isoformat(timespec="seconds")
     for ticker in ("NVDA", "AMZN", "AMD"):
         repo.put_news(
@@ -142,11 +149,12 @@ def seed(repo: Any, *, late: bool = False, today: date | None = None) -> None:
 
     rule = repo.create_rule(USER, {"type": "price_below", "ticker": "NVDA", "params": {"price": 200}, "enabled": True})
     repo.create_rule(USER, {"type": "rsi_above", "ticker": "AMD", "params": {"threshold": 70}, "enabled": True})
-    repo.record_alert(USER, rule["rule_id"], "NVDA closed at $182.40, below your $200.00 level")
+    nvda = repo.price_history("NVDA")[-1][1]
+    repo.record_alert(USER, rule["rule_id"], f"NVDA closed at ${nvda:,.2f}, below your $200.00 level")
 
     report = (today + timedelta(days=12)).isoformat()
     repo.put_earnings("NVDA", {"date": report, "hour": "amc", "eps_estimate": 1.18})
-    months = [(today.replace(day=1) - timedelta(days=31 * k)).strftime("%Y-%m") for k in range(4)]
+    months = [f"{(today.year * 12 + today.month - 1 - k) // 12}-{(today.month - 1 - k) % 12 + 1:02d}" for k in range(4)]
     for ticker, buy, hold, sell in (("NVDA", 65, 3, 1), ("AMZN", 70, 4, 0), ("AMD", 41, 12, 1)):
         repo.put_insights(
             ticker,
@@ -179,16 +187,11 @@ def seed(repo: Any, *, late: bool = False, today: date | None = None) -> None:
                 },
             },
         )
-    if not late:
+    if late:  # the news run last finished two days ago
+        old = (now - timedelta(days=2)).isoformat(timespec="seconds")
+        repo.table.put_item(Item={"pk": "JOB#news_ingest", "sk": "LAST", "finished_at": old})
+    else:
         repo.put_job_run("news_ingest")
-
-
-def build_site() -> None:
-    """Copy web/ to build/devsite, with a local config.json and a sign-in stub in place of auth.js."""
-    shutil.rmtree(SITE, ignore_errors=True)
-    shutil.copytree(ROOT / "web", SITE)
-    (SITE / "config.json").write_text(json.dumps({"apiUrl": "/api"}))
-    (SITE / "js" / "auth.js").write_text(auth_stub())
 
 
 def auth_stub() -> str:
@@ -211,6 +214,7 @@ def auth_stub() -> str:
 def make_handler(repo: Any, slow: bool) -> type[SimpleHTTPRequestHandler]:
     from portfolio.handlers import api
 
+    lock = threading.Lock()  # one request at a time against the in-memory table (moto isn't thread-safe)
     routes = [
         (method, path, re.compile("^" + re.sub(r"\{(\w+)\}", r"(?P<\1>[^/]+)", path) + "$"))
         for method, path in (key.split(" ", 1) for key in api.ROUTES)
@@ -218,18 +222,14 @@ def make_handler(repo: Any, slow: bool) -> type[SimpleHTTPRequestHandler]:
 
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
-            super().__init__(*args, directory=str(SITE), **kwargs)
+            super().__init__(*args, directory=str(WEB), **kwargs)
 
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 - matches the base signature
             pass
 
         def _api(self, method: str) -> None:
             path, _, query = self.path[len("/api") :].partition("?")
-            params = dict(p.split("=", 1) for p in query.split("&") if "=" in p) or None
-            if params:
-                from urllib.parse import unquote
-
-                params = {k: unquote(v) for k, v in params.items()}
+            params = dict(parse_qsl(query)) or None  # decoded, as API Gateway passes them
             for route_method, route, pattern in routes:
                 if route_method == method and (match := pattern.match(path)):
                     if slow and route == "/portfolio":
@@ -238,21 +238,42 @@ def make_handler(repo: Any, slow: bool) -> type[SimpleHTTPRequestHandler]:
                     event = {
                         "routeKey": f"{route_method} {route}",
                         "requestContext": {"authorizer": {"jwt": {"claims": {"sub": USER}}}},
-                        "pathParameters": match.groupdict(),
+                        "pathParameters": {k: unquote(v) for k, v in match.groupdict().items()},
                         "queryStringParameters": params,
                         "body": self.rfile.read(length).decode() if length else None,
                     }
-                    result = api.handler(event, None, repo=repo)
+                    with lock:
+                        result = api.handler(event, None, repo=repo)
                     break
             else:
                 result = {"statusCode": 404, "body": json.dumps({"message": "Not found"})}
             self.send_response(result["statusCode"])
-            self.send_header("Content-Type", "application/json")
+            for name, value in (result.get("headers") or {"Content-Type": "application/json"}).items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write((result.get("body") or "").encode())
 
+        def _text(self, body: str, content_type: str) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.end_headers()  # adds no-store
+            self.wfile.write(body.encode())
+
+        def end_headers(self) -> None:
+            if not self.path.startswith("/api/"):
+                self.send_header("Cache-Control", "no-store")  # always the latest web/ edits
+            super().end_headers()
+
         def do_GET(self) -> None:  # noqa: N802 - http.server naming
-            self._api("GET") if self.path.startswith("/api/") else super().do_GET()
+            path = self.path.split("?", 1)[0]
+            if path.startswith("/api/"):
+                self._api("GET")
+            elif path == "/config.json":
+                self._text(json.dumps({"apiUrl": "/api"}), "application/json")
+            elif path == "/js/auth.js":
+                self._text(auth_stub(), "text/javascript")
+            else:
+                super().do_GET()
 
         def do_POST(self) -> None:  # noqa: N802
             self._api("POST")
@@ -302,7 +323,6 @@ def main() -> None:
 
     repo = Repository(create_table())
     seed(repo, late=args.late)
-    build_site()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(repo, args.slow))
     print(f"Local preview (sample data, no AWS): http://localhost:{args.port}", flush=True)
     server.serve_forever()
