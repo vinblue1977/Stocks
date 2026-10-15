@@ -91,7 +91,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 - Checkup email to both people (second SES-verified address), or an HTML body.
 
 ## Security and ops
-- CloudTrail trail to S3 for a long-term audit log (free history is 90 days).
 - Passwordless sign-in: drop the password factor, or require TOTP with it.
 - Restore drill: point-in-time restore of the table to a test copy.
 
