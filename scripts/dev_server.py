@@ -8,6 +8,9 @@ Options:
     --port N    listen on N (default 8765, or $PORT)
     --slow      delay /portfolio by 3 s, to see the saved Overview with "Updating…"
     --late      stop prices and the news run a trading day early, to see the late-update warning
+
+For screenshots, add ?hold=MS to the page URL (e.g. /?hold=2500#/watchlist): the page's load event then waits
+MS milliseconds, so headless Firefox captures the page after its data has loaded (see scripts/screenshot.sh).
 """
 
 from __future__ import annotations
@@ -71,8 +74,8 @@ def isolate_from_aws() -> None:
             "AWS_SECRET_ACCESS_KEY": fake,
             "AWS_SESSION_TOKEN": fake,
             "TABLE_NAME": "PortfolioTable",
-            "OWNER_NAME": "Me",
-            "PARTNER_NAME": "Partner",
+            "OWNER_NAME": "Alex",  # sample names, as in the README
+            "PARTNER_NAME": "Sam",
         }
     )
     for key in ("AWS_PROFILE", "AWS_CONFIG_FILE", "AWS_SHARED_CREDENTIALS_FILE"):
@@ -265,8 +268,17 @@ def make_handler(repo: Any, slow: bool) -> type[SimpleHTTPRequestHandler]:
             super().end_headers()
 
         def do_GET(self) -> None:  # noqa: N802 - http.server naming
-            path = self.path.split("?", 1)[0]
-            if path.startswith("/api/"):
+            path, _, query = self.path.partition("?")
+            hold = dict(parse_qsl(query)).get("hold", "")
+            if path in ("/", "/index.html") and hold.isdigit():
+                # A hidden image that loads slowly keeps the load event (and the screenshot) waiting.
+                page = (WEB / "index.html").read_text()
+                img = f'<img src="/__hold?ms={min(int(hold), 15000)}" alt="" hidden>'
+                self._text(page.replace("</body>", f"{img}</body>"), "text/html")
+            elif path == "/__hold":
+                time.sleep(min(int(dict(parse_qsl(query)).get("ms", "0") or 0), 15000) / 1000)
+                self._text("", "image/gif")
+            elif path.startswith("/api/"):
                 self._api("GET")
             elif path == "/config.json":
                 self._text(json.dumps({"apiUrl": "/api"}), "application/json")

@@ -52,6 +52,7 @@ Needs the AWS CLI, Python 3.14+, Node 20.19+ (or 22.13+), free [Tiingo](https://
 ```bash
 make install && make lint test
 make dev                 # local preview with sample data, no AWS: http://localhost:8765 (ARGS="--slow" or "--late")
+make shot ROUTE='#/news' PHONE=1   # screenshot of the running preview (headless Firefox) -> build/screenshot.png
 
 # Store API keys (read -s keeps them out of shell history)
 read -rs K && aws ssm put-parameter --name /portfolio-tracker/tiingo-api-key --type SecureString --value "$K"
