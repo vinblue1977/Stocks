@@ -2,7 +2,7 @@
 name = "portfolio-tracker"
 version = "0.1.0"
 description = "Serverless stock portfolio tracker on AWS: holdings, prices, news summaries and rule-based alerts"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 license = "MIT"
 license-files = ["LICENSE"]
 
@@ -13,7 +13,7 @@ addopts = "-q --cov=portfolio --cov-report=term-missing:skip-covered"
 
 [tool.ruff]
 line-length = 130
-target-version = "py313"
+target-version = "py314"
 extend-exclude = ["build", ".venv", "cdk.out"]
 
 [tool.ruff.lint]

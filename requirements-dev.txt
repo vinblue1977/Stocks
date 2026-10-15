@@ -1,4 +1,4 @@
-# The Lambda layer's locked packages are installed first, on their own (hash-checked): see `make install`.
+# The Lambda layer's locked packages (layer/requirements.txt) are installed after these, hash-checked: see `make install`.
 -r requirements.txt
 boto3>=1.43.110
 moto[dynamodb,sns,ssm]>=5.2.3

@@ -38,7 +38,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: "22"
@@ -54,8 +54,11 @@ jobs:
         # uv is much faster than pip; --seed keeps pip in the venv for the layer build.
         run: |
           uv venv --seed --python "$(which python)" .venv
-          uv pip install --python .venv/bin/python --require-hashes --no-deps -r layer/requirements.txt
           uv pip install --python .venv/bin/python -r requirements-dev.txt
+          # Then the layer's locked versions (hash-checked), so tests run on exactly what ships, and a check
+          # that the lockfile isn't missing anything and doesn't conflict with the dev tools.
+          uv pip install --python .venv/bin/python --require-hashes --no-deps --reinstall -r layer/requirements.txt
+          uv pip check --python .venv/bin/python
       - name: Install ESLint (exact versions from package-lock.json; no install scripts)
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Lint (Python with Bandit security rules, and the dashboard's JavaScript)
@@ -157,7 +160,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: "22"
@@ -175,8 +178,11 @@ jobs:
       - name: Deploy
         run: |
           uv venv --seed --python "$(which python)" .venv
-          uv pip install --python .venv/bin/python --require-hashes --no-deps -r layer/requirements.txt
           uv pip install --python .venv/bin/python -r requirements-dev.txt
+          # Then the layer's locked versions (hash-checked), so tests run on exactly what ships, and a check
+          # that the lockfile isn't missing anything and doesn't conflict with the dev tools.
+          uv pip install --python .venv/bin/python --require-hashes --no-deps --reinstall -r layer/requirements.txt
+          uv pip check --python .venv/bin/python
           make test audit  # the exact versions being shipped; a release or advisory since the PR stops the deploy
           make layer
           # A missing secret would silently drop the email subscriptions or names, so fail instead.

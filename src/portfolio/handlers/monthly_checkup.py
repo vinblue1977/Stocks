@@ -119,7 +119,7 @@ def deliver(built: dict[str, Any], targets: dict[str, Any] | None, summary: str,
     except ClientError:  # SES refused it (e.g. address not verified), so nothing was sent
         logger.exception("SES refused the PDF checkup; sending plain text")
         notify.send_email(subject, email(built, targets, summary, now))
-    except (BotoCoreError, OSError):
+    except BotoCoreError, OSError:
         raise  # timeouts etc.: SES may have sent it, so don't send a second email; the run retries
     except Exception:  # building the PDF failed before anything was sent
         logger.exception("PDF checkup failed; sending plain text")
