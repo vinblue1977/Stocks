@@ -13,7 +13,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from portfolio import analytics
-from portfolio.buckets import AREAS, UNASSIGNED, area_of
+from portfolio.buckets import AREAS, UNASSIGNED, area_of, is_fund
 
 TRADING_DAYS = 252
 SMALL_POSITION = 500.0  # dollars
@@ -64,6 +64,19 @@ def effective_holdings(values: Mapping[str, float]) -> float | None:
     if not total:
         return None
     return round(1 / sum((v / total) ** 2 for v in values.values()), 1)
+
+
+def holding_limit(targets: Mapping[str, Any] | None) -> int | None:
+    """The user's single-stock limit in percent, or None when it's off."""
+    return (targets or {}).get("single_holding_limit") or None
+
+
+def over_limit(weights: Mapping[str, float], limit: float | None) -> list[dict[str, Any]]:
+    """Single stocks above `limit` (a percent) of the portfolio, largest first. Funds are already spread, so they never count."""
+    if not limit:
+        return []
+    found = [(t, w) for t, w in weights.items() if w * 100 > limit and not is_fund(t)]
+    return [{"ticker": t, "weight": round(w, 4)} for t, w in sorted(found, key=lambda tw: -tw[1])]
 
 
 def _returns(series: Sequence[tuple[str, float]]) -> dict[str, float]:
@@ -132,6 +145,7 @@ def view(
     for p in summary["positions"]:
         if p["value"] is not None:
             per_ticker[p["ticker"]] = per_ticker.get(p["ticker"], 0.0) + p["value"]
+    limit = holding_limit(targets)
     area_pct = {k: v["pct"] / 100 for k, v in ((targets or {}).get("areas") or {}).items()}
     # Tickers with no prices yet (new, still loading) would empty the shared-date history, so leave them out.
     series = analytics.value_history([h for h in holdings if histories.get(h["ticker"])], histories)
@@ -139,13 +153,22 @@ def view(
     for ticker in sorted(per_ticker, key=lambda t: -per_ticker[t]):
         groups.setdefault(area_of(ticker, overrides), []).append(ticker)
     ranked = [
-        {"ticker": t, "value": round(v, 2), "area": area_of(t, overrides), "return_1y": analytics.trailing_return(histories[t])}
+        {
+            "ticker": t,
+            "value": round(v, 2),
+            "weight": round(v / total, 4) if total else 0.0,
+            "fund": is_fund(t),
+            "area": area_of(t, overrides),
+            "return_1y": analytics.trailing_return(histories[t]),
+        }
         for t, v in sorted(per_ticker.items(), key=lambda kv: -kv[1])
     ]
     return {
         "total_value": total,
         "holdings": ranked,
         "top": ranked[:5],
+        "holding_limit": limit,
+        "over_limit": over_limit({t: v / total for t, v in per_ticker.items()} if total else {}, limit),
         "by_area": {k: round(v, 2) for k, v in by_area.items()},
         "drift": drift(by_area, total, area_pct) if targets else None,
         "effective_holdings": effective_holdings(per_ticker),

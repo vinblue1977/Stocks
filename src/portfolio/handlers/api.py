@@ -528,6 +528,8 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         ]
 
     portfolios = {p: {k: build(pick(p, k)) for k in ("overall", *KINDS)} for p in ("household", *PEOPLE)}
+    limit = checkup.holding_limit(repo.get_targets(user_id))
+    over = {p: checkup.over_limit(analytics.combined_weights(pick(p, "overall"), latest), limit) for p in portfolios}
     return _response(
         200,
         {
@@ -536,6 +538,8 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
             "live_as_of": max((q["timestamp"] for q in live.values()), default=None),
             "market": market_status(now),
             "portfolios": portfolios,
+            "holding_limit": limit,
+            "over_limit": over,
         },
     )
 
@@ -835,7 +839,9 @@ def get_targets(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
 
 
 def put_targets(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
-    """{areas: {us: {pct, fund}, ...}, sector_ceiling, overrides: {ticker: area}}; percentages add up to 100."""
+    """{areas: {us: {pct, fund}, ...}, sector_ceiling, single_holding_limit (0 = off), overrides: {ticker: area}}.
+
+    Area percentages add up to 100."""
     body = _body(event)
     raw_areas = body.get("areas")
     if not isinstance(raw_areas, dict) or set(raw_areas) - set(buckets.AREAS):
@@ -866,7 +872,15 @@ def put_targets(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         if area not in buckets.AREAS:
             raise ApiError(400, f"overrides.{ticker} must be one of: {', '.join(buckets.AREAS)}")
         overrides[_ticker(ticker)] = area
-    saved = repo.put_targets(_user_id(event), {"areas": areas, "sector_ceiling": ceiling, "overrides": overrides})
+    # An older client that doesn't send the field keeps the stored limit instead of turning it off.
+    kept = checkup.holding_limit(repo.get_targets(_user_id(event))) or 0
+    limit = _number({"single_holding_limit": body.get("single_holding_limit", kept)}, "single_holding_limit", 0, 100)
+    if limit != int(limit):
+        raise ApiError(400, "single_holding_limit must be a whole number")
+    saved = repo.put_targets(
+        _user_id(event),
+        {"areas": areas, "sector_ceiling": ceiling, "single_holding_limit": int(limit), "overrides": overrides},
+    )
     return _response(200, {"targets": saved})
 
 

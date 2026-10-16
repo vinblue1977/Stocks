@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from portfolio import analytics, notify
+from portfolio import analytics, checkup, notify
 from portfolio.config import get_config
 from portfolio.db import DEFAULT_GROUP, GROUPS, KINDS, Repository, kind_of, person_of
 from portfolio.logs import get_logger, log
@@ -43,8 +43,12 @@ def build_report(user_id: str, holdings: list[dict[str, Any]], repo: Repository,
         lines += ["", f"Best this week: {best[1]} {best[0] * 100:+.2f}%", f"Worst this week: {worst[1]} {worst[0] * 100:+.2f}%"]
     lines += _breakdown(holdings, latest, week_ago)
     lines += ["", "Allocation:"]
-    for ticker, weight in sorted(analytics.combined_weights(holdings, latest).items(), key=lambda kv: -kv[1]):
+    weights = analytics.combined_weights(holdings, latest)
+    for ticker, weight in sorted(weights.items(), key=lambda kv: -kv[1]):
         lines.append(f"  {ticker:<6} {weight * 100:5.1f}%")
+    limit = checkup.holding_limit(repo.get_targets(user_id))
+    if over := checkup.over_limit(weights, limit):
+        lines.append(f"Over your {limit}% single-holding limit: {', '.join(o['ticker'] for o in over)}")
 
     cutoff = (now - timedelta(days=7)).isoformat(timespec="seconds")
     alerts = [a for a in repo.list_alerts(user_id) if a["created_at"] >= cutoff]

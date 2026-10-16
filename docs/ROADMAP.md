@@ -43,7 +43,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 23 | Net worth | M | Manually updated accounts (401k, savings, home) for one household total |
 | 24 | Ticker detail page | M | Price chart with your buys, news and signals |
 | 25 | Risk stats | S | Volatility, max drawdown and Sharpe ratio from stored price history |
-| 26 | Concentration warning | S | Flag one holding above a set share (e.g. 25%), on the page and in the weekly email |
 | 27 | Rebalance helper | M | "Where should my next $X go?" Builds on #4 |
 
 ## Look and feel
@@ -114,6 +113,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 36 | Analysts & insiders (News & signals, Watchlist) | #61 |
 | 40 | NYSE holidays and early closes, closed-market banner | #48, #54 |
 | 8 | Earnings calendar | #50 |
+| 26 | Single-stock limit: Overview banner, Checkup tile and list, weekly email line | #84 |
 | — | Overview redesign: performance by holding, donut, sortable Holdings; SPY removed | #39, #49 |
 | — | CI: smoke test, weekly audit, dependency review, workflow lint, ESLint | #33, #51, #64 |
 | — | Lambda layer lockfile with hashes (`make lock`); Lambda on Python 3.14 | #67 |
