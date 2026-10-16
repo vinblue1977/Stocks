@@ -66,6 +66,11 @@ def effective_holdings(values: Mapping[str, float]) -> float | None:
     return round(1 / sum((v / total) ** 2 for v in values.values()), 1)
 
 
+def holding_limit(targets: Mapping[str, Any] | None) -> int | None:
+    """The user's single-stock limit in percent, or None when it's off."""
+    return (targets or {}).get("single_holding_limit") or None
+
+
 def over_limit(weights: Mapping[str, float], limit: float | None) -> list[dict[str, Any]]:
     """Single stocks above `limit` (a percent) of the portfolio, largest first. Funds are already spread, so they never count."""
     if not limit:
@@ -140,7 +145,7 @@ def view(
     for p in summary["positions"]:
         if p["value"] is not None:
             per_ticker[p["ticker"]] = per_ticker.get(p["ticker"], 0.0) + p["value"]
-    limit = (targets or {}).get("single_holding_limit") or None
+    limit = holding_limit(targets)
     area_pct = {k: v["pct"] / 100 for k, v in ((targets or {}).get("areas") or {}).items()}
     # Tickers with no prices yet (new, still loading) would empty the shared-date history, so leave them out.
     series = analytics.value_history([h for h in holdings if histories.get(h["ticker"])], histories)
@@ -163,7 +168,7 @@ def view(
         "holdings": ranked,
         "top": ranked[:5],
         "holding_limit": limit,
-        "over_limit": over_limit({r["ticker"]: r["weight"] for r in ranked}, limit),
+        "over_limit": over_limit({t: v / total for t, v in per_ticker.items()} if total else {}, limit),
         "by_area": {k: round(v, 2) for k, v in by_area.items()},
         "drift": drift(by_area, total, area_pct) if targets else None,
         "effective_holdings": effective_holdings(per_ticker),

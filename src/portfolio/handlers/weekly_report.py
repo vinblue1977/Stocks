@@ -46,7 +46,7 @@ def build_report(user_id: str, holdings: list[dict[str, Any]], repo: Repository,
     weights = analytics.combined_weights(holdings, latest)
     for ticker, weight in sorted(weights.items(), key=lambda kv: -kv[1]):
         lines.append(f"  {ticker:<6} {weight * 100:5.1f}%")
-    limit = (repo.get_targets(user_id) or {}).get("single_holding_limit")
+    limit = checkup.holding_limit(repo.get_targets(user_id))
     if over := checkup.over_limit(weights, limit):
         lines.append(f"Over your {limit}% single-holding limit: {', '.join(o['ticker'] for o in over)}")
 

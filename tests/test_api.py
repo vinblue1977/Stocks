@@ -633,6 +633,8 @@ def test_single_holding_limit_flags_stocks_not_funds(repo):
         repo.put_prices(ticker, price_series(100, 0, 30, start))
     assert call(repo, "GET /portfolio")[1]["over_limit"] == {"household": [], "mine": [], "partner": []}  # not set: off
     call(repo, "PUT /targets", body=json.dumps({**TARGETS, "single_holding_limit": 25}))
+    keep = {k: v for k, v in TARGETS.items() if k != "single_holding_limit"}
+    call(repo, "PUT /targets", body=json.dumps(keep))  # a client that omits the field keeps the limit
     _, body = call(repo, "GET /portfolio")
     assert body["holding_limit"] == 25 and body["over_limit"]["household"] == [{"ticker": "AAPL", "weight": 0.3}]  # VTI is a fund
     home = call(repo, "GET /checkup")[1]["views"]["household"]

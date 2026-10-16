@@ -528,7 +528,7 @@ def get_portfolio(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         ]
 
     portfolios = {p: {k: build(pick(p, k)) for k in ("overall", *KINDS)} for p in ("household", *PEOPLE)}
-    limit = (repo.get_targets(user_id) or {}).get("single_holding_limit") or None
+    limit = checkup.holding_limit(repo.get_targets(user_id))
     over = {p: checkup.over_limit(analytics.combined_weights(pick(p, "overall"), latest), limit) for p in portfolios}
     return _response(
         200,
@@ -872,7 +872,9 @@ def put_targets(event: dict[str, Any], repo: Repository) -> dict[str, Any]:
         if area not in buckets.AREAS:
             raise ApiError(400, f"overrides.{ticker} must be one of: {', '.join(buckets.AREAS)}")
         overrides[_ticker(ticker)] = area
-    limit = _number({"single_holding_limit": body.get("single_holding_limit", 0)}, "single_holding_limit", 0, 100)
+    # An older client that doesn't send the field keeps the stored limit instead of turning it off.
+    kept = checkup.holding_limit(repo.get_targets(_user_id(event))) or 0
+    limit = _number({"single_holding_limit": body.get("single_holding_limit", kept)}, "single_holding_limit", 0, 100)
     if limit != int(limit):
         raise ApiError(400, "single_holding_limit must be a whole number")
     saved = repo.put_targets(
