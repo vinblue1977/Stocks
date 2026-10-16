@@ -496,6 +496,16 @@ function lateBanner(data) {
       'It usually catches up on the next evening run.'));
 }
 
+/** Single stocks above the user's limit for the shown view (set on the Checkup); nothing when none is. */
+function limitBanner(data) {
+  const over = data.over_limit?.[person] || [];
+  if (!data.holding_limit || !over.length) return null;
+  const list = over.map((o) => `${o.ticker} (${fmt.pct(o.weight, 0)})`).join(', ');
+  return h('section', { class: 'late', role: 'status' }, icon('warn', 'currentColor'),
+    h('div', null, h('strong', { text: `${over.length === 1 ? 'One stock is' : `${over.length} stocks are`} over your ${data.holding_limit}% limit: ` }),
+      `${list} · ${viewLabel()}. `, h('a', { href: '#/checkup', text: 'See the Checkup' })));
+}
+
 /** `savedNote` marks a saved copy shown instead of fresh data. */
 function drawOverview(main, data, rules, savedNote) {
   const { portfolios } = data;
@@ -522,6 +532,7 @@ function drawOverview(main, data, rules, savedNote) {
       liveMarker(pageHead('Overview', savedNote ? `${pricesNote(data)} · ${savedNote}` : pricesNote(data), switcher), data.live_as_of),
       savedNote ? null : lateBanner(data),
       marketBanner(data),
+      limitBanner(data),
       savedNote ? null : sinceStrip(data),
       summaryTable(portfolios[person], data.live_as_of ? 'Today' : 'Last day'),
       h('section', { class: 'tiles', 'aria-label': `Summary for ${viewLabel()}` },

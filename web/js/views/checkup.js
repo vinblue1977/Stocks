@@ -36,7 +36,10 @@ function tiles(view, data) {
   const ceiling = data.targets?.sector_ceiling;
   const overCeiling = topKey === 'sector' && ceiling != null && share > ceiling / 100;
   const target = data.targets?.areas?.[topKey]?.pct;
+  const limit = view.holding_limit;
+  const biggest = limit ? view.holdings.find((x) => !x.fund) : null; // funds are already spread, so only stocks count
   return h('section', { class: 'tiles', 'aria-label': `Checkup summary for ${viewLabel()}` },
+    biggest ? tile(`Biggest holding · ${biggest.ticker}`, fmt.pct(biggest.weight, 0), `Your limit: ${limit}%`, biggest.weight * 100 > limit ? 'attn' : '') : null,
     tile(`Largest area · ${data.areas[topKey] || 'Unassigned'}`, fmt.pct(share, 0),
       overCeiling ? `Your ceiling: ${ceiling}%` : target != null ? `Target ${target}%` : 'No target set', overCeiling ? 'attn' : ''),
     tile('Swings vs. market', r.beta == null ? '—' : `${r.beta.toFixed(1)}×`, `Volatility ${fmt.pct(r.volatility, 0)} vs ${fmt.pct(m.volatility, 0)}`),
@@ -79,6 +82,24 @@ function mixCard(view, data, rerender) {
       h('button', { type: 'button', class: 'btn btn-ghost', text: 'Edit target mix', onClick: () => { editing = true; rerender(); } })),
     rows,
     h('p', { class: 'xsmall muted', style: { margin: '12px 0 0' }, text: `White mark = your target. Orange = more than 5 points above target, or above your ${ceiling}% single-sector ceiling.` }));
+}
+
+function holdingsCard(view) {
+  const limit = view.holding_limit;
+  if (!limit) return null;
+  const stocks = view.holdings.filter((x) => !x.fund).slice(0, 5);
+  if (!stocks.length) return null;
+  const rows = stocks.map((x) => {
+    const over = x.weight * 100 > limit;
+    return h('div', { class: 'mix-row' }, h('strong', { text: x.ticker }),
+      h('div', { class: 'mix-track', role: 'img', 'aria-label': `${x.ticker}: ${fmt.pct(x.weight)} of the portfolio, limit ${limit}%` },
+        h('div', { class: `mix-fill ${over ? 'over' : ''}`, style: { width: `${Math.min(100, x.weight * 100)}%` } }),
+        h('div', { class: 'mix-target', style: { left: `calc(${limit}% - 1px)` } })),
+      h('div', { class: 'mix-nums', text: fmt.pct(x.weight) }));
+  });
+  return h('section', { class: 'card', 'aria-labelledby': 'big-h' },
+    h('h2', { id: 'big-h', text: `Largest stocks · ${viewLabel()}` }), rows,
+    h('p', { class: 'xsmall muted', style: { margin: '12px 0 0' }, text: `White mark = your ${limit}% limit for one holding. Orange = above it. Funds aren't counted.` }));
 }
 
 function calcCard(view, data) {
@@ -155,6 +176,7 @@ function editor(data, rerender) {
       area === 'unassigned' && !overrides[ticker] ? h('option', { value: '', text: 'Choose an area', selected: true }) : null,
       Object.entries(data.areas).map(([key, label]) => h('option', { value: key, text: label, selected: (overrides[ticker] || area) === key })))));
   const ceiling = h('input', { id: 'ceiling', type: 'number', min: 0, max: 100, step: 1, value: saved?.sector_ceiling ?? 15 });
+  const limit = h('input', { id: 'limit', type: 'number', min: 0, max: 100, step: 1, value: saved?.single_holding_limit || '', placeholder: 'Off' });
   const save = h('button', { type: 'button', class: 'btn btn-primary', text: 'Save' });
   save.addEventListener('click', async () => {
     if (update() !== 100) return;
@@ -163,6 +185,7 @@ function editor(data, rerender) {
       await api('PUT', '/targets', {
         areas: values,
         sector_ceiling: Number(ceiling.value) || 0,
+        single_holding_limit: Number(limit.value) || 0,
         overrides: Object.fromEntries(Object.entries(overrides).filter(([, area]) => area)),
       });
       toast('Target mix saved.');
@@ -179,6 +202,8 @@ function editor(data, rerender) {
       rows,
       h('div', { class: 'form', style: { marginTop: '18px' } },
         h('div', { class: 'field' }, h('label', { for: 'ceiling', text: 'Single-sector ceiling (%)' }), ceiling),
+        h('div', { class: 'field' }, h('label', { for: 'limit', text: 'Single-stock limit (%)' }), limit,
+          h('span', { class: 'hint', text: 'Flags one stock above this share. Blank turns it off.' })),
         h('div', { style: { display: 'flex', gap: '8px' } }, save,
           saved ? h('button', { type: 'button', class: 'btn btn-ghost', text: 'Cancel', onClick: () => { editing = false; rerender(); } }) : null)),
       error),
@@ -213,6 +238,7 @@ export async function renderCheckup(main) {
       tiles(view, data),
       person === 'household' ? summaryCard(data.summary) : null, // the monthly summary covers the household
       mixCard(view, data, rerender),
+      holdingsCard(view),
       h('div', { class: 'row' }, riskCard(view), calcCard(view, data)),
       h('div', { class: 'footer-note' }, h('span', { text: 'You choose the targets and funds; the app only measures. Not investment advice.' })));
   };

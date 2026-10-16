@@ -617,11 +617,27 @@ def test_targets_round_trip_and_checkup(repo):
         ({"areas": {"us": {"pct": 100}}, "overrides": {"VTI": "moon"}}, "overrides.VTI"),
         ({"areas": {"us": {"pct": 100}}, "sector_ceiling": 150}, "between"),
         ({"areas": {"us": {"pct": 100}}, "sector_ceiling": 12.5}, "whole number"),
+        ({"areas": {"us": {"pct": 100}}, "single_holding_limit": 12.5}, "whole number"),
+        ({"areas": {"us": {"pct": 100}}, "single_holding_limit": 101}, "between"),
     ],
 )
 def test_targets_validation(repo, change, message):
     status, body = call(repo, "PUT /targets", body=json.dumps({**TARGETS, **change}))
     assert status == 400 and message in body["message"]
+
+
+def test_single_holding_limit_flags_stocks_not_funds(repo):
+    start = (date.today() - timedelta(days=40)).isoformat()
+    for ticker, shares in (("VTI", 6), ("AAPL", 3), ("MSFT", 1)):  # 600 / 300 / 100 -> VTI 60%, AAPL 30%, MSFT 10%
+        repo.put_holding("user-1", {"ticker": ticker, "shares": shares, "avg_cost": 1})
+        repo.put_prices(ticker, price_series(100, 0, 30, start))
+    assert call(repo, "GET /portfolio")[1]["over_limit"] == {"household": [], "mine": [], "partner": []}  # not set: off
+    call(repo, "PUT /targets", body=json.dumps({**TARGETS, "single_holding_limit": 25}))
+    _, body = call(repo, "GET /portfolio")
+    assert body["holding_limit"] == 25 and body["over_limit"]["household"] == [{"ticker": "AAPL", "weight": 0.3}]  # VTI is a fund
+    home = call(repo, "GET /checkup")[1]["views"]["household"]
+    assert home["over_limit"] == [{"ticker": "AAPL", "weight": 0.3}] and home["holding_limit"] == 25
+    assert [h["fund"] for h in home["holdings"]] == [True, False, False]
 
 
 # ---------------------------------------------------------------- transactions

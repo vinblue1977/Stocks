@@ -131,6 +131,20 @@ def test_weekly_report(repo, monkeypatch):
     assert "By person" not in sent[0] and "By group" not in sent[0]  # only one group in use
 
 
+def test_weekly_report_flags_a_stock_over_the_limit(repo, monkeypatch):
+    sent = []
+    monkeypatch.setattr(weekly_report.notify, "send_email", lambda s, b: sent.append(b))
+    start = (datetime.now(UTC).date() - timedelta(days=10)).isoformat()
+    for ticker, shares in (("VTI", 1), ("AAPL", 1)):
+        repo.put_holding("u1", {"ticker": ticker, "shares": shares, "avg_cost": 100})
+        repo.put_prices(ticker, price_series(100, 0, 10, start))
+    weekly_report.handler({}, None, repo=repo)
+    assert "single-holding limit" not in sent[0]  # not set
+    repo.put_targets("u1", {"areas": {}, "single_holding_limit": 40})
+    weekly_report.handler({}, None, repo=repo)
+    assert "Over your 40% single-holding limit: AAPL" in sent[1]  # 50% each; VTI is a fund
+
+
 def test_weekly_report_by_person(repo, monkeypatch):
     sent = []
     monkeypatch.setattr(weekly_report.notify, "send_email", lambda s, b: sent.append(b))

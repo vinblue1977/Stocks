@@ -115,6 +115,19 @@ def seed(repo: Any, *, late: bool = False, today: date | None = None) -> None:
         repo.put_holding(USER, {"ticker": ticker, "group": group, "shares": shares, "avg_cost": cost})
     for ticker in WATCHED:
         repo.put_watch(USER, ticker)
+    repo.put_targets(
+        USER,
+        {
+            "areas": {
+                "us": {"pct": 60, "fund": "VTI"},
+                "intl": {"pct": 20, "fund": "VXUS"},
+                "sector": {"pct": 20, "fund": "SMH"},
+            },
+            "sector_ceiling": 25,
+            "single_holding_limit": 10,
+            "overrides": {},
+        },
+    )
     for ticker in repo.tracked_tickers():
         signal = signals.compute_signals(ticker, repo.price_history(ticker))
         if signal:
