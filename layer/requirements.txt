@@ -8,10 +8,10 @@ annotated-types==0.8.0 \
     --hash=sha256:13b2beaad985e05e2d6407ee4c4f35590b11f8d693a258a561055cac8f64cab7 \
     --hash=sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0
     # via pydantic
-anthropic==1.14.0 \
-    --hash=sha256:abd787048378abfabeebbad917ae0f9eae1eb4dfaa0a754096b5eea02dcf8c12 \
-    --hash=sha256:d9284895864a8457ed87f0accc51fd488ad9743952e597c814e7dc9d78ac8e38
-    # via -r requirements.in
+anthropic==1.15.0 \
+    --hash=sha256:10189a7993c5c71a0a2d4bb80020ca6a2fd27679f51e627405da37251d15ff49 \
+    --hash=sha256:90caa9df83e2fc8bddb4ddeb83b7191bce255f635c03eae055deec521741df08
+    # via -r layer/requirements.in
 anyio==4.15.1 \
     --hash=sha256:6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101 \
     --hash=sha256:9f28306018cbd6d329e64a36d58256edff76dd996fe423bc957326e578b82a94
@@ -365,7 +365,7 @@ cryptography==50.0.2 \
     --hash=sha256:f9f6143a8c75945eb960d9eb98905a441394abfa24afaae239d514ffb2586480 \
     --hash=sha256:fa8f5efb344d6908a1ce62f4a24e2e5780f825d6f53f5f50ec5ffacac72936cb \
     --hash=sha256:fdd28f912fccfec1846a94e2e1e8f9b0012f557f0c46fe4f3eb0d7a87afcf90b
-    # via -r requirements.in
+    # via -r layer/requirements.in
 docstring-parser==0.18.0 \
     --hash=sha256:292510982205c12b1248696f44959db3cdd1740237a968ea1e2e7a900eeb2015 \
     --hash=sha256:b3fcbed555c47d8479be0796ef7e19c2670d428d72e96da63f3a40122860374b
@@ -612,7 +612,7 @@ pydantic==2.14.1 \
     --hash=sha256:9195d967ec791692a04438115466764fb8b9a27b31f14a760437694f40d6b454 \
     --hash=sha256:94f478203dd03404682a1ada216965651dd74b1d2d5ffd62e00e0837caab5c26
     # via
-    #   -r requirements.in
+    #   -r layer/requirements.in
     #   anthropic
 pydantic-core==2.50.1 \
     --hash=sha256:0036473f5583e6a60e50b8b21651511564277a3f05cc5dab8cf579f552cd5f6c \
@@ -760,7 +760,7 @@ python-dateutil==2.9.0.post0 \
 reportlab==5.0.1 \
     --hash=sha256:1c36e6bb0e71780c72331eba60da7f602e8d4389a8723825af71342e49d791e8 \
     --hash=sha256:ebd13154be1c8515e665de70bd2d303ae9ddc3ef47e44afd5116441ca0283a26
-    # via -r requirements.in
+    # via -r layer/requirements.in
 s3transfer==0.19.2 \
     --hash=sha256:ba0309fd86be3c27dbf78cdd813c13c5e1df16e5874b99d2535ebbdfb9892993 \
     --hash=sha256:d8168eccca828cbb2cd573675333f3bddd254313a9c42494b84c76b539e8ba25
@@ -796,7 +796,7 @@ typing-inspection==0.4.4 \
 tzdata==2026.5 \
     --hash=sha256:8cc73c0a0bfca7dbfa59235d60b2eff82231dee33f53d206db1acd9173cfc0a7 \
     --hash=sha256:b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac
-    # via -r requirements.in
+    # via -r layer/requirements.in
 urllib3==2.8.0 \
     --hash=sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3 \
     --hash=sha256:63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63
