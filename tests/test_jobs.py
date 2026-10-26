@@ -775,3 +775,29 @@ def test_intraday_weight_rule_uses_live_prices(repo, monkeypatch):
     now = datetime(2026, 10, 12, 15, 0, tzinfo=UTC)
     live = {"VTI": {"last": 130, "timestamp": "2026-10-12T15:00:00+00:00", "date": "2026-10-12"}}
     assert alerting.check_intraday(repo, live, now) == 1  # 130 of 230 is 57%
+
+
+def test_failed_alert_email_is_retried_and_stale_snapshots_ignored(repo, monkeypatch):
+    sent = []
+
+    def flaky(subject, body):
+        if not sent:
+            sent.append("failed")
+            raise RuntimeError("sns down")
+        sent.append(subject)
+
+    monkeypatch.setattr(alerting.notify, "send_email", flaky)
+    monkeypatch.setattr(alerting.notify, "push_to_user", lambda *a, **k: 1)
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "avg_cost": 100})
+    repo.put_prices("VTI", price_series(100, 0, 5, "2026-10-05"))
+    repo.create_rule("u1", {"type": "price_below", "ticker": "VTI", "params": {"price": 95}, "enabled": True})
+    evaluate_signals.handler({}, None, repo=repo)
+    now = datetime(2026, 10, 12, 15, 0, tzinfo=UTC)
+    live = {"VTI": {"last": 94, "timestamp": "2026-10-12T15:00:00+00:00", "date": "2026-10-12"}}
+    assert alerting.check_intraday(repo, live, now) == 0  # the email failed: nothing stored
+    assert alerting.check_intraday(repo, live, now) == 1  # the next run delivers it
+    assert len(repo.list_alerts("u1")) == 1
+    later = now + timedelta(days=30)
+    repo.put_rule_state("u1", repo.all_rules()[0]["rule_id"], False, "x")
+    stale = {"VTI": {"last": 94, "timestamp": "2026-11-11T15:00:00+00:00", "date": "2026-11-11"}}
+    assert alerting.check_intraday(repo, stale, later) == 0  # the last close is a month old

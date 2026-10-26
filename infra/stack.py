@@ -435,7 +435,7 @@ class PortfolioTrackerStack(Stack):
         )
         price_sync = make_function("PriceSync", "price_sync", timeout=300)
         price_sync.configure_async_invoke(on_failure=destinations.SqsDestination(price_sync_dlq), retry_attempts=1)  # pyright: ignore[reportArgumentType]
-        intraday = make_function("IntradayQuotes", "intraday_quotes", timeout=60)
+        intraday = make_function("IntradayQuotes", "intraday_quotes", timeout=120)
         for fn in (price_sync, intraday):
             table.grant_read_write_data(fn)
             fn.add_to_role_policy(iam.PolicyStatement(actions=["ssm:GetParameter"], resources=[ssm_param_arn("tiingo-api-key")]))
