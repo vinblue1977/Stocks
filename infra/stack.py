@@ -451,6 +451,7 @@ class PortfolioTrackerStack(Stack):
         evaluate = make_function("EvaluateSignals", "evaluate_signals", timeout=300)
         table.grant_read_write_data(evaluate)
         topic.grant_publish(evaluate)
+        topic.grant_publish(intraday)  # price-level alert rules are also checked on the 15-minute quotes
 
         weekly = make_function("WeeklyReport", "weekly_report", timeout=300)
         table.grant_read_data(weekly)
@@ -481,7 +482,7 @@ class PortfolioTrackerStack(Stack):
         api_fn = make_function("Api", "api", timeout=15, memory=512, max_concurrency=API_MAX_CONCURRENCY)
         api_fn.add_environment("PRICE_SYNC_FUNCTION_NAME", price_sync.function_name)
         # Phone notifications: the API (test sends) and the alert job sign pushes with the VAPID key.
-        for fn in (api_fn, evaluate):
+        for fn in (api_fn, evaluate, intraday):
             fn.add_environment("VAPID_SUBJECT", site_url)
             fn.add_to_role_policy(
                 iam.PolicyStatement(actions=["ssm:GetParameter"], resources=[ssm_param_arn("vapid-private-key")])

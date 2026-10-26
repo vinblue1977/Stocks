@@ -17,7 +17,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 ## Stay informed
 | # | Idea | Effort | Notes |
 |---|---|---|---|
-| 9 | Intraday alerts | S | Alert rules also checked against the 15-minute intraday prices (when `intradayQuotes` is on), not only after the close |
 | 10 | Daily close email | S | Today's change and biggest movers after the evening run, as an option on the existing report email rather than a second message |
 
 ## Convenience
@@ -104,6 +103,7 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 4 | Target mix, Checkup page and monthly PDF email | #42, #44 |
 | 7 | Watchlist | #34 |
 | 12 | Install on your phone | #30 |
+| 9 | Intraday alerts: price-level rules checked every 15 minutes in market hours, once a day per rule | #90 |
 | 14 | Push notifications for rule alerts (installed app) | #55 |
 | 19 | Today's movers | #38 |
 | 29 | Faster phone open (last Overview shown instantly, then refreshed) | #56 |

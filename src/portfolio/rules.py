@@ -25,10 +25,10 @@ class RuleSpec:
 
 
 RULE_TYPES: dict[str, RuleSpec] = {
-    "price_below": RuleSpec({"price": (0.01, 1_000_000)}, "Price closes below $N"),
-    "price_above": RuleSpec({"price": (0.01, 1_000_000)}, "Price closes above $N"),
-    "price_below_sma": RuleSpec({"window": (5, 250)}, "Price closes below its N-day average"),
-    "price_above_sma": RuleSpec({"window": (5, 250)}, "Price closes above its N-day average"),
+    "price_below": RuleSpec({"price": (0.01, 1_000_000)}, "Price falls below $N"),
+    "price_above": RuleSpec({"price": (0.01, 1_000_000)}, "Price rises above $N"),
+    "price_below_sma": RuleSpec({"window": (5, 250)}, "Price falls below its N-day average"),
+    "price_above_sma": RuleSpec({"window": (5, 250)}, "Price rises above its N-day average"),
     "golden_cross": RuleSpec({}, "50-day average crosses above the 200-day average"),
     "death_cross": RuleSpec({}, "50-day average crosses below the 200-day average"),
     "drawdown_below": RuleSpec({"pct": (1, 90)}, "Price falls N% or more below its 1-year high"),
@@ -37,6 +37,10 @@ RULE_TYPES: dict[str, RuleSpec] = {
     "weight_above": RuleSpec({"pct": (1, 100)}, "Holding grows past N% of the portfolio"),
     "sentiment_below": RuleSpec({"threshold": (-1, 1)}, "7-day news sentiment falls below N (-1 to +1)"),
 }
+
+# Rules about where the price is now: also checked against the 15-minute quotes in market hours.
+# The rest (RSI, crossovers, sentiment) only change with the close.
+INTRADAY_TYPES = frozenset({"price_below", "price_above", "price_below_sma", "price_above_sma", "drawdown_below", "weight_above"})
 
 
 def validate_rule(body: Mapping[str, Any]) -> dict[str, Any]:
@@ -82,6 +86,7 @@ def evaluate(rule: Mapping[str, Any], signal: Mapping[str, Any], weight: float |
     p = rule.get("params", {})
     ticker = rule["ticker"]
     price = signal.get("price")
+    verb = "is at" if signal.get("intraday") else "closed at"
 
     def fmt_pct(x: float) -> str:
         return f"{x * 100:.1f}%"
@@ -93,7 +98,7 @@ def evaluate(rule: Mapping[str, Any], signal: Mapping[str, Any], weight: float |
         price = round(price, 2)  # compare what the message shows, so it never reads "$200.00, below your $200.00"
         hit = price < level if t == "price_below" else price > level
         side = "below" if price < level else "above" if price > level else "at"
-        return hit, f"{ticker} closed at ${price:,.2f}, {side} your ${level:,.2f} level"
+        return hit, f"{ticker} {verb} ${price:,.2f}, {side} your ${level:,.2f} level"
 
     if t in ("price_below_sma", "price_above_sma"):
         window = float(p["window"])
@@ -103,7 +108,7 @@ def evaluate(rule: Mapping[str, Any], signal: Mapping[str, Any], weight: float |
         below = price < avg
         hit = below if t == "price_below_sma" else price > avg
         side = "below" if below else "above"
-        return hit, f"{ticker} closed at {price:.2f}, {side} its {int(window)}-day average of {avg:.2f}"
+        return hit, f"{ticker} {verb} {price:.2f}, {side} its {int(window)}-day average of {avg:.2f}"
 
     if t in ("golden_cross", "death_cross"):
         f, s = signal.get("sma50"), signal.get("sma200")
