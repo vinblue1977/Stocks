@@ -281,16 +281,17 @@ class Repository:
         item = self.table.get_item(Key={"pk": f"USER#{user_id}", "sk": f"RULESTATE#{rule_id}"}).get("Item")
         return _clean(item) if item else None
 
-    def put_rule_state(self, user_id: str, rule_id: str, triggered: bool, detail: str) -> None:
-        self.table.put_item(
-            Item={
-                "pk": f"USER#{user_id}",
-                "sk": f"RULESTATE#{rule_id}",
-                "triggered": triggered,
-                "detail": detail,
-                "updated_at": _now_iso(),
-            }
-        )
+    def put_rule_state(self, user_id: str, rule_id: str, triggered: bool, detail: str, alerted_on: str | None = None) -> None:
+        item = {
+            "pk": f"USER#{user_id}",
+            "sk": f"RULESTATE#{rule_id}",
+            "triggered": triggered,
+            "detail": detail,
+            "updated_at": _now_iso(),
+        }
+        if alerted_on:
+            item["alerted_on"] = alerted_on  # trading day of the last alert: at most one per day
+        self.table.put_item(Item=item)
 
     def record_alert(self, user_id: str, rule_id: str, message: str) -> None:
         now = _now_iso()

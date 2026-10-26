@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from conftest import price_series
 
-from portfolio import llm
+from portfolio import alerting, llm
 from portfolio.handlers import evaluate_signals, intraday_quotes, news_ingest, price_sync, weekly_report
 from portfolio.llm import ArticleScore, TickerBrief
 from portfolio.market import market_open
@@ -99,8 +99,8 @@ def test_news_ingest_scores_and_briefs(repo):
 def test_evaluate_signals_alerts_once(repo, monkeypatch):
     sent = []
     pushed = []
-    monkeypatch.setattr(evaluate_signals.notify, "send_email", lambda s, b: sent.append(s))
-    monkeypatch.setattr(evaluate_signals.notify, "push_to_user", lambda repo, user, title, body: pushed.append((user, title)))
+    monkeypatch.setattr(alerting.notify, "send_email", lambda s, b: sent.append(s))
+    monkeypatch.setattr(alerting.notify, "push_to_user", lambda repo, user, title, body: pushed.append((user, title)))
     start = (datetime.now(UTC).date() - timedelta(days=300)).isoformat()
     repo.put_holding("u1", {"ticker": "VTI", "shares": 10, "avg_cost": 100})
     repo.put_holding("u1", {"ticker": "BND", "shares": 1, "avg_cost": 70})
@@ -222,7 +222,7 @@ def test_migration_moves_legacy_holdings_once(repo, table):
 
 def test_weight_rule_uses_combined_portfolio(repo, monkeypatch):
     sent = []
-    monkeypatch.setattr(evaluate_signals.notify, "send_email", lambda s, b: sent.append(s))
+    monkeypatch.setattr(alerting.notify, "send_email", lambda s, b: sent.append(s))
     start = (datetime.now(UTC).date() - timedelta(days=60)).isoformat()
     for t, p in (("VOO", 100), ("BND", 100), ("SPY", 400)):
         repo.put_prices(t, price_series(p, 0, 60, start))
@@ -727,3 +727,77 @@ def test_news_ingest_not_recorded_when_every_ticker_fails(repo):
     repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "avg_cost": 1})
     news_ingest.handler({}, None, repo=repo, provider=Down(), summarizer=FakeSummarizer)
     assert repo.get_job_run("news_ingest") is None
+
+
+def test_intraday_price_rule_alerts_once_a_day(repo, monkeypatch):
+    sent = []
+    monkeypatch.setattr(alerting.notify, "send_email", lambda s, b: sent.append(b))
+    monkeypatch.setattr(alerting.notify, "push_to_user", lambda *a, **k: 1)
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "avg_cost": 100})
+    repo.put_prices("VTI", price_series(100, 0, 5, "2026-10-05"))  # last close 100
+    repo.create_rule("u1", {"type": "price_below", "ticker": "VTI", "params": {"price": 95}, "enabled": True})
+    repo.create_rule("u1", {"type": "rsi_above", "ticker": "VTI", "params": {"threshold": 1}, "enabled": True})
+    evaluate_signals.handler({}, None, repo=repo)  # snapshot for the intraday check
+    now = datetime(2026, 10, 12, 15, 0, tzinfo=UTC)
+
+    def quote(last):
+        return {"VTI": {"last": last, "timestamp": "2026-10-12T15:00:00+00:00", "date": "2026-10-12"}}
+
+    assert alerting.check_intraday(repo, quote(97), now) == 0  # above the level
+    assert alerting.check_intraday(repo, quote(94), now) == 1  # crosses mid-session
+    assert "VTI is at $94.00, below your $95.00 level" in sent[0]
+    assert alerting.check_intraday(repo, quote(94), now) == 0  # still true: no repeat
+    alerting.check_intraday(repo, quote(96), now)
+    assert alerting.check_intraday(repo, quote(94), now) == 0  # bounced and crossed again the same day
+    assert alerting.check_intraday(repo, quote(94), now + timedelta(days=1)) == 0  # old quotes (not today) are ignored
+    assert len(sent) == 1 and len(repo.list_alerts("u1")) == 1  # the RSI rule waits for the close
+
+
+def test_intraday_check_failure_keeps_the_quotes(repo, monkeypatch):
+    repo.put_holding("u1", {"group": "stocks", "ticker": "VOO", "shares": 1, "avg_cost": 1})
+
+    def boom(*args):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(intraday_quotes.alerting, "check_intraday", boom)
+    intraday_quotes.handler({}, None, repo=repo, provider=FakeQuotes(), now=datetime(2026, 10, 12, 15, 0, tzinfo=UTC))
+    assert "VOO" in repo.latest_quotes()
+
+
+def test_intraday_weight_rule_uses_live_prices(repo, monkeypatch):
+    monkeypatch.setattr(alerting.notify, "send_email", lambda s, b: None)
+    monkeypatch.setattr(alerting.notify, "push_to_user", lambda *a, **k: 1)
+    for ticker in ("VTI", "BND"):
+        repo.put_holding("u1", {"ticker": ticker, "shares": 1, "avg_cost": 100})
+        repo.put_prices(ticker, price_series(100, 0, 5, "2026-10-05"))
+    repo.create_rule("u1", {"type": "weight_above", "ticker": "VTI", "params": {"pct": 55}, "enabled": True})
+    evaluate_signals.handler({}, None, repo=repo)  # 50/50 at the close
+    now = datetime(2026, 10, 12, 15, 0, tzinfo=UTC)
+    live = {"VTI": {"last": 130, "timestamp": "2026-10-12T15:00:00+00:00", "date": "2026-10-12"}}
+    assert alerting.check_intraday(repo, live, now) == 1  # 130 of 230 is 57%
+
+
+def test_failed_alert_email_is_retried_and_stale_snapshots_ignored(repo, monkeypatch):
+    sent = []
+
+    def flaky(subject, body):
+        if not sent:
+            sent.append("failed")
+            raise RuntimeError("sns down")
+        sent.append(subject)
+
+    monkeypatch.setattr(alerting.notify, "send_email", flaky)
+    monkeypatch.setattr(alerting.notify, "push_to_user", lambda *a, **k: 1)
+    repo.put_holding("u1", {"ticker": "VTI", "shares": 1, "avg_cost": 100})
+    repo.put_prices("VTI", price_series(100, 0, 5, "2026-10-05"))
+    repo.create_rule("u1", {"type": "price_below", "ticker": "VTI", "params": {"price": 95}, "enabled": True})
+    evaluate_signals.handler({}, None, repo=repo)
+    now = datetime(2026, 10, 12, 15, 0, tzinfo=UTC)
+    live = {"VTI": {"last": 94, "timestamp": "2026-10-12T15:00:00+00:00", "date": "2026-10-12"}}
+    assert alerting.check_intraday(repo, live, now) == 0  # the email failed: nothing stored
+    assert alerting.check_intraday(repo, live, now) == 1  # the next run delivers it
+    assert len(repo.list_alerts("u1")) == 1
+    later = now + timedelta(days=30)
+    repo.put_rule_state("u1", repo.all_rules()[0]["rule_id"], False, "x")
+    stale = {"VTI": {"last": 94, "timestamp": "2026-11-11T15:00:00+00:00", "date": "2026-11-11"}}
+    assert alerting.check_intraday(repo, stale, later) == 0  # the last close is a month old

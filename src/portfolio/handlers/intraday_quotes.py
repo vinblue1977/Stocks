@@ -2,7 +2,8 @@
 
 Scheduled every 15 minutes on weekdays across both EDT and EST market hours; runs outside
 9:30-16:00 New York time return without calling Tiingo. One request covers all tickers.
-The dashboard shows these until the evening pipeline stores the day's official close.
+The dashboard shows these until the evening pipeline stores the day's official close, and price-level
+alert rules are checked against them.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from portfolio import alerting
 from portfolio.config import get_config
 from portfolio.db import Repository
 from portfolio.logs import get_logger, log
@@ -44,6 +46,13 @@ def handler(
     kept = {t: q for t, q in repo.latest_quotes().items() if t in tickers and t not in quotes and q.get("date") == today}
     if quotes or kept:
         repo.put_quotes({**kept, **quotes})
+        try:
+            fired = alerting.check_intraday(repo, {**kept, **quotes}, now)
+        except Exception:  # the stored quotes matter more than one missed check; the evening job still alerts
+            logger.exception("intraday alert check failed")
+        else:
+            if fired:
+                log(logger, "intraday_alerts", fired=fired)
     missing = sorted(set(tickers) - set(quotes))
     log(logger, "intraday_quotes_complete", quoted=len(quotes), missing=missing)
     return {"tickers": len(tickers), "quoted": len(quotes), "missing": missing}

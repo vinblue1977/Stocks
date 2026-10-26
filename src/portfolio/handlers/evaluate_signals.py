@@ -6,14 +6,14 @@ not every day the condition stays true.
 
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from portfolio import analytics, notify, rules, signals
+from portfolio import alerting, rules, signals
 from portfolio.config import get_config
 from portfolio.db import Repository
 from portfolio.logs import get_logger, log
+from portfolio.market import trading_day
 from portfolio.news_policy import news_off
 
 logger = get_logger(__name__)
@@ -43,30 +43,14 @@ def handler(event: dict[str, Any] | None, context: Any, repo: Repository | None 
             snapshots[ticker] = snapshot
             latest[ticker] = snapshot["price"]
 
-    weights = _weights_by_user(holdings, latest)
+    weights = alerting.weights_by_user(holdings, latest)
+    today = trading_day(now).isoformat()
     fired = 0
     for rule in all_rules:
         signal = snapshots.get(rule["ticker"])
         if signal is None:
             continue
-        user_id = rule["user_id"]
-        met, detail = rules.evaluate(rule, signal, weights.get(user_id, {}).get(rule["ticker"]))
-        state = repo.get_rule_state(user_id, rule["rule_id"]) or {}
-        was_met = bool(state.get("triggered", False))
-        repo.put_rule_state(user_id, rule["rule_id"], met, detail)
-        if met and not was_met:
-            fired += 1
-            repo.record_alert(user_id, rule["rule_id"], detail)
-            description = rules.RULE_TYPES[rule["type"]].description
-            notify.send_email(f"Alert: {rule['ticker']} rule triggered", f"{detail}.\n\nRule: {description}.")
-            notify.push_to_user(repo, user_id, f"Alert: {rule['ticker']}", f"{detail}.")
+        met, detail = rules.evaluate(rule, signal, weights.get(rule["user_id"], {}).get(rule["ticker"]))
+        fired += alerting.apply_rule(repo, rule, met, detail, today)
     log(logger, "signals_complete", tickers=sorted(snapshots), rules=len(all_rules), fired=fired)
     return {"tickers": sorted(snapshots), "rules_evaluated": len(all_rules), "alerts_sent": fired}
-
-
-def _weights_by_user(holdings: list[dict[str, Any]], latest: dict[str, float]) -> dict[str, dict[str, float]]:
-    """Per user, each ticker's share of the whole portfolio (all groups combined)."""
-    by_user: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for holding in holdings:
-        by_user[holding["user_id"]].append(holding)
-    return {user_id: analytics.combined_weights(holdings, latest) for user_id, holdings in by_user.items()}
