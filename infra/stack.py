@@ -749,16 +749,21 @@ class PortfolioTrackerStack(Stack):
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
             alarm_description="The weekday price/news/signals pipeline failed",
         ).add_alarm_action(alarm_action)  # pyright: ignore[reportArgumentType]
-        for fn in (api_fn, price_sync, news_ingest, evaluate, weekly, monthly):
-            cloudwatch.Alarm(
-                self,
-                f"{fn.node.id}ErrorsAlarm",
-                metric=fn.metric_errors(period=Duration.hours(1)),
-                threshold=3,
-                evaluation_periods=1,
-                treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
-                alarm_description=f"{fn.node.id} Lambda errors",
-            ).add_alarm_action(alarm_action)  # pyright: ignore[reportArgumentType]
+        # One alarm for every function: the logs say which one failed.
+        fns = (api_fn, price_sync, news_ingest, evaluate, weekly, monthly)
+        cloudwatch.Alarm(
+            self,
+            "LambdaErrorsAlarm",
+            metric=cloudwatch.MathExpression(
+                expression=f"SUM([{','.join(f'e{i}' for i in range(len(fns)))}])",
+                using_metrics={f"e{i}": fn.metric_errors(period=Duration.hours(1)) for i, fn in enumerate(fns)},
+                period=Duration.hours(1),
+            ),
+            threshold=3,
+            evaluation_periods=1,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+            alarm_description="Lambda errors across the API, price, news, evaluate, weekly and monthly functions",
+        ).add_alarm_action(alarm_action)  # pyright: ignore[reportArgumentType]
         cloudwatch.Alarm(
             self,
             "ApiThrottlesAlarm",

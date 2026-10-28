@@ -230,7 +230,7 @@ def test_secrets_scoped_to_named_parameters(any_template):
 
 def test_budget_and_alarms(any_template):
     any_template.resource_count_is("AWS::Budgets::Budget", 1)
-    assert len(any_template.find_resources("AWS::CloudWatch::Alarm")) == 9
+    assert len(any_template.find_resources("AWS::CloudWatch::Alarm")) == 4
 
 
 def test_person_names_reach_the_functions(tmp_path_factory):
