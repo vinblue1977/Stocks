@@ -85,7 +85,7 @@ Run the pipeline now: `aws stepfunctions start-execution --state-machine-arn <Pi
 |---|---|---|
 | `alertEmail` | none | Alerts, reports, alarms, budget warnings |
 | `allowedOrigins` | `localhost:5173` | CORS origins |
-| `ownerName` / `partnerName` | none | Names on the portfolio pages and weekly email, e.g. `-c ownerName=Alex -c partnerName=Sam` (or `make deploy OWNER_NAME=Alex PARTNER_NAME=Sam`); the partner page appears only when `partnerName` is set. Pass them at deploy time rather than committing them; they're served only to signed-in users |
+| `ownerName` / `partnerName` | none | Names on the portfolio pages, e.g. `-c ownerName=Alex -c partnerName=Sam` (or `make deploy OWNER_NAME=Alex PARTNER_NAME=Sam`); the partner page appears only when `partnerName` is set. Pass them at deploy time rather than committing them; they're served only to signed-in users |
 | `allowedCountries` | `[]` (this repo's cdk.json: `["US"]`) | Countries that can load the dashboard's pages (CloudFront geo restriction); `[]` allows all. Not the API or sign-in |
 | `newsExcludedTickers` | `["ITOT", "MGV", "DGRO", "DVY", "IWB", "ONEQ", "SPYD"]` | Tickers to skip when fetching news (e.g. broad index funds with no headlines); price signals still apply |
 | `intradayQuotes` | `true` | Fetch intraday prices every 15 minutes while the US market is open (one Tiingo request for all tickers, about 27 a day). Price-level alert rules (price, averages, drawdown, weight) are also checked on each quote, at most one alert per rule per day. `false` shows closing prices only |
