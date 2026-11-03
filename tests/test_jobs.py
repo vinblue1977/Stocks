@@ -145,16 +145,16 @@ def test_weekly_report_flags_a_stock_over_the_limit(repo, monkeypatch):
     assert "Over your 40% single-holding limit: AAPL" in sent[1]  # 50% each; VTI is a fund
 
 
-def test_weekly_report_links_to_the_dashboard(repo, monkeypatch):
+def test_weekly_report_links_to_the_dashboard(repo, monkeypatch, request):
     sent = []
     monkeypatch.setattr(weekly_report.notify, "send_email", lambda s, b: sent.append(b))
     monkeypatch.setenv("SITE_URL", "https://example.test")
     weekly_report.get_config.cache_clear()
+    request.addfinalizer(weekly_report.get_config.cache_clear)  # never leak this config into other tests
     start = (datetime.now(UTC).date() - timedelta(days=10)).isoformat()
     repo.put_prices("VTI", price_series(100, 0, 10, start))
     repo.put_holding("u1", {"ticker": "VTI", "shares": 4, "avg_cost": 100})
     weekly_report.handler({}, None, repo=repo)
-    weekly_report.get_config.cache_clear()
     assert "Total value: $400.00" in sent[0]
     assert "Full detail: https://example.test/#/" in sent[0]
 

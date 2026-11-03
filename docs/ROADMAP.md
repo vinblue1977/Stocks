@@ -56,7 +56,6 @@ Ideas for the dashboard, not yet scheduled. Effort: **S** about an hour or two, 
 | 32 | Tax-loss finder | S–M | Stock Holdings below cost, long vs. short term, and a 30-day wash-sale reminder. Facts only (pairs with #6) |
 | 33 | "What if" trade preview | M | Try a sale or buy and see the new mix vs. target, risk and concentration before doing it at the broker |
 | 35 | Earnings reaction history | S | How each stock moved the day after its last few reports (Finnhub + stored prices) |
-| 37 | Weekly email upgrade | S | Add this week's earnings and biggest movers to the Sunday email |
 | 38 | Data health page | S | When each job last ran, how fresh prices and news are, and month-to-date AWS spend (cached daily) |
 | 41 | Backup download | S | One-click JSON/CSV of holdings, trades and targets (pairs with #11) |
 | 42 | Wealthfront file import | M | Automatic Investment buys from a downloaded statement, so its history is exact too (#11) |

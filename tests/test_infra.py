@@ -187,6 +187,11 @@ def test_bedrock_access_limited_to_one_model(any_template):
     assert '"bedrock:*"' not in policies and '"Action": "*"' not in policies
 
 
+def test_weekly_report_gets_the_dashboard_link(template):
+    fn = next(f for f in app_functions(template) if f["Properties"]["Handler"].endswith("weekly_report.handler"))
+    assert "SITE_URL" in fn["Properties"]["Environment"]["Variables"]
+
+
 def test_monthly_checkup_schedule_and_model(template, tmp_path_factory):
     rules = template.find_resources("AWS::Events::Rule")
     assert any(r["Properties"].get("ScheduleExpression") == "cron(0 14 ? * SAT#1 *)" for r in rules.values())

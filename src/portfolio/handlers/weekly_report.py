@@ -48,8 +48,7 @@ def build_report(user_id: str, holdings: list[dict[str, Any]], repo: Repository,
 
     cutoff = (now - timedelta(days=7)).isoformat(timespec="seconds")
     alerts = [a for a in repo.list_alerts(user_id) if a["created_at"] >= cutoff]
-    plural = "s" if len(alerts) != 1 else ""
-    lines += ["", f"{len(alerts)} alert{plural} fired this week." if alerts else "No alerts fired this week."]
+    lines += ["", f"Alerts fired this week: {len(alerts)}" if alerts else "No alerts fired this week."]
     if site := get_config().site_url:
         lines += ["", f"Full detail: {site}/#/"]
     return "\n".join(lines)
