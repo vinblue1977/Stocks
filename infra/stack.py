@@ -456,6 +456,7 @@ class PortfolioTrackerStack(Stack):
         weekly = make_function("WeeklyReport", "weekly_report", timeout=300)
         table.grant_read_data(weekly)
         topic.grant_publish(weekly)
+        weekly.add_environment("SITE_URL", site_url)
 
         # Monthly checkup email, written by a stronger model than the nightly news summaries.
         checkup_model: str = self.node.try_get_context("checkupModelId") or model_id
