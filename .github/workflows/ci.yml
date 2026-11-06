@@ -170,8 +170,9 @@ jobs:
     needs: [checks, changes, workflow-lint]  # checks/workflow-lint gate manual dispatch only; they skip pushes
     # Auto on merges that change code or infra; manual dispatch stays as a fallback. Main only, and the
     # production environment and the AWS role trust both enforce that too.
+    # Disabled 2026-11-06: the stack was deleted. Remove `false &&` after reinstalling (and recreate the deploy role).
     if: >-
-      always() && github.ref == 'refs/heads/main' &&
+      false && always() && github.ref == 'refs/heads/main' &&
       ((github.event_name == 'push' && needs.changes.outputs.deploy == 'true') ||
        (github.event_name == 'workflow_dispatch' && inputs.deploy &&
         needs.checks.result == 'success' && needs.workflow-lint.result == 'success'))
